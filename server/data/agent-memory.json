@@ -1,0 +1,21 @@
+{
+  "facts": [
+    {
+      "id": "brand_name",
+      "text": "Qoyod (قيود) — Saudi cloud accounting SaaS, ZATCA Phase-2 certified, serves 25,000+ SMBs.",
+      "updated_at": 1777063154367
+    },
+    {
+      "id": "voice_rules",
+      "text": "Arabic-first Saudi dialect. Use مو / وش / ليش. NEVER use Egyptian markers مش / ايه / ازاي / بتاع / يلا.",
+      "updated_at": 1777063154367
+    },
+    {
+      "id": "palette",
+      "text": "Qoyod palette — Navy #021544, Deep Turquoise #01355A, Accent Teal #17A3A4.",
+      "updated_at": 1777063154367
+    }
+  ],
+  "recall": [],
+  "notes": {}
+}

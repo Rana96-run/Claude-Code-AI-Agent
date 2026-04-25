@@ -1,0 +1,29 @@
+{
+  "name": "qoyod-creative-os-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --env-file=.env src/index.ts",
+    "start": "tsx --env-file=.env src/index.ts",
+    "console": "tsx --env-file=.env src/console.ts",
+    "asana:register": "tsx --env-file=.env src/scripts/asana-register.ts",
+    "asana:delete": "tsx --env-file=.env src/scripts/asana-delete.ts",
+    "slack:test": "tsx --env-file=.env src/scripts/slack-test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "googleapis": "^144.0.0",
+    "multer": "^1.4.5-lts.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/multer": "^1.4.12",
+    "@types/node": "^20.14.0",
+    "tsx": "^4.16.0",
+    "typescript": "^5.5.0"
+  }
+}

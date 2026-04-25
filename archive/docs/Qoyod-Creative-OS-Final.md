@@ -1,0 +1,235 @@
+# Qoyod Creative OS — Final Documentation
+
+**Internal AI-powered marketing tool for the Qoyod team**
+Password: `QoyodTeam2026`
+
+---
+
+## What is this?
+
+Qoyod Creative OS is a password-protected web app built exclusively for the Qoyod marketing team. It gives every marketer on the team access to 11 AI-powered tools — all tailored to Qoyod's products, brand voice, Saudi market, and ZATCA compliance messaging.
+
+No prompting skills required. Every tab has pre-filled context about Qoyod's products, competitors, and tone of voice. Click Generate and get professional Arabic marketing content instantly.
+
+---
+
+## How to access
+
+1. Open the app URL (shared internally)
+2. Enter the team password: **QoyodTeam2026**
+3. You're in — no individual accounts needed
+
+---
+
+## The 11 Tabs
+
+### 1. إنشاء محتوى — Ad Content Generator
+Generate complete ad content packages in one click:
+- Hook (attention-grabbing opening)
+- Headline
+- Body copy
+- UGC video script
+- Design direction for the creative team
+
+**A/B mode**: Toggle to generate two completely different ad variants side by side — different angles, different emotional hooks — ready for split testing.
+
+---
+
+### 2. حملة — Campaign Builder
+Build a full multi-channel campaign from a single brief:
+- Channel selection: Instagram, Snapchat, LinkedIn, TikTok, Google, SMS, Email, WhatsApp
+- Budget allocation per channel
+- Campaign hooks tailored to each platform's audience and format
+- Timeline and phasing recommendations
+
+---
+
+### 3. خطة المحتوى — Monthly Content Calendar
+Generate a complete month of social content:
+- Post-by-post content plan
+- Caption for each post
+- Design text (what goes on the visual)
+- Hashtag set per post
+- All formatted for easy handoff to the design team
+
+---
+
+### 4. رسائل / بريد — Message Sequences
+Generate full CRM message sequences:
+- **Welcome** sequence for new signups
+- **Nurture** sequence for trial users
+- **Win-back** sequence for churned customers
+- **Demo invitation** sequence
+- **Feature announcement** sequence
+
+Covers WhatsApp, Email, and SMS formats. All in professional Saudi Arabic.
+
+---
+
+### 5. تحليل الأداء — Performance Analyzer
+Paste in your campaign metrics and get:
+- Diagnosis of what's working and what isn't
+- Quick wins to implement immediately
+- Creative recommendations to improve performance
+- Benchmark comparison against typical SaaS performance
+
+---
+
+### 6. مراقبة السوق — Competitor Monitor
+Track what your competitors are doing and generate counter-creatives:
+- Competitors covered: Daftra, Foodics, Rewaa, Wafeq
+- Analyze their messaging angles
+- Generate counter-creative that positions Qoyod favorably
+- Identify messaging gaps you can own
+
+---
+
+### 7. التصميم — Design Brief Generator
+Create detailed design briefs for the creative team:
+- 1, 2, or 3 visual variants per brief
+- Art direction notes
+- Dos and don'ts for each concept
+- File checklist (dimensions, formats, deliverables)
+- **Ad Specs button** (appears after brief generation): platform-specific specs with exact dimensions, text limits, and safe zones for every channel
+
+---
+
+### 8. صفحات الوصول — Landing Page Builder
+Two-step landing page creation:
+1. Generate the page strategy (sections, messaging, CTA hierarchy)
+2. Generate a complete self-contained HTML file — ready to upload to any server or send to a developer
+
+---
+
+### 9. مكتبة الإعلانات — Ad Reference Library
+A curated library of real high-performing ads with:
+- Category filtering (awareness, conversion, retention)
+- "Use as reference" links that pre-fill other tabs with the ad's style and angle
+
+---
+
+### 10. شرائح العملاء — Customer Personas (ICP)
+10 pre-built Saudi market customer personas:
+- Each with pain points, motivations, and objections
+- Hooks tailored to that persona
+- One-click "Create ad for this persona" that jumps to the content tab pre-filled
+
+---
+
+### 11. مراجعة — Creative Review
+Two tools in one:
+- **Compliance checklist**: Verify your ad against Qoyod brand guidelines, ZATCA claims policy, and Saudi advertising regulations
+- **AI copy reviewer**: Paste any copy and get a dialect check, quality score (1–10), and an improved rewritten version
+
+---
+
+## Products & Segments Built In
+
+The app has deep knowledge of all Qoyod products baked into every prompt:
+
+| Group | Products |
+|-------|---------|
+| Core Platform | Qoyod Main, QFlavours, QoyodPOS, QBookkeeping |
+| Segments | قيود للمحاسبين, قيود لأصحاب الأعمال |
+| Services | VAT Services, API Integration, E-Invoice Phase 2 (ZATCA) |
+| Seasonal | Ramadan, National Day, Founding Day, Year-End offers |
+
+**Key features always referenced in content:**
+ZATCA e-invoice compliance, Tax Declaration, Financial Reports, Inventory Management, Mobile Management, Third-party Integrations, 24h Arabic Support, SOCPA-certified Bookkeeping, Budget Planning, Recurring Transactions
+
+---
+
+## Competitors Known to the System
+
+- Daftra
+- Foodics
+- Rewaa
+- Wafeq
+
+Content generated by the app is automatically positioned against these competitors where relevant.
+
+---
+
+## Brand & Tone
+
+- **Primary color**: Navy `#021544`
+- **Accent color**: Teal `#17A3A4`
+- **Fonts**: IBM Plex Sans Arabic (body) + Space Grotesk (headings)
+- **Voice**: Professional, direct, Saudi Arabic — not formal Egyptian or Gulf dialect
+- **Direction**: RTL throughout
+
+---
+
+## Promo Video
+
+A 46-second cinematic product demo video (`Qoyod Creative OS — Promo Video`) is included as a separate artifact. It shows all 11 tabs with live animated UI demos, Arabic typing effects, performance dashboards, and WhatsApp/Email sequences.
+
+**To export as MP4:**
+1. Open the Promo Video in the preview
+2. Click **"Record & Download as MP4"** (bottom-left)
+3. Select "This Tab" when the browser asks what to share
+4. Wait 46 seconds for the video to play through
+5. MP4 downloads automatically and uploads to the Google Drive folder
+
+---
+
+## Google Drive Folder
+
+All project assets are stored at:
+**https://drive.google.com/drive/folders/15oAfN3gOQIiWLhto1Zd8jhdC_na6mnn-**
+
+Contents:
+- `01 — Source Code/` — Full app source code archive
+- `02 — Documentation/` — Setup and deploy guides
+- `03 — Screenshots & Images/` — App screenshots
+- `Qoyod Creative OS — Project Summary` (Google Doc)
+- MP4 video (added after first recording)
+
+Access is shared with the `@qoyod.com` domain.
+
+---
+
+## Technical Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React 19 + Vite + Tailwind CSS |
+| Backend | Express + TypeScript (Node.js) |
+| AI Model | Claude (Anthropic API) |
+| Auth | Session-based password gate |
+| Hosting | Replit (development) |
+| Video | Framer Motion animations + browser screen capture |
+| Drive | Google Drive API via Replit connector |
+
+---
+
+## AI Configuration
+
+- **Model**: Claude Sonnet (latest)
+- **Max output**: 2,000 tokens per generation
+- **Prompt limit**: 20,000 characters
+- **API key**: Stored securely as environment secret (never exposed to browser)
+
+---
+
+## Security
+
+- Team password required to access any feature
+- API key never exposed to the client
+- All AI calls routed through server-side proxy
+- Shared with Qoyod domain only (org policy enforced by Google Workspace)
+
+---
+
+## How to Update the App
+
+The app is live in Replit. To make changes:
+1. Edit the relevant file in Replit (e.g., add a persona, change a prompt, update a product)
+2. The dev server hot-reloads automatically
+3. Use "Deploy" in Replit to push changes to the public URL
+
+Main file for content changes: `artifacts/qoyod-creative-os/src/pages/CreativeOS.jsx`
+
+---
+
+*Built April 2026 — Qoyod Marketing Team*

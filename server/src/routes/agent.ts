@@ -1,0 +1,1720 @@
+import { Router } from "express";
+import crypto from "crypto";
+import { canvaUploadSvgAndCreateDesign } from "./canva.js";
+import { driveUploadText } from "./drive.js";
+import { logger, taskLogger } from "../lib/logger.js";
+import { loadTasks, saveTasks, type PersistedTask } from "../lib/agent-store.js";
+import { cacheLookup, cacheStore, cacheStats, cacheClear } from "../lib/agent-cache.js";
+import {
+  addRecall,
+  buildMemoryBlock,
+  deleteFact,
+  deleteNote,
+  listFacts,
+  readNotes,
+  recentRecall,
+  upsertFact,
+  writeNote,
+} from "../lib/agent-memory.js";
+import { parseMentions } from "../lib/agent-mentions.js";
+import {
+  addSchedule,
+  deleteSchedule,
+  listSchedules,
+  startScheduler,
+  toggleSchedule,
+  type Schedule,
+} from "../lib/agent-schedule.js";
+import {
+  PERSONAS,
+  personaTools,
+  pickPersona,
+  type PersonaId,
+} from "../lib/agent-personas.js";
+
+/* ══════════════════════════════════════════════════════════════════
+   Qoyod Creative Agent — autonomous loop
+
+   The agent listens for three kinds of triggers:
+     1. Manual "run" from the CreativeOS UI  (POST /api/agent/run)
+     2. @mention or task-assignment ingested via webhook from Slack,
+        HubSpot, Asana, Email, etc.                (POST /api/agent/webhook)
+     3. Direct programmatic push                    (POST /api/agent/mention)
+
+   When triggered, it enters a Claude tool-use loop and can:
+     - Draft ad copy / captions / content topics
+     - Generate SVG ad creatives
+     - Generate Nano Banana images
+     - Draft landing-page HTML
+     - Build a content calendar / email sequence / campaign plan
+     - Review copy against Qoyod voice
+     - Publish to WordPress, HubSpot, Canva, Drive, Miro
+
+   All work is tracked in an in-memory task store with step-level logging
+   so the UI can show an activity feed per task.
+   ══════════════════════════════════════════════════════════════════ */
+
+const router = Router();
+
+const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
+const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5";
+
+const MAX_AGENT_STEPS = 12;
+
+type StepKind = "think" | "tool_use" | "tool_result" | "error" | "finish";
+interface Step {
+  ts: number;
+  kind: StepKind;
+  tool?: string;
+  message?: string;
+  input?: unknown;
+  output?: unknown;
+}
+interface Trigger {
+  source: "ui" | "webhook" | "mention" | "email" | "task";
+  actor?: string;          // who @mentioned / assigned
+  channel?: string;        // slack channel, email thread, etc.
+  title?: string;          // task title
+  body?: string;           // the message body / mention text / task description
+  context?: Record<string, unknown>; // any extra structured context
+}
+interface Task {
+  id: string;
+  created_at: number;
+  updated_at: number;
+  trigger: Trigger;
+  status: "queued" | "thinking" | "running" | "done" | "error";
+  steps: Step[];
+  outputs: Record<string, unknown>;
+  summary?: string;
+  error?: string;
+  priority?: "low" | "normal" | "high";
+  schedule_id?: string;
+  persona?: PersonaId;
+}
+
+const TASKS = new Map<string, Task>();
+const TASK_CAP = 100;                // keep last 100 tasks in memory
+
+/* Trigger dedup — if the same body hits within 60s we skip. */
+const DEDUP_WINDOW_MS = 60_000;
+const recentTriggerHashes = new Map<string, number>();
+function triggerHash(t: Trigger): string {
+  return crypto
+    .createHash("sha1")
+    .update(`${t.source}|${t.actor ?? ""}|${t.title ?? ""}|${t.body ?? ""}`)
+    .digest("hex");
+}
+function isDuplicate(t: Trigger): boolean {
+  const h = triggerHash(t);
+  const last = recentTriggerHashes.get(h);
+  const now = Date.now();
+  /* Garbage-collect old entries */
+  for (const [k, ts] of recentTriggerHashes) {
+    if (now - ts > DEDUP_WINDOW_MS) recentTriggerHashes.delete(k);
+  }
+  if (last && now - last < DEDUP_WINDOW_MS) return true;
+  recentTriggerHashes.set(h, now);
+  return false;
+}
+
+/* Rehydrate on boot so the UI sees prior history after a restart. */
+(function seedFromDisk() {
+  try {
+    for (const p of loadTasks() as PersistedTask[]) {
+      /* Anything left "running" or "thinking" after a crash is marked error. */
+      const status =
+        p.status === "running" || p.status === "thinking" || p.status === "queued"
+          ? "error"
+          : (p.status as Task["status"]);
+      TASKS.set(p.id, {
+        id: p.id,
+        created_at: p.created_at,
+        updated_at: p.updated_at,
+        trigger: p.trigger as Trigger,
+        status,
+        steps: p.steps as Step[],
+        outputs: p.outputs ?? {},
+        summary: p.summary,
+        error: p.error ?? (status === "error" ? "server restart interrupted task" : undefined),
+        priority: p.priority,
+        schedule_id: p.schedule_id,
+        persona: p.persona as PersonaId | undefined,
+      });
+    }
+  } catch (e) {
+    logger.warn({ err: String(e) }, "agent: seed from disk failed");
+  }
+})();
+
+function persist() {
+  const snap: PersistedTask[] = [...TASKS.values()].map((t) => ({
+    id: t.id,
+    created_at: t.created_at,
+    updated_at: t.updated_at,
+    status: t.status,
+    trigger: t.trigger,
+    steps: t.steps,
+    outputs: t.outputs,
+    summary: t.summary,
+    error: t.error,
+    priority: t.priority,
+    schedule_id: t.schedule_id,
+    persona: t.persona,
+  } as PersistedTask));
+  saveTasks(snap);
+}
+
+function newTaskId() {
+  return "t_" + crypto.randomBytes(6).toString("hex");
+}
+function pushStep(task: Task, step: Omit<Step, "ts">) {
+  task.steps.push({ ts: Date.now(), ...step });
+  task.updated_at = Date.now();
+  persist();
+}
+function trimTasks() {
+  if (TASKS.size <= TASK_CAP) return;
+  const ordered = [...TASKS.entries()].sort(([, a], [, b]) => a.created_at - b.created_at);
+  while (TASKS.size > TASK_CAP) {
+    const first = ordered.shift();
+    if (!first) break;
+    TASKS.delete(first[0]);
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   SYSTEM PROMPT — tells Claude how to behave as the creative agent
+   ───────────────────────────────────────────────────────────── */
+const SYSTEM_PROMPT = `You are the Qoyod Creative Agent — an autonomous AI marketing assistant for Qoyod, a Saudi ZATCA-certified cloud accounting SaaS.
+
+You are triggered when a teammate @mentions you, assigns you a task, or clicks "Run agent" in the CreativeOS app. Your job is to understand the request, plan the minimum set of steps, call the right tools, and produce a concrete output (ad copy, SVG ad, landing page, calendar, email sequence, campaign plan, etc.) — optionally publishing it to WordPress, HubSpot, Canva, Drive, or Miro.
+
+VOICE & BRAND (apply to all copy you produce):
+- Arabic copy MUST be Saudi dialect (مو / وش / ليش). NEVER Egyptian (مش / ايه / ازاي).
+- Tone: engaging, confident, professional, clear. "فزعة" — give more than expected.
+- Primary palette: Navy #021544, Deep Turquoise #01355A, Accent Turquoise #17A3A4.
+- Products: Qoyod Main (accounting + e-invoice), QFlavours (F&B POS), QoyodPOS (retail), QBookkeeping (outsourced), VAT, E-Invoice (ZATCA Ph2), API Integration, seasonal offers.
+- Every ad must: be mobile-first, have 1 hook, 1 message, 1 CTA, 1 trust element (ZATCA / SOCPA / 25,000+ شركة).
+
+OPERATING RULES:
+1. Break the user's request into the smallest useful set of tool calls — do not over-generate.
+2. Prefer one strong asset over many weak ones. A/B variants are fine when explicitly asked.
+3. If the request is ambiguous, make a concrete reasonable assumption and proceed — do not ask follow-ups. The user is not watching live; they'll review the result.
+4. After you finish all tool calls, write a short Arabic summary (2-4 lines) of what you produced and include any public links (Canva / WP preview / Drive) as plain URLs. This is your final assistant message.
+5. Never invent ZATCA claims that are not true. Qoyod is ZATCA Phase-2 compliant.
+6. Never publish to WordPress/HubSpot without an explicit instruction in the trigger. If the trigger mentions "publish" / "نشر" / "draft live" then go ahead.`;
+
+/* ─────────────────────────────────────────────────────────────
+   BRAND FACTS — lightweight KV the agent can consult before writing
+   ───────────────────────────────────────────────────────────── */
+const BRAND_FACTS = {
+  palette: {
+    navy: "#021544",
+    deep_turquoise: "#01355A",
+    accent_turquoise: "#17A3A4",
+    usage: "Navy = primary background. Teal = CTAs, accents, data highlights. White on navy, navy on teal.",
+  },
+  fonts: {
+    arabic: "IBM Plex Sans Arabic",
+    latin: "Space Grotesk",
+    design_system: "Lama Sans (in Figma specs)",
+  },
+  products: [
+    "Qoyod Main — accounting + e-invoicing (ZATCA Phase 2 compliant)",
+    "QFlavours — F&B POS",
+    "QoyodPOS — retail POS",
+    "QBookkeeping — outsourced bookkeeping",
+    "VAT module",
+    "E-Invoice (ZATCA Phase 2)",
+    "API Integration",
+  ],
+  trust: [
+    "ZATCA Phase 2 certified",
+    "SOCPA-aligned",
+    "+25,000 Saudi businesses",
+    "Arabic-first, 24/7 support",
+  ],
+  dialect: {
+    allowed: ["مو", "وش", "ليش", "كم", "عندك", "بسرعة"],
+    forbidden: ["مش", "ايه", "ازاي", "بتاع", "يلا"],
+    rule: "Saudi dialect only. Never Egyptian. Never mix dialects in one asset.",
+  },
+  cta_patterns: [
+    "ابدأ مجاناً",
+    "جرّب الآن",
+    "احجز عرضك",
+    "اطلب العرض",
+    "سجّل اليوم",
+    "جدولة مكالمة",
+  ],
+} as const;
+
+/* ─────────────────────────────────────────────────────────────
+   TOOL DEFINITIONS (JSON schemas exposed to Claude)
+   ───────────────────────────────────────────────────────────── */
+const TOOLS = [
+  {
+    name: "generate_content",
+    description:
+      "Generate Arabic/Saudi ad copy, social captions, or article drafts for a given Qoyod product + funnel stage. Returns the copy as text.",
+    input_schema: {
+      type: "object",
+      properties: {
+        product: { type: "string", description: "Qoyod product name (e.g. 'Qoyod Main', 'QFlavours')" },
+        funnel: { type: "string", enum: ["TOF", "MOF", "BOF"] },
+        channel: { type: "string", description: "Instagram / Snapchat / LinkedIn / Twitter / Email / etc." },
+        hook_type: {
+          type: "string",
+          enum: ["Fear", "Time", "Simplicity", "Control", "SocialProof", "BeforeAfter", "Auto"],
+        },
+        brief: { type: "string", description: "Optional extra notes about message angle" },
+        variants: { type: "number", description: "How many hook variants (default 3)" },
+      },
+      required: ["product", "funnel", "channel"],
+    },
+  },
+  {
+    name: "generate_ad_svg",
+    description:
+      "Generate a complete SVG ad creative (Navy + Teal brand) for Qoyod. Returns the SVG string and its dimensions.",
+    input_schema: {
+      type: "object",
+      properties: {
+        product: { type: "string" },
+        message: { type: "string", description: "Main Arabic headline" },
+        hook: { type: "string", description: "Secondary line (Arabic)" },
+        cta: { type: "string", description: "CTA button text (Arabic)" },
+        trust: { type: "string", description: "Trust badge, e.g. 'ZATCA Phase 2'" },
+        ratio: { type: "string", enum: ["1:1", "4:5", "9:16", "16:9"] },
+        concept: { type: "string" },
+        color_accent: { type: "string", description: "Override accent hex" },
+      },
+      required: ["product", "message", "cta", "ratio"],
+    },
+  },
+  {
+    name: "generate_nb_image",
+    description:
+      "Generate a photorealistic or illustrated image via Nano Banana (gemini-2.5-flash-image). Returns a data-URL + Drive link if Drive is configured.",
+    input_schema: {
+      type: "object",
+      properties: {
+        prompt: { type: "string" },
+        save_to_drive_as: {
+          type: "string",
+          description: "If provided, persist the PNG to the team Drive under this filename.",
+        },
+      },
+      required: ["prompt"],
+    },
+  },
+  {
+    name: "build_landing_page_html",
+    description:
+      "Draft a mobile-first Arabic RTL landing page (self-contained HTML + CSS, no external images) for a Qoyod product.",
+    input_schema: {
+      type: "object",
+      properties: {
+        product: { type: "string" },
+        headline: { type: "string" },
+        angle: { type: "string" },
+        cta_text: { type: "string" },
+        include_form: { type: "boolean" },
+      },
+      required: ["product", "headline"],
+    },
+  },
+  {
+    name: "build_campaign_plan",
+    description:
+      "Produce a 360° campaign plan JSON (objectives, channels, phases, weekly post cadence, budget guidance).",
+    input_schema: {
+      type: "object",
+      properties: {
+        theme: { type: "string" },
+        type: { type: "string", enum: ["Seasonal", "Launch", "Awareness", "Lead-Gen", "Retention"] },
+        objective: { type: "string", enum: ["Leads", "Awareness", "Sales", "Retention"] },
+        channels: { type: "array", items: { type: "string" } },
+        duration_weeks: { type: "number" },
+        product: { type: "string" },
+      },
+      required: ["theme", "objective", "product"],
+    },
+  },
+  {
+    name: "build_content_calendar",
+    description: "Produce a weekly content calendar with post ideas per channel.",
+    input_schema: {
+      type: "object",
+      properties: {
+        product: { type: "string" },
+        weeks: { type: "number" },
+        channels: { type: "array", items: { type: "string" } },
+        sector: { type: "string" },
+      },
+      required: ["product", "weeks"],
+    },
+  },
+  {
+    name: "build_email_sequence",
+    description: "Draft an email nurture sequence (subject + preview + body per email).",
+    input_schema: {
+      type: "object",
+      properties: {
+        product: { type: "string" },
+        segment: { type: "string", description: "Target persona / ICP" },
+        emails: { type: "number", description: "How many emails in the sequence" },
+      },
+      required: ["product", "segment", "emails"],
+    },
+  },
+  {
+    name: "review_copy",
+    description:
+      "Review a piece of copy for Qoyod brand voice, Saudi dialect, clarity, one-message rule. Returns issues + rewrite suggestions.",
+    input_schema: {
+      type: "object",
+      properties: {
+        copy: { type: "string" },
+        language: { type: "string", enum: ["ar", "en"] },
+      },
+      required: ["copy"],
+    },
+  },
+  {
+    name: "publish_wordpress",
+    description:
+      "Publish a draft page to WordPress. Requires WP_SITE_URL / WP_USERNAME / WP_APP_PASSWORD env vars.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        html: { type: "string" },
+        slug: { type: "string" },
+      },
+      required: ["title", "html"],
+    },
+  },
+  {
+    name: "publish_hubspot",
+    description: "Create a draft landing/site page in HubSpot. Requires HS_ACCESS_TOKEN.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        html: { type: "string" },
+        slug: { type: "string" },
+      },
+      required: ["title", "html"],
+    },
+  },
+  {
+    name: "upload_canva",
+    description: "Upload an SVG to Canva and create a new design from it. Requires Canva OAuth to be connected.",
+    input_schema: {
+      type: "object",
+      properties: {
+        svg: { type: "string" },
+        name: { type: "string" },
+        design_type: { type: "string", description: "Canva preset, e.g. 'SocialMedia'" },
+      },
+      required: ["svg", "name"],
+    },
+  },
+  {
+    name: "save_to_drive",
+    description:
+      "Save a text-ish artifact (HTML / markdown / SVG / CSV) to the Qoyod team Drive folder. Returns a public view link.",
+    input_schema: {
+      type: "object",
+      properties: {
+        filename: { type: "string" },
+        content: { type: "string" },
+        mimeType: { type: "string" },
+      },
+      required: ["filename", "content", "mimeType"],
+    },
+  },
+  {
+    name: "analyze_landing_page",
+    description:
+      "Fetch a public URL and critique it as a growth marketer. Returns {headline_clarity, value_prop, cta, trust, mobile, risks[], fixes[]}. Use before redesigning a landing page.",
+    input_schema: {
+      type: "object",
+      properties: {
+        url: { type: "string" },
+        focus: { type: "string", enum: ["conversion", "clarity", "arabic-quality", "seo", "all"] },
+      },
+      required: ["url"],
+    },
+  },
+  {
+    name: "translate_copy",
+    description:
+      "Translate copy between Arabic (Saudi dialect) and English while preserving Qoyod voice. Never outputs Egyptian Arabic.",
+    input_schema: {
+      type: "object",
+      properties: {
+        text: { type: "string" },
+        to: { type: "string", enum: ["ar", "en"] },
+        register: { type: "string", enum: ["ad", "long-form", "formal"] },
+      },
+      required: ["text", "to"],
+    },
+  },
+  {
+    name: "generate_video_script",
+    description:
+      "Write a short-form video script (TikTok / Reels / Shorts) with scene-by-scene camera + voiceover + on-screen text.",
+    input_schema: {
+      type: "object",
+      properties: {
+        product: { type: "string" },
+        hook: { type: "string" },
+        duration_sec: { type: "number", description: "15, 30, 45, or 60" },
+        channel: { type: "string", enum: ["TikTok", "Reels", "Shorts", "Snap"] },
+        cta: { type: "string" },
+      },
+      required: ["product", "duration_sec", "channel"],
+    },
+  },
+  {
+    name: "generate_seo_meta",
+    description:
+      "Produce Arabic-first SEO meta (title, meta description, Open Graph, 5-10 keywords) for a Qoyod page.",
+    input_schema: {
+      type: "object",
+      properties: {
+        topic: { type: "string" },
+        product: { type: "string" },
+        language: { type: "string", enum: ["ar", "en"] },
+      },
+      required: ["topic"],
+    },
+  },
+  {
+    name: "plan_ab_test",
+    description:
+      "Design a clean A/B test (or A/B/C) for a given growth hypothesis. Returns variant specs, success metric, sample size guidance, kill criteria.",
+    input_schema: {
+      type: "object",
+      properties: {
+        hypothesis: { type: "string" },
+        surface: { type: "string", description: "e.g. 'landing page hero', 'Meta ad', 'email subject'" },
+        variants: { type: "number" },
+      },
+      required: ["hypothesis", "surface"],
+    },
+  },
+  {
+    name: "generate_hashtags",
+    description: "Suggest 8-15 Saudi/Gulf-market hashtags for a given topic + channel.",
+    input_schema: {
+      type: "object",
+      properties: {
+        topic: { type: "string" },
+        channel: { type: "string", enum: ["Instagram", "TikTok", "Twitter", "LinkedIn", "Snapchat"] },
+      },
+      required: ["topic"],
+    },
+  },
+  {
+    name: "brief_to_spec",
+    description:
+      "Expand a 1-line brief into a structured marketing spec (goal, audience, message hierarchy, channels, assets, KPIs). Great first step before other tools.",
+    input_schema: {
+      type: "object",
+      properties: {
+        brief: { type: "string" },
+      },
+      required: ["brief"],
+    },
+  },
+  {
+    name: "generate_miro_board",
+    description:
+      "Create a Miro board visualizing a workflow / funnel for Qoyod. Returns the board URL.",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        description: { type: "string" },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    name: "analyze_competitor_content",
+    description:
+      "Analyze a competitor's public content (URL or handle) for themes, tone, hooks, posting cadence, and gaps Qoyod can exploit.",
+    input_schema: {
+      type: "object",
+      properties: {
+        competitor: { type: "string", description: "Name, URL, or social handle" },
+        channel: { type: "string" },
+        goal: {
+          type: "string",
+          enum: ["content_gap", "hook_analysis", "posting_cadence", "messaging"],
+        },
+      },
+      required: ["competitor"],
+    },
+  },
+  {
+    name: "generate_google_ads_rsa",
+    description:
+      "Draft a Google Ads Responsive Search Ad (RSA): 15 headlines + 4 descriptions, Saudi Arabic + English, with character counts validated.",
+    input_schema: {
+      type: "object",
+      properties: {
+        product: { type: "string" },
+        landing_url: { type: "string" },
+        keywords: { type: "array", items: { type: "string" } },
+        funnel: { type: "string", enum: ["TOF", "MOF", "BOF"] },
+        language: { type: "string", enum: ["ar", "en", "bilingual"] },
+      },
+      required: ["product", "keywords"],
+    },
+  },
+  {
+    name: "build_blog_article",
+    description:
+      "Write a long-form SEO blog article (Arabic or English) with H1/H2s, intro, body, FAQ schema block, and internal-link suggestions.",
+    input_schema: {
+      type: "object",
+      properties: {
+        topic: { type: "string" },
+        primary_keyword: { type: "string" },
+        secondary_keywords: { type: "array", items: { type: "string" } },
+        language: { type: "string", enum: ["ar", "en"] },
+        word_count: { type: "number" },
+      },
+      required: ["topic", "primary_keyword"],
+    },
+  },
+  {
+    name: "analyze_metrics_report",
+    description:
+      "Given a JSON blob of campaign or landing-page metrics, return an insights report with 3 actions for next 14 days.",
+    input_schema: {
+      type: "object",
+      properties: {
+        metrics: { type: "object", description: "Any metrics JSON — impressions, clicks, CVR, CPA, LP sessions, etc." },
+        context: { type: "string" },
+      },
+      required: ["metrics"],
+    },
+  },
+  {
+    name: "build_press_release",
+    description: "Bilingual (ar+en) press release for Qoyod announcements.",
+    input_schema: {
+      type: "object",
+      properties: {
+        headline: { type: "string" },
+        body_points: { type: "array", items: { type: "string" } },
+        quote_from: { type: "string", description: "Executive name + title for the quote" },
+        embargo_date: { type: "string" },
+      },
+      required: ["headline", "body_points"],
+    },
+  },
+  {
+    name: "slack_post",
+    description:
+      "Post a message to a Slack channel (optionally threaded). Use this proactively when a teammate needs a heads-up mid-task. Requires SLACK_BOT_TOKEN.",
+    input_schema: {
+      type: "object",
+      properties: {
+        channel: { type: "string", description: "Channel ID or name like #marketing" },
+        text: { type: "string" },
+        thread_ts: { type: "string", description: "Optional — reply in a thread" },
+      },
+      required: ["channel", "text"],
+    },
+  },
+  {
+    name: "create_asana_task",
+    description:
+      "Create an Asana task in a specified project. Requires ASANA_ACCESS_TOKEN (Personal Access Token from the Asana Developer Console).",
+    input_schema: {
+      type: "object",
+      properties: {
+        project_gid: { type: "string" },
+        name: { type: "string" },
+        notes: { type: "string" },
+        assignee: { type: "string", description: "User gid or 'me'" },
+      },
+      required: ["project_gid", "name"],
+    },
+  },
+  {
+    name: "brand_fact_lookup",
+    description:
+      "Quick lookup of Qoyod brand/product facts (palette, fonts, products, trust elements, forbidden dialect words). Use before writing copy when unsure.",
+    input_schema: {
+      type: "object",
+      properties: {
+        topic: {
+          type: "string",
+          enum: ["palette", "fonts", "products", "trust", "dialect", "cta_patterns"],
+        },
+      },
+      required: ["topic"],
+    },
+  },
+  {
+    name: "memory_write",
+    description:
+      "Jot a short note to long-term memory scoped to the current persona, so the next run picks it up. Use for learnings: 'winning hook: …', 'Zain campaign performed 2x on Reels', etc. ≤240 chars.",
+    input_schema: {
+      type: "object",
+      properties: {
+        text: { type: "string", description: "The note. Short and concrete." },
+      },
+      required: ["text"],
+    },
+  },
+  {
+    name: "memory_read",
+    description:
+      "Read recent persona notes + recent task recall for the current persona. Call at the start of a task if you suspect context from past runs matters.",
+    input_schema: { type: "object", properties: {} },
+  },
+] as const;
+
+/* ─────────────────────────────────────────────────────────────
+   INTERNAL HELPERS — run a single tool
+   ───────────────────────────────────────────────────────────── */
+async function callAnthropic(body: unknown): Promise<any> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error("ANTHROPIC_API_KEY not set");
+  const r = await fetch(ANTHROPIC_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) {
+    const err = await r.text();
+    throw new Error(`Anthropic ${r.status}: ${err}`);
+  }
+  return r.json();
+}
+
+function extractText(content: Array<{ type: string; text?: string }>): string {
+  return content.filter((b) => b.type === "text").map((b) => b.text ?? "").join("").trim();
+}
+
+/* Claude-subcall helper used by many "generate_*" tools */
+async function claudeText(system: string, user: string, max_tokens = 2000): Promise<string> {
+  const data = await callAnthropic({ model: MODEL, max_tokens, system, messages: [{ role: "user", content: user }] });
+  return extractText(data.content ?? []);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   TOOL DISPATCH — every tool name maps to a handler
+   ───────────────────────────────────────────────────────────── */
+async function runTool(name: string, input: any, ctx?: { personaId?: string }): Promise<unknown> {
+  switch (name) {
+    case "generate_content": {
+      const {
+        product,
+        funnel,
+        channel,
+        hook_type = "Auto",
+        brief = "",
+        variants = 3,
+      } = input;
+      const sys = `You are a senior Arabic copywriter for Qoyod. Write in Saudi dialect (مو / وش / ليش — NEVER Egyptian). Always: one hook, one message, one CTA. Tone: confident, warm, professional.`;
+      const usr = `Write ad copy for ${product} (${funnel}) on ${channel}. Hook angle: ${hook_type}. Extra: ${brief}.
+Return JSON: {"hooks":[${variants} short Saudi-dialect hooks], "message":"...", "cta":"...", "trust":"..."}. Reply with JSON only.`;
+      const text = await claudeText(sys, usr, 1200);
+      return safeJSON(text) ?? { raw: text };
+    }
+    case "generate_ad_svg": {
+      const r = await fetch(`http://127.0.0.1:${process.env.PORT || 8080}/api/generate-design`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      return r.json();
+    }
+    case "generate_nb_image": {
+      const { prompt, save_to_drive_as } = input;
+      const r = await fetch(`http://127.0.0.1:${process.env.PORT || 8080}/api/nb/generate-image`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      });
+      const data: any = await r.json();
+      if (!r.ok) return { error: data.error ?? `HTTP ${r.status}` };
+      const out: Record<string, unknown> = {
+        mimeType: data.mimeType,
+        dataUrl: data.dataUrl?.slice(0, 120) + "…",
+      };
+      if (save_to_drive_as && data.base64) {
+        /* Drive helper only takes text/utf-8, so we keep the base64 as a .txt sidecar
+           — or upload the raw bytes using the standard /api/drive/upload route. */
+        const up = await fetch(
+          `http://127.0.0.1:${process.env.PORT || 8080}/api/drive/upload`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              content: data.base64,
+              binaryBase64: true,
+              filename: save_to_drive_as,
+              mimeType: data.mimeType ?? "image/png",
+            }),
+          }
+        );
+        const upd: any = await up.json();
+        if (upd?.link) out.drive_link = upd.link;
+        if (upd?.error) out.drive_error = upd.error;
+      }
+      return out;
+    }
+    case "build_landing_page_html": {
+      const { product, headline, angle = "", cta_text = "ابدأ الآن", include_form = true } = input;
+      const sys = `You produce self-contained mobile-first RTL Arabic landing pages for Qoyod. Inline <style>. No external images (use inline SVG / CSS). Navy #021544 + Teal #17A3A4 brand. Use <html lang="ar" dir="rtl">. Single file, <!DOCTYPE html> … </html>. Return ONLY the HTML.`;
+      const usr = `Product: ${product}
+Hero headline: "${headline}"
+Angle: ${angle}
+CTA: "${cta_text}"
+Include lead form: ${include_form ? "yes" : "no"}`;
+      const html = await claudeText(sys, usr, 4000);
+      return { html };
+    }
+    case "build_campaign_plan": {
+      const { theme, type = "Seasonal", objective, channels = [], duration_weeks = 4, product } = input;
+      const sys = `You are Qoyod's senior growth marketer. Output JSON only.`;
+      const usr = `Build a ${duration_weeks}-week ${type} campaign plan for product: ${product}. Theme: "${theme}". Objective: ${objective}. Channels: ${channels.join(", ")}.
+JSON schema: {"phases":[{"week":1,"focus":"...","assets":["..."],"channels":["..."],"kpis":["..."]}], "cta":"...", "budget_split":{"Meta":%,"TikTok":%,"Snapchat":%,"Google":%,"LinkedIn":%}, "risks":["..."]}.`;
+      const text = await claudeText(sys, usr, 2500);
+      return safeJSON(text) ?? { raw: text };
+    }
+    case "build_content_calendar": {
+      const { product, weeks = 2, channels = ["Instagram", "LinkedIn", "Twitter"], sector = "General" } = input;
+      const sys = `You are Qoyod's content calendar planner. Output JSON.`;
+      const usr = `Draft a ${weeks}-week content calendar for ${product} (sector: ${sector}) across: ${channels.join(", ")}.
+JSON: {"weeks":[{"week":1,"posts":[{"day":"Sun","channel":"Instagram","funnel":"TOF","hook":"...","caption":"...","format":"Static"}]}]}. Include a mix of TOF/MOF/BOF posts. Arabic Saudi dialect.`;
+      const text = await claudeText(sys, usr, 3500);
+      return safeJSON(text) ?? { raw: text };
+    }
+    case "build_email_sequence": {
+      const { product, segment, emails = 4 } = input;
+      const sys = `You are Qoyod's lifecycle email copywriter. Output JSON only.`;
+      const usr = `Draft a ${emails}-email nurture sequence for ${product} targeting "${segment}". Arabic Saudi dialect.
+JSON: {"sequence":[{"idx":1,"subject":"...","preview":"...","body_html":"<p>…</p>","cta":"..."}]}`;
+      const text = await claudeText(sys, usr, 3500);
+      return safeJSON(text) ?? { raw: text };
+    }
+    case "review_copy": {
+      const { copy, language = "ar" } = input;
+      const sys = `You are Qoyod's editorial reviewer. Strict Saudi dialect check (flag any Egyptian mش/ايه/ازاي). Check: 1-hook, 1-message, 1-CTA, trust element present, ZATCA claims accurate.`;
+      const usr = `Language: ${language}\nCopy:\n${copy}\n\nReturn JSON: {"score":0-100,"issues":["..."],"rewrite":"..."}`;
+      const text = await claudeText(sys, usr, 1500);
+      return safeJSON(text) ?? { raw: text };
+    }
+    case "publish_wordpress": {
+      const { title, html, slug } = input;
+      const r = await fetch(`http://127.0.0.1:${process.env.PORT || 8080}/api/wp-draft`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, content: html, slug }),
+      });
+      return r.json();
+    }
+    case "publish_hubspot": {
+      const { title, html, slug } = input;
+      const r = await fetch(`http://127.0.0.1:${process.env.PORT || 8080}/api/hs-draft`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, content: html, slug }),
+      });
+      return r.json();
+    }
+    case "upload_canva": {
+      const { svg, name, design_type = "SocialMedia" } = input;
+      return canvaUploadSvgAndCreateDesign(svg, name, design_type);
+    }
+    case "save_to_drive": {
+      const { filename, content, mimeType = "text/plain" } = input;
+      return driveUploadText(filename, content, mimeType);
+    }
+    case "analyze_landing_page": {
+      const { url, focus = "all" } = input;
+      let pageText = "";
+      try {
+        const r = await fetch(url, { headers: { "User-Agent": "QoyodCreativeAgent/1.0" } });
+        if (!r.ok) return { error: `fetch ${r.status}`, url };
+        const html = await r.text();
+        /* Strip scripts/styles/tags so we feed Claude readable prose */
+        pageText = html
+          .replace(/<script[\s\S]*?<\/script>/gi, " ")
+          .replace(/<style[\s\S]*?<\/style>/gi, " ")
+          .replace(/<[^>]+>/g, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 8000);
+      } catch (e) {
+        return { error: e instanceof Error ? e.message : String(e), url };
+      }
+      const sys = `You are Qoyod's senior growth analyst. Critique landing pages like a conversion-focused marketer. Arabic pages: flag any non-Saudi dialect. Focus: ${focus}.`;
+      const usr = `URL: ${url}\n\nPage text (truncated):\n${pageText}\n\nReturn JSON: {"headline_clarity":"...","value_prop":"...","cta":"...","trust":"...","mobile":"...","risks":["..."],"fixes":["..."],"score":0-100}`;
+      const text = await claudeText(sys, usr, 2000);
+      return safeJSON(text) ?? { raw: text, url };
+    }
+    case "translate_copy": {
+      const { text, to, register = "ad" } = input;
+      const sys =
+        to === "ar"
+          ? `Translate to Saudi-dialect Arabic (مو/وش/ليش — NEVER Egyptian مش/ايه). Preserve Qoyod brand voice. Register: ${register}.`
+          : `Translate to clean business English. Preserve Qoyod brand voice. Register: ${register}.`;
+      const out = await claudeText(sys, `Translate:\n${text}`, 1500);
+      return { translated: out };
+    }
+    case "generate_video_script": {
+      const { product, hook = "", duration_sec = 30, channel, cta = "ابدأ مجاناً" } = input;
+      const sys = `You write short-form video scripts for Qoyod. Saudi dialect. Hook in first 1.5s. Scene-by-scene with Arabic VO, on-screen Arabic text, camera direction. Output JSON only.`;
+      const usr = `Product: ${product}. Channel: ${channel}. Duration: ${duration_sec}s. Hook angle: ${hook}. CTA: ${cta}.
+JSON: {"total_sec":${duration_sec},"scenes":[{"t":"0-3s","vo":"...","on_screen":"...","camera":"...","broll":"..."}],"cta":"...","caption":"..."}`;
+      const t = await claudeText(sys, usr, 1800);
+      return safeJSON(t) ?? { raw: t };
+    }
+    case "generate_seo_meta": {
+      const { topic, product = "Qoyod", language = "ar" } = input;
+      const sys = `Qoyod SEO specialist. Output JSON only. Language: ${language}.`;
+      const usr = `Topic: ${topic}. Product: ${product}.
+JSON: {"title":"...","meta_description":"...","og_title":"...","og_description":"...","keywords":["..."],"slug":"..."}`;
+      const t = await claudeText(sys, usr, 900);
+      return safeJSON(t) ?? { raw: t };
+    }
+    case "plan_ab_test": {
+      const { hypothesis, surface, variants = 2 } = input;
+      const sys = `You are Qoyod's growth experimentation lead. Output JSON only.`;
+      const usr = `Hypothesis: ${hypothesis}
+Surface: ${surface}
+Variants: ${variants}
+JSON: {"hypothesis":"...","surface":"...","variants":[{"id":"A","spec":"..."}],"primary_metric":"...","secondary":["..."],"min_sample_size":1000,"kill_criteria":"...","duration_days":14}`;
+      const t = await claudeText(sys, usr, 1500);
+      return safeJSON(t) ?? { raw: t };
+    }
+    case "generate_hashtags": {
+      const { topic, channel = "Instagram" } = input;
+      const sys = `You are a Gulf-market social strategist. Return JSON only.`;
+      const usr = `Suggest 8-15 hashtags for "${topic}" on ${channel}. Mix Arabic + English. JSON: {"hashtags":["#..."]}`;
+      const t = await claudeText(sys, usr, 400);
+      return safeJSON(t) ?? { raw: t };
+    }
+    case "brief_to_spec": {
+      const { brief } = input;
+      const sys = `Expand a 1-line marketing brief into a complete spec. Output JSON only.`;
+      const usr = `Brief: ${brief}
+JSON: {"goal":"...","audience":"...","primary_message":"...","secondary_messages":["..."],"channels":["..."],"assets_needed":["..."],"kpis":["..."],"funnel_stage":"TOF|MOF|BOF","timeline":"...","suggested_next_tools":["..."]}`;
+      const t = await claudeText(sys, usr, 1500);
+      return safeJSON(t) ?? { raw: t };
+    }
+    case "generate_miro_board": {
+      const { name, description = "" } = input;
+      const r = await fetch(`http://127.0.0.1:${process.env.PORT || 8080}/api/miro/create-board`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, description }),
+      });
+      return r.json();
+    }
+    case "analyze_competitor_content": {
+      const { competitor, channel = "general", goal = "content_gap" } = input;
+      /* Attempt a public fetch when competitor looks like a URL, otherwise
+         let Claude reason from what it knows about the brand. */
+      let pageText = "";
+      if (typeof competitor === "string" && /^https?:\/\//.test(competitor)) {
+        try {
+          const r = await fetch(competitor, {
+            headers: { "User-Agent": "QoyodCreativeAgent/1.0" },
+          });
+          if (r.ok) {
+            const html = await r.text();
+            pageText = html
+              .replace(/<script[\s\S]*?<\/script>/gi, " ")
+              .replace(/<style[\s\S]*?<\/style>/gi, " ")
+              .replace(/<[^>]+>/g, " ")
+              .replace(/\s+/g, " ")
+              .trim()
+              .slice(0, 6000);
+          }
+        } catch {
+          /* ignore — fall back to reasoning */
+        }
+      }
+      const sys = `You analyze competitors for Qoyod (Saudi ZATCA cloud accounting). Output JSON only.`;
+      const usr = `Competitor: ${competitor}
+Channel: ${channel}
+Goal: ${goal}
+${pageText ? `\nPublic page text:\n${pageText}` : ""}
+JSON: {"themes":["..."],"tone":"...","hooks_used":["..."],"posting_cadence":"...","gaps_for_qoyod":["..."],"steal_ideas":["..."]}`;
+      const t = await claudeText(sys, usr, 2000);
+      return safeJSON(t) ?? { raw: t };
+    }
+    case "generate_google_ads_rsa": {
+      const { product, keywords = [], funnel = "MOF", landing_url = "", language = "bilingual" } = input;
+      const sys = `You are a Google Ads specialist for Qoyod. Output JSON only. Hard limits: headlines ≤30 chars, descriptions ≤90 chars. Saudi-dialect Arabic, never Egyptian.`;
+      const usr = `Product: ${product}. Funnel: ${funnel}. Target keywords: ${keywords.join(", ")}. Landing: ${landing_url}. Language: ${language}.
+JSON: {"headlines":[{"text":"...","chars":N}],"descriptions":[{"text":"...","chars":N}],"paths":["path1","path2"],"final_url":"..."} — 15 headlines + 4 descriptions.`;
+      const t = await claudeText(sys, usr, 2500);
+      return safeJSON(t) ?? { raw: t };
+    }
+    case "build_blog_article": {
+      const { topic, primary_keyword, secondary_keywords = [], language = "ar", word_count = 1500 } = input;
+      const sys = `You write SEO blog articles for Qoyod. ${language === "ar" ? "Saudi dialect for tone, MSA for facts." : "Clear business English."} Output Markdown only.`;
+      const usr = `Topic: ${topic}
+Primary keyword: ${primary_keyword}
+Secondary: ${secondary_keywords.join(", ")}
+Target length: ~${word_count} words.
+Structure: H1, 200-word intro (keyword in first 100 chars), 4-7 H2 sections, FAQ block (5 Q&As), internal-link suggestions as a trailing list.`;
+      const md = await claudeText(sys, usr, 4500);
+      return { markdown: md, word_count: md.split(/\s+/).length };
+    }
+    case "analyze_metrics_report": {
+      const { metrics, context = "" } = input;
+      const sys = `You are Qoyod's growth analyst. Headline the "so what" first. Output JSON only.`;
+      const usr = `Context: ${context}
+Metrics JSON:
+${JSON.stringify(metrics).slice(0, 6000)}
+Return: {"headline_insight":"...","signals":[{"metric":"...","direction":"up|down|flat","meaning":"..."}],"actions_14d":["...","...","..."],"open_question":"..."}`;
+      const t = await claudeText(sys, usr, 2000);
+      return safeJSON(t) ?? { raw: t };
+    }
+    case "build_press_release": {
+      const { headline, body_points = [], quote_from = "CEO Qoyod", embargo_date = "" } = input;
+      const sys = `You write bilingual (Arabic + English) press releases for Qoyod. Output JSON only.`;
+      const usr = `Headline idea: ${headline}
+Body points: ${body_points.join(" | ")}
+Quote from: ${quote_from}
+Embargo: ${embargo_date || "FOR IMMEDIATE RELEASE"}
+JSON: {"ar":{"headline":"...","lede":"...","body":"...","quote":"...","boilerplate":"..."},"en":{"headline":"...","lede":"...","body":"...","quote":"...","boilerplate":"..."}}`;
+      const t = await claudeText(sys, usr, 2500);
+      return safeJSON(t) ?? { raw: t };
+    }
+    case "slack_post": {
+      const { channel, text, thread_ts } = input;
+      const token = process.env.SLACK_BOT_TOKEN;
+      if (!token) return { error: "SLACK_BOT_TOKEN not set" };
+      const r = await fetch("https://slack.com/api/chat.postMessage", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ channel, text, thread_ts }),
+      });
+      const d: any = await r.json();
+      if (!d.ok) return { error: d.error ?? "slack error", raw: d };
+      return { ok: true, ts: d.ts, channel: d.channel };
+    }
+    case "create_asana_task": {
+      const { project_gid, name, notes = "", assignee } = input;
+      const token = process.env.ASANA_ACCESS_TOKEN;
+      if (!token) return { error: "ASANA_ACCESS_TOKEN not set" };
+      const r = await fetch("https://app.asana.com/api/1.0/tasks", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          data: {
+            projects: [project_gid],
+            name,
+            notes,
+            ...(assignee ? { assignee } : {}),
+          },
+        }),
+      });
+      const d: any = await r.json();
+      if (!r.ok) return { error: d.errors?.[0]?.message ?? `HTTP ${r.status}`, raw: d };
+      return {
+        ok: true,
+        task_gid: d.data?.gid,
+        url: d.data?.permalink_url,
+      };
+    }
+    case "brand_fact_lookup": {
+      const { topic } = input;
+      return BRAND_FACTS[topic as keyof typeof BRAND_FACTS] ?? { error: "unknown topic" };
+    }
+    case "memory_write": {
+      const personaId = ctx?.personaId ?? "orchestrator";
+      const text = String(input?.text ?? "").slice(0, 240);
+      if (!text) return { error: "text required" };
+      const note = writeNote(personaId, text);
+      return { saved: true, note_id: note.id, persona: personaId };
+    }
+    case "memory_read": {
+      const personaId = ctx?.personaId ?? "orchestrator";
+      return {
+        persona: personaId,
+        notes: readNotes(personaId, 10),
+        recent_tasks: recentRecall(personaId, 5),
+      };
+    }
+    default:
+      return { error: `Unknown tool: ${name}` };
+  }
+}
+
+function safeJSON(text: string): any | null {
+  try {
+    const clean = text.replace(/```json\n?|\n?```/g, "").trim();
+    const fi = clean.indexOf("{");
+    const li = clean.lastIndexOf("}");
+    if (fi === -1) {
+      const fa = clean.indexOf("[");
+      const la = clean.lastIndexOf("]");
+      if (fa === -1) return null;
+      return JSON.parse(clean.slice(fa, la + 1));
+    }
+    return JSON.parse(clean.slice(fi, li + 1));
+  } catch {
+    return null;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   AGENT LOOP
+   ───────────────────────────────────────────────────────────── */
+async function runAgent(task: Task) {
+  task.status = "thinking";
+
+  /* Resolve persona — precedence:
+       1. explicit context.persona (caller forced it)
+       2. first @mention handle in title+body
+       3. keyword dispatch from title+body
+     Also strip @handles out of the body before Claude sees it so it
+     doesn't echo them back. */
+  const explicit = (task.trigger.context as any)?.persona as string | undefined;
+  const rawText = `${task.trigger.title ?? ""} ${task.trigger.body ?? ""}`;
+  const mentions = parseMentions(rawText);
+  const personaId =
+    task.persona ??
+    ((explicit && (PERSONAS as any)[explicit])
+      ? (explicit as PersonaId)
+      : mentions.primary ??
+        pickPersona(mentions.clean || rawText, explicit));
+  task.persona = personaId;
+  const persona = PERSONAS[personaId];
+  const activeTools = personaTools(TOOLS, personaId);
+
+  const log = taskLogger({
+    task_id: task.id,
+    persona: personaId,
+    source: task.trigger.source,
+  });
+  log.info(
+    { tools: activeTools.length, mentions: mentions.all, actors: mentions.actors },
+    "agent.run.start",
+  );
+
+  pushStep(task, {
+    kind: "think",
+    message: `Persona: ${persona.label_en} (${personaId}) · ${activeTools.length} tools · from ${task.trigger.source}${
+      task.trigger.actor ? ` (${task.trigger.actor})` : ""
+    }${mentions.all.length > 1 ? ` · cc: ${mentions.all.slice(1).join(", ")}` : ""}`,
+  });
+
+  /* Build first user message from the trigger */
+  const triggerText =
+    [
+      task.trigger.title && `Task: ${task.trigger.title}`,
+      task.trigger.body && `Message: ${task.trigger.body}`,
+      task.trigger.context &&
+        Object.keys(task.trigger.context).length > 0 &&
+        `Context: ${JSON.stringify(task.trigger.context)}`,
+      `Source: ${task.trigger.source}${task.trigger.actor ? ` • ${task.trigger.actor}` : ""}`,
+    ]
+      .filter(Boolean)
+      .join("\n\n") || "No trigger body.";
+
+  const messages: any[] = [{ role: "user", content: triggerText }];
+
+  for (let step = 0; step < MAX_AGENT_STEPS; step++) {
+    let data: any;
+    try {
+      data = await callAnthropic({
+        model: MODEL,
+        max_tokens: 4096,
+        system: [SYSTEM_PROMPT, persona.prompt, buildMemoryBlock(personaId)]
+          .filter(Boolean)
+          .join("\n\n"),
+        tools: activeTools,
+        messages,
+      });
+    } catch (e) {
+      task.status = "error";
+      task.error = e instanceof Error ? e.message : String(e);
+      pushStep(task, { kind: "error", message: task.error });
+      return;
+    }
+
+    const content = data.content ?? [];
+    messages.push({ role: "assistant", content });
+
+    const thinkText = extractText(content);
+    if (thinkText) pushStep(task, { kind: "think", message: thinkText });
+
+    const toolUses = content.filter((b: any) => b.type === "tool_use");
+    if (toolUses.length === 0 || data.stop_reason === "end_turn") {
+      task.status = "done";
+      task.summary = thinkText || "Done.";
+      pushStep(task, { kind: "finish", message: task.summary });
+      addRecall({
+        task_id: task.id,
+        persona: personaId,
+        title: task.trigger.title || task.trigger.body?.slice(0, 60) || "(untitled)",
+        summary: task.summary.slice(0, 240),
+      });
+      log.info({ steps: task.steps.length }, "agent.run.done");
+      await replyToSource(task);
+      return;
+    }
+
+    task.status = "running";
+    const toolResults: any[] = [];
+    for (const tu of toolUses) {
+      pushStep(task, { kind: "tool_use", tool: tu.name, input: tu.input });
+      let output: unknown;
+      /* Cache check — saves a fresh tool round-trip when a repeat run
+         asks for the same deterministic output (review_copy, translate,
+         RSA, etc.). User can bypass with context.skipCache=true. */
+      const skipCache = Boolean((task.trigger.context as any)?.skipCache);
+      const hit = cacheLookup(tu.name, tu.input, personaId, { skipCache });
+      if (hit.hit) {
+        output = hit.output;
+        log.info(
+          { tool: tu.name, age_ms: hit.age_ms },
+          "agent.tool.cache_hit",
+        );
+        pushStep(task, {
+          kind: "tool_result",
+          tool: tu.name,
+          output,
+          message: `(cache hit · age ${Math.round((hit.age_ms ?? 0) / 1000)}s)`,
+        });
+        mergeOutputs(task, tu.name, output);
+        toolResults.push({
+          type: "tool_result",
+          tool_use_id: tu.id,
+          content: JSON.stringify(truncateForClaude(output)),
+        });
+        continue;
+      }
+      try {
+        output = await runTool(tu.name, tu.input, { personaId });
+        if (!(output && typeof output === "object" && "error" in (output as object))) {
+          cacheStore(tu.name, tu.input, output, personaId);
+        }
+      } catch (e) {
+        output = { error: e instanceof Error ? e.message : String(e) };
+        log.error({ tool: tu.name, err: String(e) }, "agent.tool.error");
+      }
+      /* Thread outputs into task.outputs so UI can link them */
+      mergeOutputs(task, tu.name, output);
+      pushStep(task, { kind: "tool_result", tool: tu.name, output });
+      toolResults.push({
+        type: "tool_result",
+        tool_use_id: tu.id,
+        content: JSON.stringify(truncateForClaude(output)),
+      });
+    }
+
+    messages.push({ role: "user", content: toolResults });
+  }
+
+  task.status = "done";
+  pushStep(task, {
+    kind: "finish",
+    message: `Stopped after ${MAX_AGENT_STEPS} steps. Consider narrowing the request.`,
+  });
+  task.summary = task.summary ?? "Reached step cap.";
+  await replyToSource(task);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   REPLY-BACK — post the agent's summary back to the source so the
+   teammate who mentioned us sees what we did without opening the UI.
+   Currently supports Slack channels (needs SLACK_BOT_TOKEN).
+   ───────────────────────────────────────────────────────────── */
+async function replyToSource(task: Task) {
+  const token = process.env.SLACK_BOT_TOKEN;
+  if (!token) return;
+  /* Post for mentions/webhooks, OR for any task if a default channel is set */
+  const defaultChannel = process.env.SLACK_DEFAULT_CHANNEL;
+  const isSlackTrigger =
+    task.trigger.source === "mention" || task.trigger.source === "webhook";
+  if (!isSlackTrigger && !defaultChannel) return;
+  const channel = task.trigger.channel || defaultChannel;
+  if (!channel) return;
+
+  const lines: string[] = [];
+  if (task.summary) lines.push(task.summary);
+  const outs = task.outputs ?? {};
+  const linkKeys = [
+    "canva_edit_url",
+    "wordpress_edit_url",
+    "hubspot_edit_url",
+    "wordpress_preview_url",
+    "hubspot_preview_url",
+    "drive_link",
+    "nb_image_drive_link",
+    "miro_board_url",
+  ];
+  const links = linkKeys
+    .filter((k) => typeof outs[k] === "string")
+    .map((k) => `• ${k}: ${outs[k]}`);
+  if (links.length) lines.push(...links);
+  const text = lines.join("\n").slice(0, 3500) || "✅ Done.";
+
+  try {
+    await fetch("https://slack.com/api/chat.postMessage", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        channel,
+        text,
+        thread_ts: (task.trigger.context as any)?.slack_ts,
+      }),
+    });
+  } catch (e) {
+    logger.warn({ err: String(e), task_id: task.id }, "slack reply failed");
+  }
+}
+
+/* Pull any useful links/ids from tool outputs into task.outputs for quick UI access */
+function mergeOutputs(task: Task, tool: string, output: unknown) {
+  const o = output as Record<string, unknown> | undefined;
+  if (!o) return;
+  if (tool === "generate_ad_svg" && typeof o.svg === "string") {
+    (task.outputs.svgs ??= [] as unknown[]) as unknown[];
+    (task.outputs.svgs as unknown[]).push({
+      svg: (o.svg as string).slice(0, 400) + "…",
+      width: o.width,
+      height: o.height,
+    });
+  }
+  if (tool === "upload_canva") {
+    if (o.edit_url) task.outputs.canva_edit_url = o.edit_url;
+    if (o.view_url) task.outputs.canva_view_url = o.view_url;
+  }
+  if (tool === "publish_wordpress") {
+    if (o.editUrl) task.outputs.wordpress_edit_url = o.editUrl;
+    if (o.previewUrl) task.outputs.wordpress_preview_url = o.previewUrl;
+  }
+  if (tool === "publish_hubspot") {
+    if (o.editUrl) task.outputs.hubspot_edit_url = o.editUrl;
+    if (o.previewUrl) task.outputs.hubspot_preview_url = o.previewUrl;
+  }
+  if (tool === "save_to_drive" && o.link) task.outputs.drive_link = o.link;
+  if (tool === "generate_nb_image" && o.drive_link) task.outputs.nb_image_drive_link = o.drive_link;
+  if (tool === "generate_miro_board") {
+    const url = (o.viewLink as string) || (o.url as string) || (o.board?.viewLink as string);
+    if (url) task.outputs.miro_board_url = url;
+  }
+  if (tool === "analyze_landing_page") {
+    (task.outputs.analyses ??= [] as unknown[]);
+    (task.outputs.analyses as unknown[]).push(o);
+  }
+  if (tool === "brief_to_spec") task.outputs.spec = o;
+  if (tool === "build_campaign_plan") task.outputs.campaign_plan = o;
+  if (tool === "build_content_calendar") task.outputs.content_calendar = o;
+  if (tool === "build_email_sequence") task.outputs.email_sequence = o;
+  if (tool === "generate_video_script") task.outputs.video_script = o;
+  if (tool === "plan_ab_test") task.outputs.ab_test = o;
+  if (tool === "generate_seo_meta") task.outputs.seo_meta = o;
+}
+
+function truncateForClaude(output: unknown): unknown {
+  /* Avoid sending 100kb SVGs or data-URLs back into Claude */
+  if (output && typeof output === "object") {
+    const clone: Record<string, unknown> = { ...(output as Record<string, unknown>) };
+    for (const k of Object.keys(clone)) {
+      const v = clone[k];
+      if (typeof v === "string" && v.length > 1500) clone[k] = v.slice(0, 1500) + "…[truncated]";
+    }
+    return clone;
+  }
+  return output;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   TRIGGER ENDPOINTS
+   ───────────────────────────────────────────────────────────── */
+
+/* Spawn + kick off an agent task. Returns null when deduped. */
+function spawnTask(
+  trigger: Trigger,
+  opts: { priority?: Task["priority"]; schedule_id?: string; persona?: PersonaId } = {},
+): Task | null {
+  if (isDuplicate(trigger)) {
+    logger.info({ trigger_source: trigger.source }, "agent: duplicate trigger skipped");
+    return null;
+  }
+  const task: Task = {
+    id: newTaskId(),
+    created_at: Date.now(),
+    updated_at: Date.now(),
+    trigger,
+    status: "queued",
+    steps: [],
+    outputs: {},
+    priority: opts.priority ?? "normal",
+    schedule_id: opts.schedule_id,
+    persona: opts.persona,
+  };
+  TASKS.set(task.id, task);
+  trimTasks();
+  persist();
+  runAgent(task).catch((e) => {
+    task.status = "error";
+    task.error = e instanceof Error ? e.message : String(e);
+    pushStep(task, { kind: "error", message: task.error });
+    logger.error({ err: task.error, task_id: task.id }, "agent loop crashed");
+  });
+  return task;
+}
+
+/* Manual UI trigger */
+router.post("/run", async (req, res) => {
+  const { title, body, context, actor, priority, persona } = req.body ?? {};
+  const task = spawnTask(
+    { source: "ui", title, body, context, actor: actor ?? "ui" },
+    { priority, persona: persona as PersonaId | undefined },
+  );
+  if (!task) return res.status(202).json({ deduped: true });
+  res.json({ task_id: task.id, status: task.status, persona: task.persona });
+});
+
+/* Generic @mention ingestion — simple JSON shape */
+router.post("/mention", async (req, res) => {
+  const { actor, channel, text, context } = req.body ?? {};
+  if (!text) return res.status(400).json({ error: "text required" });
+  const task = spawnTask({ source: "mention", actor, channel, body: text, context });
+  if (!task) return res.status(202).json({ deduped: true });
+  res.json({ task_id: task.id, status: task.status });
+});
+
+/* Generic webhook ingress
+   Supports three shapes auto-detected by payload:
+     - Slack Events API        (team @mention in a channel)
+     - HubSpot workflow webhook (contact/deal enrollment)
+     - Asana task webhook      (task assigned to Creative Agent user)
+   Anything else is passed through as "task" source with raw body. */
+router.post("/webhook", async (req, res) => {
+  /* Asana webhook registration handshake — the first POST has an empty body
+     and an `X-Hook-Secret` header that must be echoed back verbatim. */
+  const asanaSecret = req.headers["x-hook-secret"];
+  if (asanaSecret && typeof asanaSecret === "string") {
+    res.setHeader("X-Hook-Secret", asanaSecret);
+    return res.status(200).end();
+  }
+
+  const p: any = req.body ?? {};
+  let trigger: Trigger;
+
+  if (p.type === "url_verification" && p.challenge) {
+    /* Slack URL verification handshake */
+    return res.status(200).json({ challenge: p.challenge });
+  }
+
+  if (p.event?.type === "app_mention" || p.event?.type === "message") {
+    /* Slack app_mention — our primary trigger. Guard on team_id so a
+       leaked webhook URL can't be abused by events from another workspace. */
+    const expectedTeam = process.env.SLACK_TEAM_ID;
+    if (expectedTeam && p.team_id && p.team_id !== expectedTeam) {
+      logger.warn({ got: p.team_id, expected: expectedTeam }, "slack: team_id mismatch");
+      return res.status(200).json({ ok: true, ignored: "wrong_team" });
+    }
+    /* Ignore bot-echoes so we don't mention ourselves into a loop. */
+    if (p.event.bot_id || p.event.subtype === "bot_message") {
+      return res.status(200).json({ ok: true, ignored: "bot_message" });
+    }
+    trigger = {
+      source: "mention",
+      actor: p.event.user,
+      channel: p.event.channel,
+      body: p.event.text,
+      context: { slack_ts: p.event.ts, thread_ts: p.event.thread_ts, team: p.team_id },
+    };
+  } else if (Array.isArray(p) && p[0]?.subscriptionType) {
+    /* HubSpot workflow webhook — array of events */
+    const e = p[0];
+    trigger = {
+      source: "task",
+      actor: "hubspot_workflow",
+      title: `HubSpot ${e.subscriptionType}`,
+      body: JSON.stringify(e),
+      context: { portalId: e.portalId, objectId: e.objectId, event_type: e.subscriptionType },
+    };
+  } else if (Array.isArray(p.events) && p.events.length > 0) {
+    /* Asana webhook — events[] with per-event resource.
+       We pick the first task-related event; dedup handles burst bodies. */
+    const taskEvent =
+      p.events.find(
+        (e: any) => e.resource?.resource_type === "task" && (e.action === "added" || e.action === "changed"),
+      ) ?? p.events[0];
+    trigger = {
+      source: "task",
+      actor: taskEvent?.user?.gid ?? "asana",
+      title: taskEvent?.resource?.name ?? `Asana ${taskEvent?.action ?? "event"}`,
+      body:
+        taskEvent?.resource?.notes ??
+        `Asana ${taskEvent?.action} on ${taskEvent?.resource?.resource_type} ${taskEvent?.resource?.gid}`,
+      context: {
+        task_gid: taskEvent?.resource?.gid,
+        action: taskEvent?.action,
+        parent_gid: taskEvent?.parent?.gid,
+      },
+    };
+  } else if (p.object_kind === "note" || p.object_kind === "issue") {
+    /* GitLab/GitHub issue webhook — bonus: treat issues assigned to the
+       agent as task triggers. */
+    trigger = {
+      source: "task",
+      actor: p.user?.username ?? "git",
+      title: p.object_attributes?.title ?? p.issue?.title ?? "Issue",
+      body: p.object_attributes?.description ?? p.issue?.body ?? "",
+      context: { issue_id: p.object_attributes?.id ?? p.issue?.id },
+    };
+  } else {
+    trigger = {
+      source: "webhook",
+      body: typeof p === "string" ? p : JSON.stringify(p).slice(0, 4000),
+      context: { raw: true, headers_ua: req.headers["user-agent"] },
+    };
+  }
+
+  const task = spawnTask(trigger);
+  if (!task) return res.json({ ok: true, deduped: true });
+  res.json({ ok: true, task_id: task.id });
+});
+
+/* ─────────────────────────────────────────────────────────────
+   SCHEDULES — recurring / daily agent runs
+   ───────────────────────────────────────────────────────────── */
+router.get("/schedules", (_req, res) => {
+  res.json({ schedules: listSchedules() });
+});
+
+router.post("/schedules", (req, res) => {
+  const { name, cadence, trigger } = req.body ?? {};
+  if (!name || !cadence || !trigger?.body) {
+    return res.status(400).json({ error: "name, cadence, trigger.body required" });
+  }
+  const validCadence =
+    (typeof cadence.every_minutes === "number" && cadence.every_minutes > 0) ||
+    (typeof cadence.daily_at === "string" && /^\d{1,2}:\d{2}$/.test(cadence.daily_at));
+  if (!validCadence) {
+    return res
+      .status(400)
+      .json({ error: "cadence must be {every_minutes:N} or {daily_at:'HH:mm'}" });
+  }
+  const s = addSchedule({ name, cadence, trigger });
+  res.json({ schedule: s });
+});
+
+router.patch("/schedules/:id", (req, res) => {
+  const { active } = req.body ?? {};
+  if (typeof active !== "boolean") return res.status(400).json({ error: "active boolean required" });
+  const ok = toggleSchedule(req.params.id, active);
+  if (!ok) return res.status(404).json({ error: "not found" });
+  res.json({ ok: true });
+});
+
+router.delete("/schedules/:id", (req, res) => {
+  const ok = deleteSchedule(req.params.id);
+  if (!ok) return res.status(404).json({ error: "not found" });
+  res.json({ ok: true });
+});
+
+/* Run a schedule's trigger immediately (testing aid) */
+router.post("/schedules/:id/fire", (req, res) => {
+  const s = listSchedules().find((x) => x.id === req.params.id);
+  if (!s) return res.status(404).json({ error: "not found" });
+  const task = spawnTask(
+    {
+      source: "task",
+      actor: s.trigger.actor ?? "scheduler",
+      title: s.trigger.title ?? s.name,
+      body: s.trigger.body,
+      context: { schedule_id: s.id, manual_fire: true },
+    },
+    { schedule_id: s.id },
+  );
+  if (!task) return res.status(202).json({ deduped: true });
+  res.json({ task_id: task.id });
+});
+
+/* Personas catalog for the UI */
+/* ─────────────────────────────────────────────────────────────
+   MEMORY + CACHE admin endpoints — small CRUD for the facts store,
+   visibility into the tool-cache ROI.
+   ───────────────────────────────────────────────────────────── */
+router.get("/memory", (req, res) => {
+  const persona = typeof req.query.persona === "string" ? req.query.persona : undefined;
+  res.json({
+    facts: listFacts(),
+    recall: recentRecall(persona, 20),
+    notes: persona ? readNotes(persona, 20) : undefined,
+  });
+});
+router.post("/memory/fact", (req, res) => {
+  const { id, text, source } = req.body ?? {};
+  if (!id || !text) return res.status(400).json({ error: "id and text required" });
+  upsertFact(String(id), String(text), source ? String(source) : undefined);
+  res.json({ ok: true });
+});
+router.delete("/memory/fact/:id", (req, res) => {
+  const ok = deleteFact(req.params.id);
+  res.json({ ok });
+});
+router.post("/memory/note", (req, res) => {
+  const { persona, text } = req.body ?? {};
+  if (!persona || !text) return res.status(400).json({ error: "persona and text required" });
+  const note = writeNote(String(persona), String(text));
+  res.json({ ok: true, note });
+});
+router.delete("/memory/note/:persona/:id", (req, res) => {
+  const ok = deleteNote(req.params.persona, req.params.id);
+  res.json({ ok });
+});
+
+router.get("/cache/stats", (_req, res) => res.json(cacheStats()));
+router.post("/cache/clear", (_req, res) => {
+  cacheClear();
+  res.json({ ok: true });
+});
+
+router.get("/personas", (_req, res) => {
+  res.json({
+    personas: Object.values(PERSONAS).map((p) => ({
+      id: p.id,
+      label: p.label,
+      label_en: p.label_en,
+      tagline: p.tagline,
+      tools: p.tools.length ? p.tools : TOOLS.map((t) => t.name),
+    })),
+  });
+});
+
+/* List + inspect tasks */
+router.get("/tasks", (req, res) => {
+  const { status, source, schedule_id, persona } = req.query;
+  const list = [...TASKS.values()]
+    .filter((t) => (status ? t.status === status : true))
+    .filter((t) => (source ? t.trigger.source === source : true))
+    .filter((t) => (schedule_id ? t.schedule_id === schedule_id : true))
+    .filter((t) => (persona ? t.persona === persona : true))
+    .sort((a, b) => b.created_at - a.created_at)
+    .slice(0, 50)
+    .map((t) => ({
+      id: t.id,
+      created_at: t.created_at,
+      updated_at: t.updated_at,
+      status: t.status,
+      source: t.trigger.source,
+      actor: t.trigger.actor,
+      title: t.trigger.title ?? t.trigger.body?.slice(0, 80) ?? "",
+      steps: t.steps.length,
+      summary: t.summary,
+      priority: t.priority,
+      schedule_id: t.schedule_id,
+      persona: t.persona,
+    }));
+  res.json({ tasks: list });
+});
+
+router.get("/tasks/:id", (req, res) => {
+  const t = TASKS.get(req.params.id);
+  if (!t) return res.status(404).json({ error: "Task not found" });
+  res.json(t);
+});
+
+router.delete("/tasks/:id", (req, res) => {
+  const existed = TASKS.delete(req.params.id);
+  persist();
+  res.json({ ok: existed });
+});
+
+/* Re-run an existing task — useful after tweaking a schedule's body or
+   retrying a failed run. Bypasses dedup so it always executes. */
+router.post("/tasks/:id/rerun", (req, res) => {
+  const t = TASKS.get(req.params.id);
+  if (!t) return res.status(404).json({ error: "Task not found" });
+  /* Clear dedup by hashing a fresh suffix */
+  const trigger = { ...t.trigger, body: (t.trigger.body ?? "") + `\n[rerun ${Date.now()}]` };
+  const task = spawnTask(trigger, { priority: t.priority, schedule_id: t.schedule_id });
+  if (!task) return res.status(202).json({ deduped: true });
+  res.json({ task_id: task.id });
+});
+
+/* Agent status / health */
+router.get("/status", (_req, res) => {
+  const tasks = [...TASKS.values()];
+  const by = (k: Task["status"]) => tasks.filter((t) => t.status === k).length;
+  res.json({
+    model: MODEL,
+    tools: TOOLS.map((t) => t.name),
+    tool_count: TOOLS.length,
+    max_agent_steps: MAX_AGENT_STEPS,
+    dedup_window_ms: DEDUP_WINDOW_MS,
+    tasks_in_memory: TASKS.size,
+    task_cap: TASK_CAP,
+    task_counts: {
+      queued: by("queued"),
+      thinking: by("thinking"),
+      running: by("running"),
+      done: by("done"),
+      error: by("error"),
+    },
+    schedules: listSchedules().length,
+    personas: Object.keys(PERSONAS).length,
+    configured: {
+      anthropic: !!process.env.ANTHROPIC_API_KEY,
+      gemini: !!process.env.GEMINI_API_KEY,
+      drive: !!(
+        process.env.GOOGLE_SERVICE_ACCOUNT_JSON || process.env.GOOGLE_APPLICATION_CREDENTIALS
+      ),
+      canva: !!(process.env.CANVA_CLIENT_ID && process.env.CANVA_CLIENT_SECRET),
+      miro: !!(process.env.MIRO_CLIENT_ID || process.env.MIRO_ACCESS_TOKEN),
+      wordpress: !!(process.env.WP_SITE_URL && process.env.WP_APP_PASSWORD),
+      hubspot: !!process.env.HS_ACCESS_TOKEN,
+      slack_reply: !!process.env.SLACK_BOT_TOKEN,
+    },
+  });
+});
+
+/* ─────────────────────────────────────────────────────────────
+   Scheduler wiring — fire schedules into spawnTask() on their cadence
+   ───────────────────────────────────────────────────────────── */
+startScheduler((s: Schedule) => {
+  spawnTask(
+    {
+      source: "task",
+      actor: s.trigger.actor ?? "scheduler",
+      title: s.trigger.title ?? s.name,
+      body: s.trigger.body,
+      context: { schedule_id: s.id, schedule_name: s.name },
+    },
+    { schedule_id: s.id },
+  );
+});
+
+export default router;
