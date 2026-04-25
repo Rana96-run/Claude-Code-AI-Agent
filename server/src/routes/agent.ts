@@ -1453,6 +1453,58 @@ router.post("/webhook", async (req, res) => {
       body: p.event.text,
       context: { slack_ts: p.event.ts, thread_ts: p.event.thread_ts, team: p.team_id },
     };
+  } else if (p._zapier || p.zap_type) {
+    /* ── Zapier webhook (Webhooks by Zapier action) ──────────────────
+       All Zaps POST to /api/agent/webhook with a _zapier:true flag
+       plus a zap_type that maps to the right persona + task body.
+       Supported zap_type values:
+         hs_new_lead        → email_lifecycle  (nurture sequence)
+         hs_deal_stage      → content_creator  (stage-specific content)
+         hs_form_submit     → cro              (LP variant brief)
+         sheets_brief       → orchestrator     (generic content brief)
+         calendly_booking   → content_creator  (prospect prep)
+         linkedin_lead      → email_lifecycle  (nurture sequence)
+         rss_competitor     → social_media     (competitor analysis)
+         google_review      → pr_comms         (review response)
+         typeform_brief     → orchestrator     (content brief)
+         youtube_published  → social_media     (repurpose to social)
+    */
+    const zap = p.zap_type ?? "generic";
+    const personaMap: Record<string, string> = {
+      hs_new_lead:       "email_lifecycle",
+      hs_deal_stage:     "content_creator",
+      hs_form_submit:    "cro",
+      sheets_brief:      "orchestrator",
+      calendly_booking:  "content_creator",
+      linkedin_lead:     "email_lifecycle",
+      rss_competitor:    "social_media",
+      google_review:     "pr_comms",
+      typeform_brief:    "orchestrator",
+      youtube_published: "social_media",
+    };
+    const titleMap: Record<string, string> = {
+      hs_new_lead:       `New lead: ${p.contact_name ?? p.email ?? "unknown"}`,
+      hs_deal_stage:     `Deal stage: ${p.deal_name ?? ""} → ${p.stage ?? ""}`,
+      hs_form_submit:    `Form submission: ${p.form_name ?? p.page_name ?? ""}`,
+      sheets_brief:      `Content brief: ${p.title ?? p.brief ?? ""}`,
+      calendly_booking:  `Demo booked: ${p.invitee_name ?? ""} — ${p.event_type ?? ""}`,
+      linkedin_lead:     `LinkedIn lead: ${p.first_name ?? ""} ${p.last_name ?? ""}`,
+      rss_competitor:    `Competitor post: ${p.title ?? p.feed_title ?? ""}`,
+      google_review:     `New review (${p.rating ?? "?"}★): ${p.reviewer_name ?? ""}`,
+      typeform_brief:    `Brief: ${p.title ?? p.form_name ?? ""}`,
+      youtube_published: `New video: ${p.video_title ?? ""}`,
+    };
+    const bodyParts = Object.entries(p)
+      .filter(([k]) => !["_zapier","zap_type"].includes(k))
+      .map(([k, v]) => `${k}: ${v}`)
+      .join("\n");
+    trigger = {
+      source:  "webhook",
+      actor:   `zapier:${zap}`,
+      title:   titleMap[zap] ?? `Zapier: ${zap}`,
+      body:    bodyParts,
+      context: { zap_type: zap, persona: personaMap[zap] ?? undefined, raw: p },
+    };
   } else if (Array.isArray(p) && p[0]?.subscriptionType) {
     /* HubSpot workflow webhook — array of events */
     const e = p[0];
