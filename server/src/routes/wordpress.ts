@@ -37,13 +37,12 @@ router.post("/wp-draft", async (req, res) => {
   }
 
   const base = String(siteUrl).replace(/\/$/, "");
-  const auth = Buffer.from(`${username}:${appPassword}`).toString("base64");
 
   try {
     const wpRes = await fetch(`${base}/wp-json/wp/v2/pages`, {
       method: "POST",
       headers: {
-        Authorization: `Basic ${auth}`,
+        "X-Agent-Token": appPassword,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
