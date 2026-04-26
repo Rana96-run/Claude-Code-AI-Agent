@@ -148,11 +148,11 @@ OUTPUT FORMAT
 Return ONE JSON object:
 {
   "copy": {
-    "headline": "5-7 Arabic MSA words, hero headline. Calm, direct, confident.",
-    "hook": "6-10 Arabic words, supporting line",
-    "cta": "2-3 Arabic words, button label (اشترك الآن / احجز ديمو / ابدأ تجربتك)",
-    "trust": "max 4 Arabic words, ONE trust element only (ZATCA-معتمد / SOCPA / +25,000 شركة / etc)",
-    "tagline": "2-3 Arabic words, under brand mark"
+    "headline": "EXACTLY 4-6 Arabic words. HARD LIMIT. Single complete phrase. Calm, direct, confident. NO em-dashes, NO commas, NO ellipsis, NO joining hook+headline. Just the hero headline alone.",
+    "hook": "EXACTLY 6-9 Arabic words supporting line. Separate from headline.",
+    "cta": "EXACTLY 2-3 Arabic words, button label only (اشترك الآن / احجز ديمو / ابدأ تجربتك)",
+    "trust": "MAX 4 Arabic words, ONE trust element only (ZATCA-معتمد / SOCPA / +25,000 شركة)",
+    "tagline": "EXACTLY 2-3 Arabic words, under brand mark"
   },
   "image_prompt": "250-400 word English SCENE-ONLY prompt. Specify: shot type + lens, lighting, composition (always leave clean empty space on the right side for square/landscape, or bottom for portrait — typography will be added in post). Saudi business context. Brand colors as hex (#021544 navy, #17A3A4 teal, #1FCACB bright cyan, #FFFFFF white). NO text rendering anywhere. NO logos in the frame. NO watermarks. Mood and style descriptors (cinematic, photoreal, 8K) or (editorial flat illustration, no 3D)."
 }
@@ -242,6 +242,7 @@ router.post("/generate-design", async (req, res) => {
     image_provider = "auto",
     persona = "",        // P1..P6 or persona description (optional)
     sector = "",         // retail / f&b / construction / e-commerce / healthcare / enterprise / bookkeeping
+    visual_style = "",   // device_dashboard / 2d_character / Before_After / Saudi_Person / etc.
   } = req.body ?? {};
 
   const [w, h] = RATIO_DIMS[ratio] ?? [1080, 1080];
@@ -249,8 +250,19 @@ router.post("/generate-design", async (req, res) => {
 
   try {
     /* 1. Claude → copy + scene-only image prompt */
+    /* If user picked an explicit visual style, fold it into art_direction
+       so Claude leans the scene that way. */
+    const VISUAL_STYLE_HINTS: Record<string, string> = {
+      device_dashboard: "device + Qoyod dashboard close-up, editorial product photography",
+      "2d_character": "minimal 2D flat illustration with one Saudi character, clean vector style",
+      Before_After: "split-screen before/after — chaos vs calm, dramatic lighting contrast",
+      Saudi_Person: "editorial portrait of a Saudi business owner, modest professional dress, soft natural light",
+    };
+    const styleHint = visual_style && VISUAL_STYLE_HINTS[visual_style]
+      ? `${VISUAL_STYLE_HINTS[visual_style]}. ${art_direction || ""}`.trim()
+      : art_direction;
     const { copy, image_prompt } = await generateDesignBundle(
-      product, message, hook, cta, trust, concept, art_direction,
+      product, message, hook, cta, trust, concept, styleHint,
       ratio, Number(variant) || 1, scheme, apiKey,
       String(persona), String(sector),
     );

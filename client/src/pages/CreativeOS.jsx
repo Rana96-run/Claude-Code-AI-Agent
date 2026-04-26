@@ -912,12 +912,13 @@ export default function CreativeOS(){
           trust:bTrust,
           ratio,
           concept:data.concept||"",
-          art_direction:data.art_direction||"",
+          art_direction:data.art_direction||bStyle,
           color_scheme:scheme,
           variant:variantNum,
           image_provider:imageProvider,
           persona:bPersona,
           sector:bSector,
+          visual_style:bStyle,
         }),
       });
       const json=await r.json();
@@ -1844,6 +1845,18 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
                   </Fld>
                 </div>
                 <Fld label={T("المقاسات","Placements")}><div style={{display:"flex",flexWrap:"wrap",gap:4}}>{["1:1","4:5","9:16","16:9"].map(v=><Seg key={v} ch={v} on={bPlaces.includes(v)} onClick={()=>setBPlaces(p=>p.includes(v)?p.filter(x=>x!==v):[...p,v])}/>)}</div></Fld>
+                <Fld label={T("الأسلوب البصري / المشهد","Visual Style / Mockup")}>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                    {INSPOS.map(s=><Seg key={s.v} ch={lang==="ar"?s.ar:s.v} on={bStyle===s.v} onClick={()=>setBStyle(s.v)}/>)}
+                  </div>
+                </Fld>
+                <Fld label={T("نموذج توليد الصورة","Image Generation Model")}>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                    {[["auto",T("تلقائي (يختار الأنسب)","Auto (best fit)")],["gpt-image","GPT Image (editorial / product)"],["nanobanana","Nano Banana (cinematic)"]].map(([v,l])=>(
+                      <Seg key={v} ch={l} on={imageProvider===v} onClick={()=>setImageProvider(v)}/>
+                    ))}
+                  </div>
+                </Fld>
                 <Fld label={T("عدد النسخ","Variants")}><div style={{display:"flex",flexWrap:"wrap",gap:4}}>{[1,2,3,4,5].map(n=><Seg key={n} ch={n} on={numVariants===n} onClick={()=>setNumVariants(n)}/>)}</div></Fld>
                 <Btn ch={T(`✦ أنشئ ${numVariants} تصميم الآن`,`✦ Generate ${numVariants} Design${numVariants>1?"s":""} Now`)} onClick={genDirectDesigns} dis={bLd} full/>
                 <button onClick={genBrief} disabled={bLd} style={{marginTop:4,width:"100%",padding:"5px",borderRadius:6,border:"1px solid rgba(106,150,170,.3)",background:"transparent",color:"#6a96aa",fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>{T("توليد بريف فقط (بدون SVG)","Generate Brief Only (no SVG)")}</button>

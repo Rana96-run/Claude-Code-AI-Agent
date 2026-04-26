@@ -293,13 +293,17 @@ function buildVdom(
   const rtl = (s: string): string =>
     (s || "").split(/(\s+)/).filter((t) => t.length > 0).reverse().join("");
 
-  /* Sizes scaled to ratio. We keep them generous for premium feel. */
-  const headlineSize =
-    ratio === "9:16" ? 96 : ratio === "16:9" ? 78 : 88;
-  const hookSize = ratio === "9:16" ? 40 : ratio === "16:9" ? 32 : 36;
-  const ctaSize = ratio === "9:16" ? 40 : 36;
-  const trustSize = ratio === "9:16" ? 26 : 22;
-  const brandSize = ratio === "9:16" ? 64 : ratio === "16:9" ? 52 : 56;
+  /* Adaptive font sizes — shrink the headline if it's too long so we never
+     wrap into 5+ lines. Each Arabic word averages ~5 chars. */
+  const headlineLen = (copy.headline || "").length;
+  const tooLong = headlineLen > 30;
+  const headlineSize = tooLong
+    ? (ratio === "9:16" ? 64 : ratio === "16:9" ? 54 : 58)
+    : (ratio === "9:16" ? 84 : ratio === "16:9" ? 70 : 76);
+  const hookSize = ratio === "9:16" ? 34 : ratio === "16:9" ? 28 : 30;
+  const ctaSize = ratio === "9:16" ? 36 : 32;
+  const trustSize = ratio === "9:16" ? 24 : 20;
+  const brandSize = ratio === "9:16" ? 56 : ratio === "16:9" ? 44 : 48;
 
   /* Container positioning per ratio — text sits in the gradient zone where
      legibility is highest. */
@@ -358,9 +362,11 @@ function buildVdom(
               type: "img",
               props: {
                 src: logoDataUrl,
+                width: ratio === "9:16" ? 180 : ratio === "16:9" ? 150 : 160,
+                height: ratio === "9:16" ? 56 : ratio === "16:9" ? 46 : 50,
                 style: {
                   width: ratio === "9:16" ? 180 : ratio === "16:9" ? 150 : 160,
-                  height: "auto",
+                  height: ratio === "9:16" ? 56 : ratio === "16:9" ? 46 : 50,
                   objectFit: "contain",
                 },
               },
