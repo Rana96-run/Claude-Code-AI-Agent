@@ -31,6 +31,14 @@ import {
   pickPersona,
   type PersonaId,
 } from "../lib/agent-personas.js";
+import {
+  upsertEntry,
+  listEntries,
+  saveCompetitorPosts,
+  libraryStats,
+  type ContentEntry,
+  type CompetitorPost,
+} from "../lib/content-library.js";
 
 /* ══════════════════════════════════════════════════════════════════
    Qoyod Creative Agent — autonomous loop
@@ -192,18 +200,46 @@ You are triggered when a teammate @mentions you, assigns you a task, or clicks "
 
 VOICE & BRAND (apply to all copy you produce):
 - Arabic copy MUST be Saudi dialect (مو / وش / ليش). NEVER Egyptian (مش / ايه / ازاي).
-- Tone: engaging, confident, professional, clear. "فزعة" — give more than expected.
+- Tone: engaging, confident, professional, clear. Give more than expected.
+- NEVER use emojis in any generated marketing content (captions, ads, articles, emails, landing pages). Emojis are forbidden in all output.
 - Primary palette: Navy #021544, Deep Turquoise #01355A, Accent Turquoise #17A3A4.
 - Products: Qoyod Main (accounting + e-invoice), QFlavours (F&B POS), QoyodPOS (retail), QBookkeeping (outsourced), VAT, E-Invoice (ZATCA Ph2), API Integration, seasonal offers.
-- Every ad must: be mobile-first, have 1 hook, 1 message, 1 CTA, 1 trust element (ZATCA / SOCPA / 25,000+ شركة).
+- Every ad must: be mobile-first, have 1 hook, 1 message, 1 CTA, 1 trust element (ZATCA / SOCPA / 25,000+ businesses).
+
+COMMUNICATION RULES (your summary, Slack replies, status messages):
+- ALL system communications must be in ENGLISH. Only the actual marketing content you generate stays in Arabic.
+- NO emojis anywhere — not in summaries, not in section headers, not in lists. Use plain text only.
+- For analysis tasks (post review, competitor scan, metrics, landing page audit): write the FULL analysis directly in your final summary as a structured human-readable report. Do NOT save the analysis as an HTML or Drive file unless the user explicitly asks for a file.
+- Use this structure for analysis summaries:
+    Title: short descriptive line
+    Context: 1 line
+    Findings: numbered list (1, 2, 3) with 1-2 sentences each
+    Recommendations: numbered list with concrete next actions
+    Links: any relevant URLs as plain text
 
 OPERATING RULES:
 1. Break the user's request into the smallest useful set of tool calls — do not over-generate.
 2. Prefer one strong asset over many weak ones. A/B variants are fine when explicitly asked.
-3. If the request is ambiguous, make a concrete reasonable assumption and proceed — do not ask follow-ups. The user is not watching live; they'll review the result.
-4. After you finish all tool calls, write a short Arabic summary (2-4 lines) of what you produced and include any public links (Canva / WP preview / Drive) as plain URLs. This is your final assistant message.
+3. If the request is ambiguous, make a concrete reasonable assumption and proceed — do not ask follow-ups.
+4. After all tool calls, write your final summary in ENGLISH following the structure above. Include public URLs as plain text (no markdown link syntax).
 5. Never invent ZATCA claims that are not true. Qoyod is ZATCA Phase-2 compliant.
-6. Never publish to WordPress/HubSpot without an explicit instruction in the trigger. If the trigger mentions "publish" / "نشر" / "draft live" then go ahead.`;
+6. Never publish to WordPress/HubSpot without an explicit instruction. If the trigger mentions "publish" / "نشر" / "draft live", proceed.
+
+STRICT SINGLE-CHANNEL RULE:
+- If the user specifies one channel (e.g. Instagram, LinkedIn, TikTok), call generate_content ONCE for that channel only. Do NOT generate copies for other channels unless the user explicitly says "all channels" / "كل القنوات" / "لكل القنوات".
+- If the user specifies no channel, generate for Instagram only (default) and mention you can do other channels if needed.
+
+STRICT SINGLE-SIZE RULE (for ads/SVG):
+- If the user specifies one size/ratio (e.g. 1:1), call generate_ad_svg ONCE for that size only. Do NOT auto-generate other sizes.
+- After delivering the one requested size, end your message with a line like: "يمكنني إنشاء نفس التصميم بأحجام أخرى (4:5 / 9:16 / 16:9) — فقط اطلب." — but do NOT call the tool again.
+- Only generate multiple sizes if the user says "كل الأحجام" / "all sizes" / "جهّزها لكل المنصات".
+
+DESIGN TOOL SELECTION:
+You have 3 design tools — choose based on what the user asks for:
+1. generate_ad_svg — branded SVG ad with Qoyod template (navy + teal, Arabic text, CTA button). Use for: social ads, banners, campaigns.
+2. generate_nb_image — Google Gemini AI photorealistic/illustrated image. Use for: lifestyle photos, product mockups, abstract visuals.
+3. generate_openai_image — DALL-E 3 high-quality artistic image. Use for: creative concepts, stylised artwork, when user says "ChatGPT image" or "DALL-E".
+Default to generate_ad_svg for ad requests. Use generate_nb_image or generate_openai_image only when the user explicitly asks for a "photo", "AI image", "real image", or names one of these tools.`;
 
 /* ─────────────────────────────────────────────────────────────
    BRAND FACTS — lightweight KV the agent can consult before writing
@@ -288,7 +324,12 @@ const TOOLS = [
         trust: { type: "string", description: "Trust badge, e.g. 'ZATCA Phase 2'" },
         ratio: { type: "string", enum: ["1:1", "4:5", "9:16", "16:9"] },
         concept: { type: "string" },
-        color_accent: { type: "string", description: "Override accent hex" },
+        color_scheme: {
+          type: "string",
+          enum: ["navy", "teal", "ocean", "light", "midnight", "slate", "auto"],
+          description: "Color scheme. navy=dark navy bg (default), teal=teal bg, ocean=deep blue-green, light=white bg, midnight=near-black, slate=cool grey-blue, auto=rotate. Pick based on context or user preference.",
+        },
+        color_accent: { type: "string", description: "Legacy: override accent hex (use color_scheme instead)" },
       },
       required: ["product", "message", "cta", "ratio"],
     },
@@ -296,11 +337,48 @@ const TOOLS = [
   {
     name: "generate_nb_image",
     description:
-      "Generate a photorealistic or illustrated image via Nano Banana (gemini-2.5-flash-image). Returns a data-URL + Drive link if Drive is configured.",
+      "Generate a photorealistic or illustrated image via Google Gemini (gemini-2.5-flash-image / Imagen 2). Great for lifestyle, product mockups, and scene images. Returns a data-URL + optional Drive link.",
     input_schema: {
       type: "object",
       properties: {
-        prompt: { type: "string" },
+        prompt: {
+          type: "string",
+          description: "Detailed English description of the image. Be specific about style, lighting, subject.",
+        },
+        save_to_drive_as: {
+          type: "string",
+          description: "If provided, persist the PNG to the team Drive under this filename (e.g. 'qoyod-hero.png').",
+        },
+      },
+      required: ["prompt"],
+    },
+  },
+  {
+    name: "generate_openai_image",
+    description:
+      "Generate a high-quality image via OpenAI DALL-E 3. Best for artistic, stylised, or concept ads. Returns a data-URL + optional Drive link. Requires OPENAI_API_KEY.",
+    input_schema: {
+      type: "object",
+      properties: {
+        prompt: {
+          type: "string",
+          description: "Detailed English prompt. Be specific about style, composition, mood, brand colours (#021544 navy, #17A3A4 teal).",
+        },
+        size: {
+          type: "string",
+          enum: ["1024x1024", "1792x1024", "1024x1792"],
+          description: "1024x1024 = square (Instagram), 1792x1024 = landscape, 1024x1792 = portrait/stories. Default: 1024x1024",
+        },
+        quality: {
+          type: "string",
+          enum: ["hd", "standard"],
+          description: "hd = more detail, standard = faster. Default: hd",
+        },
+        style: {
+          type: "string",
+          enum: ["vivid", "natural"],
+          description: "vivid = hyper-real/dramatic, natural = realistic/subtle. Default: vivid",
+        },
         save_to_drive_as: {
           type: "string",
           description: "If provided, persist the PNG to the team Drive under this filename.",
@@ -623,7 +701,7 @@ const TOOLS = [
   {
     name: "slack_post",
     description:
-      "Post a message to a Slack channel (optionally threaded). Use this proactively when a teammate needs a heads-up mid-task. Requires SLACK_BOT_TOKEN.",
+      "Post a message to a Slack channel (optionally threaded). ONLY call this when the user explicitly asks you to send a Slack message. Do NOT call this automatically or proactively. Requires SLACK_BOT_TOKEN.",
     input_schema: {
       type: "object",
       properties: {
@@ -681,6 +759,76 @@ const TOOLS = [
     description:
       "Read recent persona notes + recent task recall for the current persona. Call at the start of a task if you suspect context from past runs matters.",
     input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "content_library_save",
+    description:
+      "Save a published Qoyod content piece to the team content library. Call this every time a new social post or asset is produced/detected, so the agent learns over time.",
+    input_schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Unique ID — broadcast_guid or generated slug" },
+        type: { type: "string", enum: ["post", "reel", "story", "email", "ad", "blog", "other"] },
+        channel: { type: "string", description: "Instagram / LinkedIn / Facebook / etc." },
+        published_at: { type: "string", description: "ISO timestamp" },
+        content_text: { type: "string" },
+        post_url: { type: "string" },
+        thumb_url: { type: "string" },
+        media_type: { type: "string" },
+        topic: { type: "string", description: "What product/concept this covers" },
+        hashtags: { type: "array", items: { type: "string" } },
+        tone: { type: "string", description: "educational / promotional / community / humour" },
+        quality: {
+          type: "object",
+          description: "Quality scores (fill after reviewing the post)",
+          properties: {
+            brand_voice: { type: "number" },
+            dialect_correct: { type: "boolean" },
+            hook_strength: { type: "number" },
+            clarity: { type: "number" },
+            notes: { type: "string" },
+          },
+        },
+        optimization: {
+          type: "object",
+          description: "Optimization insights (fill after competitor research)",
+          properties: {
+            what_works: { type: "string" },
+            what_to_improve: { type: "string" },
+            competitor_insight: { type: "string" },
+            suggested_variant: { type: "string" },
+          },
+        },
+      },
+      required: ["id", "type", "channel", "published_at", "content_text"],
+    },
+  },
+  {
+    name: "content_library_read",
+    description:
+      "Read past Qoyod posts from the content library. Use before generating new content to learn from what was already published.",
+    input_schema: {
+      type: "object",
+      properties: {
+        channel: { type: "string" },
+        topic: { type: "string" },
+        limit: { type: "number", description: "Max results (default 10)" },
+      },
+    },
+  },
+  {
+    name: "search_competitor_content",
+    description:
+      "Search the web for recent public content from Qoyod's Saudi competitors (Wafeq, Sahl, Dafater, Zid, Foodics, Zoho Books) on a given topic. Returns post excerpts, angles, and engagement signals to benchmark against Qoyod.",
+    input_schema: {
+      type: "object",
+      properties: {
+        topic: { type: "string", description: "Topic to search, e.g. 'فاتورة الكترونية', 'ZATCA', 'محاسبة سحابية'" },
+        competitor: { type: "string", description: "Optional: specific competitor name to focus on" },
+        channel: { type: "string", description: "Optional: Instagram / LinkedIn / general" },
+      },
+      required: ["topic"],
+    },
   },
 ] as const;
 
@@ -770,6 +918,47 @@ Return JSON: {"hooks":[${variants} short Saudi-dialect hooks], "message":"...", 
               binaryBase64: true,
               filename: save_to_drive_as,
               mimeType: data.mimeType ?? "image/png",
+            }),
+          }
+        );
+        const upd: any = await up.json();
+        if (upd?.link) out.drive_link = upd.link;
+        if (upd?.error) out.drive_error = upd.error;
+      }
+      return out;
+    }
+    case "generate_openai_image": {
+      const {
+        prompt,
+        size = "1024x1024",
+        quality = "hd",
+        style = "vivid",
+        save_to_drive_as,
+      } = input;
+      const r = await fetch(`http://127.0.0.1:${process.env.PORT || 8080}/api/nb/generate-image-openai`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, size, quality, style }),
+      });
+      const data: any = await r.json();
+      if (!r.ok) return { error: data.error ?? `HTTP ${r.status}` };
+      const out: Record<string, unknown> = {
+        mimeType: data.mimeType,
+        dataUrl: data.dataUrl?.slice(0, 120) + "…",
+        model: data.model,
+        revised_prompt: data.revised_prompt,
+      };
+      if (save_to_drive_as && data.base64) {
+        const up = await fetch(
+          `http://127.0.0.1:${process.env.PORT || 8080}/api/drive/upload`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              content: data.base64,
+              binaryBase64: true,
+              filename: save_to_drive_as,
+              mimeType: "image/png",
             }),
           }
         );
@@ -1064,6 +1253,98 @@ JSON: {"ar":{"headline":"...","lede":"...","body":"...","quote":"...","boilerpla
         recent_tasks: recentRecall(personaId, 5),
       };
     }
+
+    /* ── Content Library ──────────────────────────────────────── */
+    case "content_library_save": {
+      const entry: ContentEntry = {
+        id: String(input.id),
+        type: input.type ?? "post",
+        channel: input.channel,
+        published_at: input.published_at,
+        content_text: input.content_text,
+        post_url: input.post_url,
+        thumb_url: input.thumb_url,
+        media_type: input.media_type,
+        topic: input.topic,
+        hashtags: Array.isArray(input.hashtags) ? input.hashtags : undefined,
+        tone: input.tone,
+        quality: input.quality,
+        optimization: input.optimization,
+        analyzed_at: new Date().toISOString(),
+      };
+      const saved = upsertEntry(entry);
+      return { saved: true, id: saved.id, library_stats: libraryStats() };
+    }
+
+    case "content_library_read": {
+      const { channel, topic, limit = 10 } = input;
+      const entries = listEntries({ channel, topic, limit: Number(limit) });
+      return { entries, count: entries.length, library_stats: libraryStats() };
+    }
+
+    /* ── Competitor Intelligence via Gemini Google Search ─────── */
+    case "search_competitor_content": {
+      const { topic, competitor, channel } = input;
+      const geminiKey = process.env.GEMINI_API_KEY;
+      if (!geminiKey) return { error: "GEMINI_API_KEY not set" };
+
+      const competitorList = competitor
+        ? String(competitor)
+        : "Wafeq, Sahl, Dafater, Zid, Foodics";
+      const channelNote = channel ? ` on ${channel}` : " on Instagram, Twitter/X, TikTok, and LinkedIn";
+
+      const searchPrompt = [
+        `Search for recent social media posts by Saudi accounting/fintech competitors (${competitorList}) about the topic: "${topic}"${channelNote}.`,
+        `For each post found, extract: company name, channel, post text excerpt, engagement signals (likes/comments if visible), posting date, and URL.`,
+        `Return ONLY valid JSON in this exact schema:`,
+        `{"posts":[{"competitor":"...","channel":"...","text":"...","engagement":"...","date":"...","url":"..."}],"insights":"summary of patterns, hooks they use, and content gaps Qoyod can exploit"}`,
+      ].join(" ");
+
+      try {
+        const r = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: searchPrompt }] }],
+              tools: [{ googleSearch: {} }],
+              generationConfig: { temperature: 0.2 },
+            }),
+          }
+        );
+        if (!r.ok) {
+          const err = await r.text();
+          return { error: `Gemini ${r.status}: ${err.slice(0, 300)}` };
+        }
+        const data: any = await r.json();
+        const rawText: string =
+          data.candidates?.[0]?.content?.parts
+            ?.filter((p: any) => p.text)
+            ?.map((p: any) => p.text as string)
+            ?.join("") ?? "";
+
+        const parsed = safeJSON(rawText);
+
+        /* Persist competitor posts into the content library */
+        if (parsed?.posts && Array.isArray(parsed.posts)) {
+          const cposts: CompetitorPost[] = (parsed.posts as any[]).map((p) => ({
+            competitor: String(p.competitor ?? "unknown"),
+            channel: String(p.channel ?? channel ?? "social"),
+            content_text: String(p.text ?? ""),
+            post_url: p.url ? String(p.url) : undefined,
+            fetched_at: new Date().toISOString(),
+            engagement_hint: p.engagement ? String(p.engagement) : undefined,
+          }));
+          saveCompetitorPosts(cposts);
+        }
+
+        return parsed ?? { raw: rawText.slice(0, 2000) };
+      } catch (e) {
+        return { error: e instanceof Error ? e.message : String(e) };
+      }
+    }
+
     default:
       return { error: `Unknown tool: ${name}` };
   }
@@ -1253,32 +1534,35 @@ async function runAgent(task: Task) {
 async function replyToSource(task: Task) {
   const token = process.env.SLACK_BOT_TOKEN;
   if (!token) return;
-  /* Post for mentions/webhooks, OR for any task if a default channel is set */
-  const defaultChannel = process.env.SLACK_DEFAULT_CHANNEL;
-  const isSlackTrigger =
-    task.trigger.source === "mention" || task.trigger.source === "webhook";
-  if (!isSlackTrigger && !defaultChannel) return;
-  const channel = task.trigger.channel || defaultChannel;
+  /* Reply ONLY for direct Slack mentions. Never for UI, webhook, poller, or scheduler. */
+  const isSlackTrigger = task.trigger.source === "mention";
+  if (!isSlackTrigger) return;
+  const channel = task.trigger.channel;
   if (!channel) return;
 
-  const lines: string[] = [];
-  if (task.summary) lines.push(task.summary);
+  const linkLabels: Record<string, string> = {
+    canva_edit_url:        "Canva",
+    canva_view_url:        "Canva preview",
+    wordpress_edit_url:    "WordPress",
+    wordpress_preview_url: "WordPress preview",
+    hubspot_edit_url:      "HubSpot",
+    hubspot_preview_url:   "HubSpot preview",
+    drive_link:            "Drive",
+    nb_image_drive_link:   "Image",
+    miro_board_url:        "Miro board",
+  };
+
+  const sections: string[] = [];
+  if (task.trigger.title) sections.push(`*${task.trigger.title}*`);
+  if (task.summary) sections.push(task.summary);
+
   const outs = task.outputs ?? {};
-  const linkKeys = [
-    "canva_edit_url",
-    "wordpress_edit_url",
-    "hubspot_edit_url",
-    "wordpress_preview_url",
-    "hubspot_preview_url",
-    "drive_link",
-    "nb_image_drive_link",
-    "miro_board_url",
-  ];
-  const links = linkKeys
-    .filter((k) => typeof outs[k] === "string")
-    .map((k) => `• ${k}: ${outs[k]}`);
-  if (links.length) lines.push(...links);
-  const text = lines.join("\n").slice(0, 3500) || "✅ Done.";
+  const links = Object.entries(linkLabels)
+    .filter(([k]) => typeof outs[k] === "string" && (outs[k] as string).length > 0)
+    .map(([k, label]) => `${label}: ${outs[k]}`);
+  if (links.length) sections.push("Links:\n" + links.join("\n"));
+
+  const text = sections.join("\n\n").slice(0, 3500) || "Task complete.";
 
   try {
     await fetch("https://slack.com/api/chat.postMessage", {
@@ -1323,7 +1607,8 @@ function mergeOutputs(task: Task, tool: string, output: unknown) {
     if (o.previewUrl) task.outputs.hubspot_preview_url = o.previewUrl;
   }
   if (tool === "save_to_drive" && o.link) task.outputs.drive_link = o.link;
-  if (tool === "generate_nb_image" && o.drive_link) task.outputs.nb_image_drive_link = o.drive_link;
+  if ((tool === "generate_nb_image" || tool === "generate_openai_image") && o.drive_link)
+    task.outputs.nb_image_drive_link = o.drive_link;
   if (tool === "generate_miro_board") {
     const url = (o.viewLink as string) || (o.url as string) || (o.board?.viewLink as string);
     if (url) task.outputs.miro_board_url = url;
@@ -1773,6 +2058,44 @@ startScheduler((s: Schedule) => {
     },
     { schedule_id: s.id },
   );
+});
+
+/* ── Social poller: manual trigger ──────────────────────────── */
+router.post("/social/poll-now", async (_req, res) => {
+  try {
+    const { pollNow } = await import("../lib/hubspot-social-poller.js");
+    await pollNow();
+    res.json({ ok: true, message: "Poll completed" });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+/* ── Competitor poller: manual trigger ───────────────────────── */
+router.post("/competitor/poll-now", async (_req, res) => {
+  try {
+    const { pollCompetitorNow } = await import("../lib/competitor-poller.js");
+    await pollCompetitorNow();
+    res.json({ ok: true, message: "Competitor scrape completed" });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+/* ── Content library stats ────────────────────────────────────── */
+router.get("/content-library/stats", (_req, res) => {
+  res.json(libraryStats());
+});
+
+/* ── Weekly digest: manual trigger ────────────────────────────── */
+router.post("/weekly-digest/run-now", async (_req, res) => {
+  try {
+    const { runDigestNow } = await import("../lib/weekly-digest.js");
+    const out = await runDigestNow();
+    res.json(out);
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
 });
 
 export default router;

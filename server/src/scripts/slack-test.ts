@@ -16,7 +16,7 @@ const res = await fetch("https://slack.com/api/chat.postMessage", {
   },
   body: JSON.stringify({
     channel: CHANNEL,
-    text: "✅ Qoyod Creative Agent is connected to Slack. Mention me with @QoyodAgent + a brief to start a task.",
+    text: "Qoyod Creative Agent is connected to Slack. Mention me with @QoyodAgent + a brief to start a task.",
   }),
 });
 

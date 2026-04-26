@@ -627,9 +627,12 @@ export default function CreativeOS(){
   const[bErr,setBErr]=useState("");
   const[appV,setAppV]=useState(null);
   const[numVariants,setNumVariants]=useState(1);
-  const[designSvgs,setDesignSvgs]=useState({});
+  const[designPngs,setDesignPngs]=useState({});
   const[designLds,setDesignLds]=useState({});
   const[designErrs,setDesignErrs]=useState({});
+  const[designProviders,setDesignProviders]=useState({});
+  const[designPrompts,setDesignPrompts]=useState({});
+  const[imageProvider,setImageProvider]=useState("auto");
 
   const[lpProd,setLpProd]=useState("QFlavours");
   const[lpCompUrl,setLpCompUrl]=useState("");
@@ -857,7 +860,7 @@ export default function CreativeOS(){
     const vList=Array.from({length:numVariants},(_,i)=>`"variant${i+1}":{"concept":"...","art_direction":"...","visual_element":"...","color_accent":"...","layout_note":"..."}`).join(",");
     const sys=`Senior art director for Qoyod.\n${QOYOD_DESIGN}\n${QOYOD_VOICE}\nProduce EXACTLY ${numVariants} distinct design variants.\nReturn ONLY valid JSON:\n{"brief_title":"...",${vList},"shared":{"color_usage":"...","logo_placement":"...","dos":["..."],"donts":["..."]}}`;
     const usr=`Product:${bProdNames} Message:"${bMsg}" Hook:"${bHook||"n/a"}" CTA:"${bCta||"ابدأ تجربتك"}" Placements:${bPlaces.join(",")} Trust:${bTrust} Style:${bStyle} Variants:${numVariants}`;
-    setBLd(true);setBErr("");setBRes(null);setAppV(null);setDesignSvgs({});setDesignLds({});setDesignErrs({});
+    setBLd(true);setBErr("");setBRes(null);setAppV(null);setDesignPngs({});setDesignLds({});setDesignErrs({});setDesignProviders({});setDesignPrompts({});
     try{setBRes(await callAI(sys,usr));}catch(e){setBErr(e.message);}finally{setBLd(false);}
   },[lang,bProd,bProdExtras,bMsg,bHook,bCta,bPlaces,bTrust,bStyle,numVariants,buildProdCtx]);
 
@@ -872,7 +875,9 @@ export default function CreativeOS(){
     const scheme=VARIANT_SCHEMES[(variantNum-1)%VARIANT_SCHEMES.length];
     setDesignLds(p=>({...p,[variantNum]:true}));
     setDesignErrs(p=>({...p,[variantNum]:""}));
-    setDesignSvgs(p=>({...p,[variantNum]:null}));
+    setDesignPngs(p=>({...p,[variantNum]:null}));
+    setDesignProviders(p=>({...p,[variantNum]:null}));
+    setDesignPrompts(p=>({...p,[variantNum]:null}));
     try{
       const r=await fetch(`/api/generate-design`,{
         method:"POST",headers:{"Content-Type":"application/json"},
@@ -887,17 +892,20 @@ export default function CreativeOS(){
           art_direction:data.art_direction||"",
           color_scheme:scheme,
           variant:variantNum,
+          image_provider:imageProvider,
         }),
       });
       const json=await r.json();
       if(!r.ok||json.error)throw new Error(json.error||"Generation failed");
-      setDesignSvgs(p=>({...p,[variantNum]:json.svg}));
+      setDesignPngs(p=>({...p,[variantNum]:json.png}));
+      setDesignProviders(p=>({...p,[variantNum]:json.provider}));
+      setDesignPrompts(p=>({...p,[variantNum]:json.image_prompt}));
     }catch(e){
       setDesignErrs(p=>({...p,[variantNum]:e.message}));
     }finally{
       setDesignLds(p=>({...p,[variantNum]:false}));
     }
-  },[bRes,bProd,bMsg,bHook,bCta,bTrust,bPlaces]);
+  },[bRes,bProd,bMsg,bHook,bCta,bTrust,bPlaces,imageProvider]);
 
   const genDirectDesigns=useCallback(async()=>{
     if(!bMsg){setBErr(T("اكتب الرسالة الرئيسية أولاً","Enter the main message first"));return;}
@@ -905,7 +913,7 @@ export default function CreativeOS(){
     const vList=Array.from({length:numVariants},(_,i)=>`"variant${i+1}":{"concept":"...","art_direction":"...","visual_element":"...","color_accent":"...","layout_note":"..."}`).join(",");
     const sys=`Senior art director for Qoyod.\n${QOYOD_DESIGN}\n${QOYOD_VOICE}\nProduce EXACTLY ${numVariants} distinct design variants.\nReturn ONLY valid JSON:\n{"brief_title":"...",${vList},"shared":{"color_usage":"...","logo_placement":"..."}}`;
     const usr=`Product:${bProdNames} Message:"${bMsg}" Hook:"${bHook||"n/a"}" CTA:"${bCta||"ابدأ تجربتك"}" Placements:${bPlaces.join(",")} Trust:${bTrust} Style:${bStyle} Variants:${numVariants}`;
-    setBLd(true);setBErr("");setBRes(null);setAppV(null);setDesignSvgs({});setDesignLds({});setDesignErrs({});
+    setBLd(true);setBErr("");setBRes(null);setAppV(null);setDesignPngs({});setDesignLds({});setDesignErrs({});setDesignProviders({});setDesignPrompts({});
     try{
       const brief=await callAI(sys,usr);
       setBRes(brief);
@@ -922,37 +930,35 @@ export default function CreativeOS(){
     setTimeout(()=>{URL.revokeObjectURL(url);document.body.removeChild(a);},500);
   };
 
-  /* Render SVG → PNG/JPG via canvas. scale=2 produces a sharper raster. */
-  const svgToRaster=async(svgStr,format="png",scale=2)=>{
-    // Parse viewBox to get target dimensions
-    const m=svgStr.match(/viewBox="0 0 (\d+) (\d+)"/);
-    const w=m?parseInt(m[1],10):1080;
-    const h=m?parseInt(m[2],10):1080;
-    // Create blob URL for the SVG
-    const svgBlob=new Blob([svgStr],{type:"image/svg+xml;charset=utf-8"});
-    const svgUrl=URL.createObjectURL(svgBlob);
-    // Load it as an image
-    const img=new Image();
-    img.crossOrigin="anonymous";
-    await new Promise((res,rej)=>{img.onload=res;img.onerror=rej;img.src=svgUrl;});
-    // Draw to canvas at scaled-up resolution
-    const canvas=document.createElement("canvas");
-    canvas.width=w*scale;canvas.height=h*scale;
-    const ctx=canvas.getContext("2d");
-    if(format==="jpg"||format==="jpeg"){
-      // JPG has no transparency — paint navy background
-      ctx.fillStyle="#021544";
-      ctx.fillRect(0,0,canvas.width,canvas.height);
-    }
-    ctx.drawImage(img,0,0,canvas.width,canvas.height);
-    URL.revokeObjectURL(svgUrl);
-    const mime=format==="jpg"||format==="jpeg"?"image/jpeg":"image/png";
-    return new Promise(res=>canvas.toBlob(res,mime,0.95));
+  /* Convert PNG data URL → Blob for download */
+  const dataUrlToBlob=(dataUrl)=>{
+    const [header,b64]=dataUrl.split(",");
+    const mime=(header.match(/data:([^;]+)/)||[,"image/png"])[1];
+    const bin=atob(b64);
+    const arr=new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
+    return new Blob([arr],{type:mime});
   };
 
-  const downloadRaster=async(svgStr,variantNum,format)=>{
+  /* Re-encode PNG as JPG (for users who want flat backgrounds) */
+  const pngToJpgBlob=async(pngDataUrl)=>{
+    const img=new Image();
+    img.crossOrigin="anonymous";
+    await new Promise((res,rej)=>{img.onload=res;img.onerror=rej;img.src=pngDataUrl;});
+    const canvas=document.createElement("canvas");
+    canvas.width=img.naturalWidth;canvas.height=img.naturalHeight;
+    const ctx=canvas.getContext("2d");
+    ctx.fillStyle="#021544";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.drawImage(img,0,0);
+    return new Promise(res=>canvas.toBlob(res,"image/jpeg",0.95));
+  };
+
+  const downloadRaster=async(pngDataUrl,variantNum,format)=>{
     try{
-      const blob=await svgToRaster(svgStr,format,2);
+      const blob=format==="jpg"||format==="jpeg"
+        ?await pngToJpgBlob(pngDataUrl)
+        :dataUrlToBlob(pngDataUrl);
       if(!blob)return;
       const url=URL.createObjectURL(blob);
       const a=document.createElement("a");
@@ -960,35 +966,36 @@ export default function CreativeOS(){
       a.download=`qoyod-ad-variant${variantNum}.${format==="jpg"||format==="jpeg"?"jpg":"png"}`;
       document.body.appendChild(a);a.click();
       setTimeout(()=>{URL.revokeObjectURL(url);document.body.removeChild(a);},500);
-    }catch(e){console.error("raster export failed",e);alert("Export failed: "+(e?.message||e));}
+    }catch(e){console.error("download failed",e);alert("Export failed: "+(e?.message||e));}
   };
 
   const CANVA_BASE=`/api/canva`;
-
   const checkCanvaStatus=useCallback(async()=>{
-    try{const r=await fetch(`${CANVA_BASE}/status`);const d=await r.json();setCanvaConn(!!d.connected);}catch{}
+    /* Deep-link mode — always available, no OAuth */
+    setCanvaConn(true);
   },[]);
-
   useEffect(()=>{checkCanvaStatus();},[checkCanvaStatus]);
 
-  const connectCanva=useCallback(async()=>{
+  /* Open in Canva: stage PNG on server → download locally → open Canva in new tab.
+     User drops the file into Canva. No OAuth, no popups, no token state. */
+  const openInCanva=useCallback(async(pngDataUrl,variantNum)=>{
+    setCanvaLd(true);
+    setCanvaMsg(p=>({...p,[variantNum]:{info:T("جاري التحضير...","Preparing...")}}));
     try{
-      const r=await fetch(`${CANVA_BASE}/auth-url`);
-      const d=await r.json();
-      if(!d.auth_url)throw new Error("Failed to get auth URL");
-      const popup=window.open(d.auth_url,"canva_auth","width=520,height=680,popup");
-      const handler=(e)=>{
-        if(e.data?.type==="canva_auth_success"){window.removeEventListener("message",handler);popup?.close();setCanvaConn(true);setCanvaMsg({ok:T("تم ربط Canva بنجاح ✓","Canva connected ✓")});}
-        else if(e.data?.type==="canva_auth_error"){window.removeEventListener("message",handler);popup?.close();setCanvaMsg({err:e.data.error||"Auth failed"});}
-      };
-      window.addEventListener("message",handler);
-    }catch(e){setCanvaMsg({err:e.message});}
+      // 1. Trigger local download so user has the file ready
+      const blob=dataUrlToBlob(pngDataUrl);
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement("a");
+      a.href=url;a.download=`qoyod-ad-variant${variantNum}.png`;
+      document.body.appendChild(a);a.click();
+      setTimeout(()=>{URL.revokeObjectURL(url);document.body.removeChild(a);},500);
+      // 2. Open Canva editor in a new tab
+      window.open("https://www.canva.com/design?create&type=TAYIuREZAEU","_blank","noopener,noreferrer");
+      setCanvaMsg(p=>({...p,[variantNum]:{ok:T("تم تنزيل الصورة. اسحبها داخل Canva.","Image downloaded. Drop it into the Canva tab.")}}));
+    }catch(e){
+      setCanvaMsg(p=>({...p,[variantNum]:{err:e.message}}));
+    }finally{setCanvaLd(false);}
   },[lang]);
-
-  const disconnectCanva=useCallback(async()=>{
-    await fetch(`${CANVA_BASE}/logout`,{method:"DELETE"});
-    setCanvaConn(false);setCanvaMsg({});
-  },[]);
 
   const MIRO_BASE="/api/miro";
 
@@ -1053,83 +1060,8 @@ export default function CreativeOS(){
     finally{setMiroLd(false);}
   },[miroConn,lang]);
 
-  const exportSvgToCanva=useCallback(async(svgStr,variantNum)=>{
-    if(!canvaConn){setCanvaMsg(p=>({...p,[variantNum]:{err:T("اتصل بـ Canva أولاً","Connect to Canva first")}}));return;}
-    setCanvaLd(true);
-    setCanvaMsg(p=>({...p,[variantNum]:{info:T("جارٍ الرفع...","Uploading...")}}));
-    try{
-      const upR=await fetch(`${CANVA_BASE}/upload-svg`,{
-        method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({svg:svgStr,name:`Qoyod Ad - Variant ${variantNum}`}),
-      });
-      const upD=await upR.json();
-      if(!upR.ok||upD.error)throw new Error(upD.error||"Upload failed");
-      const jobId=upD.job_id;
-      let assetId=null;
-      setCanvaMsg(p=>({...p,[variantNum]:{info:T("يعالج الأصل...","Processing asset...")}}));
-      for(let i=0;i<20;i++){
-        await new Promise(r=>setTimeout(r,1500));
-        const jR=await fetch(`${CANVA_BASE}/upload-job/${jobId}`);
-        const jD=await jR.json();
-        if(jD.status==="success"||jD.asset_id){assetId=jD.asset_id;break;}
-        if(jD.status==="failed")throw new Error("Asset processing failed");
-      }
-      const msg=assetId
-        ?T("✓ تم الرفع — ستجده في مكتبة Canva الخاصة بك","✓ Uploaded — find it in your Canva media library")
-        :T("تم الرفع، يعالج Canva الملف...","Uploaded, Canva is processing...");
-      setCanvaMsg(p=>({...p,[variantNum]:{ok:msg,asset_id:assetId}}));
-    }catch(e){setCanvaMsg(p=>({...p,[variantNum]:{err:e.message}}));}finally{setCanvaLd(false);}
-  },[canvaConn,lang]);
-
-  const createCanvaDesign=useCallback(async(svgStr,variantNum)=>{
-    if(!canvaConn){setCanvaMsg(p=>({...p,[variantNum]:{err:T("اتصل بـ Canva أولاً","Connect to Canva first")}}));return;}
-    setCanvaLd(true);
-    setCanvaMsg(p=>({...p,[variantNum]:{info:T("ينشئ التصميم...","Creating design...")}}));
-    try{
-      let assetId=canvaMsg[variantNum]?.asset_id||null;
-      if(!assetId&&svgStr){
-        const upR=await fetch(`${CANVA_BASE}/upload-svg`,{
-          method:"POST",headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({svg:svgStr,name:`Qoyod Ad - Variant ${variantNum}`}),
-        });
-        const upD=await upR.json();
-        if(!upR.ok||upD.error)throw new Error(upD.error||"Upload failed");
-        for(let i=0;i<20;i++){
-          await new Promise(r=>setTimeout(r,1500));
-          const jR=await fetch(`${CANVA_BASE}/upload-job/${upD.job_id}`);
-          const jD=await jR.json();
-          if(jD.asset_id){assetId=jD.asset_id;break;}
-          if(jD.status==="failed")break;
-        }
-      }
-      const dR=await fetch(`${CANVA_BASE}/create-design`,{
-        method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({title:`Qoyod Ad V${variantNum} — ${bMsg.slice(0,40)}`,asset_id:assetId,design_type:"SocialMedia"}),
-      });
-      const dD=await dR.json();
-      if(!dR.ok||dD.error)throw new Error(dD.error||"Create design failed");
-      setCanvaMsg(p=>({...p,[variantNum]:{ok:T("✓ التصميم جاهز","✓ Design ready"),edit_url:dD.edit_url}}));
-      if(dD.edit_url)window.open(dD.edit_url,"_blank");
-    }catch(e){setCanvaMsg(p=>({...p,[variantNum]:{err:e.message}}));}finally{setCanvaLd(false);}
-  },[canvaConn,canvaMsg,bMsg,lang]);
-
-  const refineWithNB=useCallback(async(svgContent,num)=>{
-    const prompt=(nbPrompts[num]||"").trim();
-    if(!prompt)return;
-    const sys=`You are an expert SVG graphic designer. You receive an existing SVG ad design and an edit instruction. Modify the SVG according to the instruction while strictly preserving the overall layout, Qoyod brand colors (#021544 navy, #17A3A4 teal, #F5A623 gold), and Arabic text direction. Return ONLY the complete raw SVG code — no markdown, no triple backticks, no explanations.`;
-    const usr=`Edit instruction: ${prompt}\n\nOriginal SVG:\n${svgContent}`;
-    setNbRefining(p=>({...p,[num]:true}));
-    setNbRefineErrs(p=>({...p,[num]:""}));
-    try{
-      const raw=await callAI(sys,usr,3000,true);
-      const cleaned=(typeof raw==="string"?raw:JSON.stringify(raw)).replace(/^```(?:svg|xml)?\n?|\n?```$/g,"").trim();
-      if(cleaned.startsWith("<svg")||cleaned.includes("<svg ")){
-        setDesignSvgs(p=>({...p,[num]:cleaned}));
-        setNbPrompts(p=>({...p,[num]:""}));
-      }else{setNbRefineErrs(p=>({...p,[num]:T("لم يُعِد النموذج SVG صالح","Model did not return valid SVG")}));}
-    }catch(e){setNbRefineErrs(p=>({...p,[num]:e.message}));}
-    finally{setNbRefining(p=>({...p,[num]:false}));}
-  },[nbPrompts,lang]);
+  /* SVG refinement removed — designs are now AI-generated PNGs.
+     To refine, click Retry with a tweaked concept or use the prompt panel below. */
 
   const genLP=useCallback(async()=>{
     if(!lpCompDesc&&!lpCompUrl){setLpErr(T("اوصف الصفحة أو أدخل رابطاً","Describe the page or enter URL"));return;}
@@ -1880,17 +1812,14 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
             {bRes&&!bLd&&(
               <div className="qa">
                 {/* ── Canva connect bar ── */}
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,padding:"8px 12px",borderRadius:8,border:"1px solid rgba(1,53,90,.45)",background:"rgba(7,22,48,.5)"}}>
-                  <svg width="16" height="16" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="16" fill="#7D2AE8"/><path d="M8 21.6C9.92 24.12 12.72 25.6 16 25.6c5.3 0 9.6-4.3 9.6-9.6S21.3 6.4 16 6.4c-3.28 0-6.08 1.48-8 3.92V6.4H4V22.4l4-.8V21.6z" fill="#fff"/></svg>
-                  <span style={{fontSize:10.5,fontWeight:600,color:canvaConn?"#5dc87a":"#6a96aa",flex:1}}>{canvaConn?T("Canva متصل — جاهز للتصدير","Canva connected — ready to export"):T("اربط Canva لتصدير التصاميم","Connect Canva to export designs")}</span>
-                  {canvaConn?(
-                    <button onClick={disconnectCanva} style={{padding:"3px 10px",borderRadius:5,border:"1px solid rgba(240,112,112,.35)",background:"transparent",color:"#f07070",fontSize:9.5,cursor:"pointer",fontFamily:"inherit"}}>{T("قطع الاتصال","Disconnect")}</button>
-                  ):(
-                    <button onClick={connectCanva} style={{padding:"4px 12px",borderRadius:5,border:"1px solid rgba(125,42,232,.5)",background:"rgba(125,42,232,.12)",color:"#b87fff",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{T("ربط Canva","Connect Canva")}</button>
-                  )}
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,padding:"8px 12px",borderRadius:8,border:"1px solid rgba(1,53,90,.45)",background:"rgba(7,22,48,.5)",flexWrap:"wrap"}}>
+                  <span style={{fontSize:10.5,fontWeight:600,color:"#17a3a3",flex:"1 1 200px"}}>✦ {T("نموذج توليد الصورة","Image generation model")}</span>
+                  <div style={{display:"flex",background:"#0a1f3d",border:"1px solid rgba(1,53,90,.45)",borderRadius:5,overflow:"hidden",height:26}}>
+                    {[["auto",T("تلقائي","Auto")],["nanobanana","Nano Banana"],["gpt-image","GPT Image"]].map(([v,l])=>(
+                      <button key={v} onClick={()=>setImageProvider(v)} style={{padding:"0 10px",height:"100%",background:imageProvider===v?"rgba(23,163,164,.15)":"none",border:"none",color:imageProvider===v?"#17a3a3":"#6a96aa",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{l}</button>
+                    ))}
+                  </div>
                 </div>
-                {canvaMsg?.ok&&<p style={{fontSize:10,color:"#5dc87a",marginBottom:6,textAlign:"center"}}>{canvaMsg.ok}</p>}
-                {canvaMsg?.err&&<p style={{fontSize:10,color:"#f07070",marginBottom:6,textAlign:"center"}}>{canvaMsg.err}</p>}
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8,marginBottom:12}}>
                   <p style={{fontSize:12,fontWeight:600,color:"#17a3a3",margin:0}}>{bRes.brief_title}</p>
                   <button onClick={genAllDesigns} style={{padding:"5px 14px",borderRadius:6,border:"1px solid rgba(23,163,164,.4)",background:"rgba(23,163,164,.08)",color:"#17a3a3",fontSize:10.5,cursor:"pointer",fontFamily:"inherit",fontWeight:600}}>
@@ -1900,85 +1829,54 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
                 <div style={{display:"grid",gridTemplateColumns:numVariants===1?"1fr":numVariants===2?"repeat(2,1fr)":"repeat(auto-fill,minmax(360px,1fr))",gap:14,marginBottom:14}}>
                   {Array.from({length:numVariants},(_,i)=>i+1).map(num=>{
                     const data=bRes[`variant${num}`];
-                    const svg=designSvgs[num];
+                    const png=designPngs[num];
+                    const provider=designProviders[num];
                     const ld=designLds[num];
                     const err=designErrs[num];
                     return(
                       <div key={num} style={{...card,marginBottom:0,border:appV===num?"1.5px solid rgba(93,200,122,.5)":"1px solid rgba(1,53,90,.45)"}}>
-                        <div style={{...cHead,background:appV===num?"rgba(93,200,122,.06)":"rgba(23,163,164,.03)"}}><span style={{fontSize:11,fontWeight:600,color:appV===num?"#5dc87a":"#17a3a3"}}>{T(`نسخة ${num}`,`Variant ${num}`)}</span>{appV===num&&<Tag ch="✓" green style={{fontSize:9.5}}/>}</div>
+                        <div style={{...cHead,background:appV===num?"rgba(93,200,122,.06)":"rgba(23,163,164,.03)"}}>
+                          <span style={{fontSize:11,fontWeight:600,color:appV===num?"#5dc87a":"#17a3a3"}}>{T(`نسخة ${num}`,`Variant ${num}`)}</span>
+                          <div style={{display:"flex",gap:5,alignItems:"center"}}>
+                            {provider&&<Tag ch={provider==="nanobanana"?"Nano Banana":provider==="gpt-image"?"GPT Image":provider} t style={{fontSize:8.5}}/>}
+                            {appV===num&&<Tag ch="✓" green style={{fontSize:9.5}}/>}
+                          </div>
+                        </div>
                         <div style={{padding:12}}>
-                          {svg?(
+                          {png?(
                             <div style={{marginBottom:10}}>
                               <div style={{borderRadius:8,overflow:"hidden",border:"1px solid rgba(23,163,164,.25)",marginBottom:8,background:"#021544",width:"100%"}}>
                                 <img
-                                  src={`data:image/svg+xml;utf8,${encodeURIComponent(svg)}`}
+                                  src={png}
                                   alt={`Variant ${num} preview`}
                                   style={{width:"100%",height:"auto",display:"block"}}
                                 />
                               </div>
                               <div style={{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap"}}>
-                                <button onClick={()=>downloadRaster(svg,num,"png")} style={{flex:1,padding:"6px 0",borderRadius:6,border:"1px solid rgba(23,163,164,.4)",background:"rgba(23,163,164,.1)",color:"#17a3a3",fontSize:10.5,cursor:"pointer",fontFamily:"inherit",fontWeight:600}}>
+                                <button onClick={()=>downloadRaster(png,num,"png")} style={{flex:1,padding:"6px 0",borderRadius:6,border:"1px solid rgba(23,163,164,.4)",background:"rgba(23,163,164,.1)",color:"#17a3a3",fontSize:10.5,cursor:"pointer",fontFamily:"inherit",fontWeight:600}}>
                                   {T("تحميل PNG","Download PNG")}
                                 </button>
-                                <button onClick={()=>downloadRaster(svg,num,"jpg")} style={{flex:1,padding:"6px 0",borderRadius:6,border:"1px solid rgba(23,163,164,.4)",background:"rgba(23,163,164,.1)",color:"#17a3a3",fontSize:10.5,cursor:"pointer",fontFamily:"inherit",fontWeight:600}}>
+                                <button onClick={()=>downloadRaster(png,num,"jpg")} style={{flex:1,padding:"6px 0",borderRadius:6,border:"1px solid rgba(23,163,164,.4)",background:"rgba(23,163,164,.1)",color:"#17a3a3",fontSize:10.5,cursor:"pointer",fontFamily:"inherit",fontWeight:600}}>
                                   {T("تحميل JPG","Download JPG")}
                                 </button>
-                                <button onClick={()=>downloadSvg(svg,num)} style={{padding:"6px 10px",borderRadius:6,border:"1px solid rgba(23,163,164,.25)",background:"transparent",color:"#6a96aa",fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>
-                                  SVG
-                                </button>
-                                <button onClick={()=>uploadToDrive(svg,`qoyod-design-v${num}.svg`,"image/svg+xml",`svg-${num}`)} disabled={driveLd[`svg-${num}`]} style={{padding:"6px 10px",borderRadius:6,border:"1px solid rgba(66,133,244,.4)",background:"rgba(66,133,244,.1)",color:driveLinks[`svg-${num}`]?"#5dc87a":"#4285f4",fontSize:10,cursor:"pointer",fontFamily:"inherit",fontWeight:600,opacity:driveLd[`svg-${num}`]?.6:1}} title="Save to Google Drive">
-                                  {driveLd[`svg-${num}`]?"…":driveLinks[`svg-${num}`]?"Drive ✓":"Drive"}
+                                <button onClick={async()=>{const blob=dataUrlToBlob(png);const file=new File([blob],`qoyod-design-v${num}.png`,{type:"image/png"});const fd=new FormData();fd.append("file",file);fd.append("name",file.name);try{setDriveLd(p=>({...p,[`png-${num}`]:true}));const r=await fetch("/api/drive/upload",{method:"POST",body:fd});const d=await r.json();if(!r.ok||d.error)throw new Error(d.error||"Drive upload failed");setDriveLinks(p=>({...p,[`png-${num}`]:d.link}));}catch(e){setDriveErrs(p=>({...p,[`png-${num}`]:e.message}));}finally{setDriveLd(p=>({...p,[`png-${num}`]:false}));}}} disabled={driveLd[`png-${num}`]} style={{padding:"6px 10px",borderRadius:6,border:"1px solid rgba(66,133,244,.4)",background:"rgba(66,133,244,.1)",color:driveLinks[`png-${num}`]?"#5dc87a":"#4285f4",fontSize:10,cursor:"pointer",fontFamily:"inherit",fontWeight:600,opacity:driveLd[`png-${num}`]?.6:1}} title="Save to Google Drive">
+                                  {driveLd[`png-${num}`]?"…":driveLinks[`png-${num}`]?"Drive ✓":"Drive"}
                                 </button>
                                 <button onClick={()=>genDesign(num)} style={{padding:"6px 10px",borderRadius:6,border:"1px solid rgba(255,255,255,.1)",background:"none",color:"#6a96aa",fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>
                                   {T("أعد الإنشاء","Retry")}
                                 </button>
                               </div>
-                              {driveLinks[`svg-${num}`]&&<p style={{fontSize:9,marginBottom:4,textAlign:"center"}}><a href={driveLinks[`svg-${num}`]} target="_blank" rel="noreferrer" style={{color:"#4285f4",textDecoration:"underline"}}>↗ {T("افتح في Drive","Open in Drive")}</a></p>}
-                              {driveErrs[`svg-${num}`]&&<p style={{fontSize:9,color:"#f07070",marginBottom:4,textAlign:"center"}}>{driveErrs[`svg-${num}`]}</p>}
-                              {/* ── Canva export row ── */}
-                              <div style={{display:"flex",gap:5}}>
-                                <button onClick={()=>exportSvgToCanva(svg,num)} disabled={canvaLd||!canvaConn} style={{flex:1,padding:"5px 0",borderRadius:6,border:"1px solid rgba(125,42,232,.45)",background:"rgba(125,42,232,.1)",color:canvaConn?"#b87fff":"#5a6080",fontSize:9.5,cursor:canvaConn?"pointer":"not-allowed",fontFamily:"inherit",fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
-                                  <svg width="11" height="11" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="16" fill="#7D2AE8"/><path d="M8 21.6C9.92 24.12 12.72 25.6 16 25.6c5.3 0 9.6-4.3 9.6-9.6S21.3 6.4 16 6.4c-3.28 0-6.08 1.48-8 3.92V6.4H4V22.4l4-.8V21.6z" fill="#fff"/></svg>
-                                  {T("رفع SVG","Upload SVG")}
-                                </button>
-                                <button onClick={()=>createCanvaDesign(svg,num)} disabled={canvaLd||!canvaConn} style={{flex:1,padding:"5px 0",borderRadius:6,border:"1px solid rgba(125,42,232,.45)",background:"rgba(125,42,232,.1)",color:canvaConn?"#b87fff":"#5a6080",fontSize:9.5,cursor:canvaConn?"pointer":"not-allowed",fontFamily:"inherit",fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
-                                  <svg width="11" height="11" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="16" fill="#7D2AE8"/><path d="M8 21.6C9.92 24.12 12.72 25.6 16 25.6c5.3 0 9.6-4.3 9.6-9.6S21.3 6.4 16 6.4c-3.28 0-6.08 1.48-8 3.92V6.4H4V22.4l4-.8V21.6z" fill="#fff"/></svg>
-                                  {T("إنشاء قالب","Create Template")}
-                                </button>
-                              </div>
+                              {driveLinks[`png-${num}`]&&<p style={{fontSize:9,marginBottom:4,textAlign:"center"}}><a href={driveLinks[`png-${num}`]} target="_blank" rel="noreferrer" style={{color:"#4285f4",textDecoration:"underline"}}>↗ {T("افتح في Drive","Open in Drive")}</a></p>}
+                              {driveErrs[`png-${num}`]&&<p style={{fontSize:9,color:"#f07070",marginBottom:4,textAlign:"center"}}>{driveErrs[`png-${num}`]}</p>}
+                              {/* ── Open in Canva (deep-link, no OAuth) ── */}
+                              <button onClick={()=>openInCanva(png,num)} disabled={canvaLd} style={{width:"100%",padding:"7px 0",borderRadius:6,border:"1px solid rgba(125,42,232,.45)",background:"rgba(125,42,232,.12)",color:"#b87fff",fontSize:10.5,cursor:"pointer",fontFamily:"inherit",fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                                <svg width="11" height="11" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="16" fill="#7D2AE8"/><path d="M8 21.6C9.92 24.12 12.72 25.6 16 25.6c5.3 0 9.6-4.3 9.6-9.6S21.3 6.4 16 6.4c-3.28 0-6.08 1.48-8 3.92V6.4H4V22.4l4-.8V21.6z" fill="#fff"/></svg>
+                                {T("افتح في Canva","Open in Canva")}
+                              </button>
                               {canvaMsg[num]?.info&&<p style={{fontSize:9,color:"#6a96aa",marginTop:4,textAlign:"center"}}>{canvaMsg[num].info}</p>}
                               {canvaMsg[num]?.ok&&<p style={{fontSize:9,color:"#5dc87a",marginTop:4,textAlign:"center"}}>{canvaMsg[num].ok}</p>}
                               {canvaMsg[num]?.err&&<p style={{fontSize:9,color:"#f07070",marginTop:4,textAlign:"center"}}>{canvaMsg[num].err}</p>}
-                              {canvaMsg[num]?.edit_url&&<a href={canvaMsg[num].edit_url} target="_blank" rel="noreferrer" style={{display:"block",marginTop:4,textAlign:"center",fontSize:9.5,color:"#b87fff",textDecoration:"underline"}}>{T("افتح في Canva ←","Open in Canva →")}</a>}
-                              {/* ── Nano Banana Refinement ── */}
-                              <div style={{marginTop:8,paddingTop:8,borderTop:"1px solid rgba(1,53,90,.4)"}}>
-                                <p style={{fontSize:9,fontWeight:600,color:"#f5a623",marginBottom:5,display:"flex",alignItems:"center",gap:4}}>
-                                  <span>✦</span>{T("عدّل مع Nano Banana","Refine with Nano Banana")}
-                                </p>
-                                <div style={{display:"flex",gap:5}}>
-                                  <input
-                                    value={nbPrompts[num]||""}
-                                    onChange={e=>setNbPrompts(p=>({...p,[num]:e.target.value}))}
-                                    onKeyDown={e=>e.key==="Enter"&&!nbRefining[num]&&svg&&refineWithNB(svg,num)}
-                                    placeholder={T("مثال: غيّر اللون الرئيسي للذهبي","e.g. Change primary color to gold")}
-                                    disabled={nbRefining[num]}
-                                    style={{flex:1,padding:"5px 8px",borderRadius:6,border:"1px solid rgba(245,166,35,.3)",background:"rgba(245,166,35,.05)",color:"#ddeef4",fontSize:9.5,fontFamily:"inherit",outline:"none",direction:"rtl"}}
-                                  />
-                                  <button
-                                    onClick={()=>refineWithNB(svg,num)}
-                                    disabled={nbRefining[num]||!(nbPrompts[num]||"").trim()}
-                                    style={{padding:"5px 10px",borderRadius:6,border:"none",background:"#f5a623",color:"#021544",fontSize:9.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",opacity:(nbRefining[num]||!(nbPrompts[num]||"").trim())?.5:1}}
-                                  >
-                                    {nbRefining[num]?(
-                                      <span style={{display:"flex",alignItems:"center",gap:4}}>
-                                        <span style={{width:8,height:8,border:"1.5px solid rgba(2,21,68,.3)",borderTopColor:"#021544",borderRadius:"50%",display:"inline-block",animation:"spin 0.8s linear infinite"}}/>
-                                        {T("يعدّل...","Refining...")}
-                                      </span>
-                                    ):T("تطبيق","Apply")}
-                                  </button>
-                                </div>
-                                {nbRefineErrs[num]&&<p style={{fontSize:9,color:"#f07070",marginTop:4}}>{nbRefineErrs[num]}</p>}
-                              </div>
+                              {designPrompts[num]&&<details style={{marginTop:8,paddingTop:6,borderTop:"1px solid rgba(1,53,90,.4)"}}><summary style={{fontSize:9,color:"#6a96aa",cursor:"pointer"}}>{T("عرض موجه الصورة","Show image prompt")}</summary><p style={{fontSize:9,color:"#6a96aa",marginTop:5,lineHeight:1.5,fontStyle:"italic"}}>{designPrompts[num]}</p></details>}
                             </div>
                           ):ld?(
                             <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8,padding:"20px 0",marginBottom:10}}>

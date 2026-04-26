@@ -22,12 +22,18 @@ let miroToken: MiroToken | null = STATIC_TOKEN
   : null;
 
 function getRedirectUri(req: Request): string {
-  const fwdHost = req.headers["x-forwarded-host"] as string | undefined;
-  const host = process.env.PUBLIC_HOST ?? fwdHost ?? req.headers.host ?? "localhost:8080";
+  const rawHost =
+    process.env.PUBLIC_HOST ??
+    (req.headers["x-forwarded-host"] as string | undefined) ??
+    req.headers.host ??
+    "localhost:8080";
+  if (/^https?:\/\//i.test(rawHost)) {
+    return `${rawHost.replace(/\/+$/, "")}/api/miro/callback`;
+  }
   const proto =
     (req.headers["x-forwarded-proto"] as string | undefined) ??
-    (host.includes("localhost") ? "http" : "https");
-  return `${proto}://${host}/api/miro/callback`;
+    (rawHost.includes("localhost") ? "http" : "https");
+  return `${proto}://${rawHost}/api/miro/callback`;
 }
 
 router.get("/auth-url", (req, res) => {
@@ -126,10 +132,11 @@ router.post("/create-board", async (req, res) => {
 
 router.post("/update-board", async (req, res) => {
   if (!miroToken) return res.status(401).json({ error: "Not connected to Miro" });
-  const { board_id } = req.body as { board_id?: string };
+  const { board_id, clear = true } = req.body as { board_id?: string; clear?: boolean };
   if (!board_id) return res.status(400).json({ error: "board_id required" });
   try {
-    await drawWorkflow(miroToken.access_token, board_id);
+    if (clear) await clearBoard(miroToken.access_token, board_id);
+    await drawAgentFlow(miroToken.access_token, board_id);
     res.json({ ok: true, view_link: `https://miro.com/app/board/${board_id}/` });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -152,6 +159,31 @@ router.post("/draw-agent-flow", async (req, res) => {
     res.status(500).json({ error: msg });
   }
 });
+
+/* Delete every item on a board so we can start fresh */
+async function clearBoard(token: string, boardId: string) {
+  const hdrs = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+  let cursor: string | undefined;
+  let deleted = 0;
+  do {
+    const url = cursor
+      ? `${MIRO_API}/boards/${boardId}/items?limit=50&cursor=${cursor}`
+      : `${MIRO_API}/boards/${boardId}/items?limit=50`;
+    const r = await fetch(url, { headers: hdrs });
+    if (!r.ok) break;
+    const data = (await r.json()) as { data?: { id: string }[]; cursor?: string };
+    const items = data.data ?? [];
+    for (const item of items) {
+      await fetch(`${MIRO_API}/boards/${boardId}/items/${item.id}`, {
+        method: "DELETE",
+        headers: hdrs,
+      }).catch(() => {});
+      deleted++;
+    }
+    cursor = data.cursor;
+  } while (cursor);
+  return deleted;
+}
 
 async function drawWorkflow(token: string, boardId: string) {
   const BASE = `${MIRO_API}/boards/${boardId}`;
@@ -272,86 +304,142 @@ async function drawWorkflow(token: string, boardId: string) {
   }
 }
 
+/* ── Simplified column flow: APIs → Triggers → Roles → Actions → Outputs ── */
 async function drawAgentFlow(token: string, boardId: string) {
   const BASE = `${MIRO_API}/boards/${boardId}`;
   const hdrs = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
   const post = async (path: string, body: object) => {
-    const r = await fetch(`${BASE}${path}`, {
-      method: "POST",
-      headers: hdrs,
-      body: JSON.stringify(body),
-    });
+    const r = await fetch(`${BASE}${path}`, { method: "POST", headers: hdrs, body: JSON.stringify(body) });
     const d = (await r.json()) as { message?: string; description?: string; id?: string };
     if (!r.ok) throw new Error(`${path}: ${d.message || d.description || JSON.stringify(d)}`);
     return d as { id: string };
   };
 
-  const NAVY = "#021544", TEAL = "#17A3A4", GOLD = "#F5A623",
-    GREEN = "#22C55E", PURPLE = "#7D2AE8", ORANGE = "#ff7a59",
-    DARK = "#0f2744", WHITE = "#FFFFFF", RED = "#ef4444";
+  const NAVY = "#021544", TEAL = "#17A3A4", GOLD = "#F5A623";
+  const GREEN = "#22C55E", PURPLE = "#7D2AE8", ORANGE = "#ff7a59";
+  const DARK = "#0f2744", WHITE = "#FFFFFF", INDIGO = "#4f46e5";
+  const BLUE = "#0284c7", PINK = "#db2777";
 
-  /* ── Layout constants ── */
-  const BW = 1400;          // banner width
-  const COL = 5;            // trigger columns
-  const TW = 220, TH = 65;  // trigger box size
-  const PW = 160, PH = 60;  // persona box
-  const OW = 160, OH = 60;  // output box
+  /* ── Layout ── */
+  const CARD_W = 260;
+  const CARD_H = 80;
+  const GAP_Y  = 24;   // vertical gap between cards
+  const GAP_X  = 140;  // horizontal gap between columns
+  const COLS   = 5;
+  const TOTAL_W = COLS * CARD_W + (COLS - 1) * GAP_X;
+  const X0 = -(TOTAL_W / 2);           // left edge of col 0
+  const cx = (col: number) => X0 + col * (CARD_W + GAP_X) + CARD_W / 2;
+  const lx = (col: number) => X0 + col * (CARD_W + GAP_X);
+  const ry = (row: number) => 220 + row * (CARD_H + GAP_Y);
 
-  const TY = 100, CY = 250, PY = 410, TOOLY = 560, OUTY = 720;
-  const tXs = [-440, -220, 0, 220, 440];   // 5 trigger x positions
-  const pXs = [-480, -300, -120, 60, 240, 420]; // 6 persona x positions
-  const oXs = [-490, -310, -130, 50, 230, 410, 590]; // 7 output x positions
+  type Node = { id: string; col: number; row: number; label: string; sub: string; fill: string };
 
-  type Node = { id: string; x: number; y: number; w: number; h: number; label: string; fill: string; text: string; shape?: string };
-  const nodes: Node[] = [
-    /* Title banner */
-    { id: "title", x: 0, y: 0, w: BW, h: 70, label: "سمعه — وكيل التسويق الذكي | كيف تشتغل؟", fill: NAVY, text: WHITE, shape: "rectangle" },
-
-    /* Trigger row */
-    { id: "t1", x: tXs[0], y: TY, w: TW, h: TH, label: "UI يدوي\nشغّل سمعه", fill: DARK, text: WHITE },
-    { id: "t2", x: tXs[1], y: TY, w: TW, h: TH, label: "Webhook\nAsana / HubSpot", fill: DARK, text: WHITE },
-    { id: "t3", x: tXs[2], y: TY, w: TW, h: TH, label: "Zapier\nأتمتة خارجية", fill: DARK, text: WHITE },
-    { id: "t4", x: tXs[3], y: TY, w: TW, h: TH, label: "Slack @mention\nتكليف مباشر", fill: DARK, text: WHITE },
-    { id: "t5", x: tXs[4], y: TY, w: TW, h: TH, label: "Scheduled\nمواعيد تلقائية", fill: DARK, text: WHITE },
-
-    /* Core processing */
-    { id: "core", x: 0, y: CY, w: BW, h: 70, label: "سمعه Core · Claude Sonnet 4.5 | اختيار شخصية → dedup → ذاكرة → cache الأدوات", fill: GOLD, text: NAVY, shape: "rectangle" },
-
-    /* Personas */
-    { id: "p1", x: pXs[0], y: PY, w: PW, h: PH, label: "مصمم جرافيك\nSVG · Canva · صور", fill: TEAL, text: WHITE },
-    { id: "p2", x: pXs[1], y: PY, w: PW, h: PH, label: "متخصص السوشيال\nمحتوى + تحليل", fill: TEAL, text: WHITE },
-    { id: "p3", x: pXs[2], y: PY, w: PW, h: PH, label: "كاتب محتوى\nكوبي · مدونة · RSA", fill: TEAL, text: WHITE },
-    { id: "p4", x: pXs[3], y: PY, w: PW, h: PH, label: "أخصائي CRO\nلاندنج · A/B · SEO", fill: TEAL, text: WHITE },
-    { id: "p5", x: pXs[4], y: PY, w: PW, h: PH, label: "إيميل & سيكونس\nwelcome · nurture", fill: TEAL, text: WHITE },
-    { id: "p6", x: pXs[5], y: PY, w: PW, h: PH, label: "كل الأدوات\nمهام متعددة", fill: PURPLE, text: WHITE },
-
-    /* Tools summary row */
-    { id: "tools", x: 0, y: TOOLY, w: BW, h: 70, label: "20+ أداة | SVG · صور AI · محتوى · إيميلات · لاندنج · خطط حملات · SEO · A/B · هاشتاقات · مراجعة...", fill: DARK, text: TEAL, shape: "rectangle" },
-
-    /* Outputs */
-    { id: "o1", x: oXs[0], y: OUTY, w: OW, h: OH, label: "Canva\nتصميم جاهز", fill: PURPLE, text: WHITE },
-    { id: "o2", x: oXs[1], y: OUTY, w: OW, h: OH, label: "Google Drive\nملفات + SVG", fill: GREEN, text: WHITE },
-    { id: "o3", x: oXs[2], y: OUTY, w: OW, h: OH, label: "WordPress\nمسودة نشر", fill: "#21759b", text: WHITE },
-    { id: "o4", x: oXs[3], y: OUTY, w: OW, h: OH, label: "HubSpot\nصفحة / بريد", fill: ORANGE, text: WHITE },
-    { id: "o5", x: oXs[4], y: OUTY, w: OW, h: OH, label: "Miro Board\nخريطة ومسار", fill: "#FFD02F", text: NAVY },
-    { id: "o6", x: oXs[5], y: OUTY, w: OW, h: OH, label: "Slack\nرد تلقائي", fill: "#4A154B", text: WHITE },
-    { id: "o7", x: oXs[6], y: OUTY, w: OW, h: OH, label: "Asana Task\nمهمة متابعة", fill: RED, text: WHITE },
+  /* ── 5 items per column max ── */
+  const columns: Node[][] = [
+    // Col 0 — APIs / Connectors
+    [
+      { id: "api_ai",      col: 0, row: 0, label: "Claude + Gemini",    sub: "AI core + image gen",        fill: DARK   },
+      { id: "api_social",  col: 0, row: 1, label: "HubSpot + Slack",    sub: "Social, CRM, @mention",      fill: ORANGE },
+      { id: "api_publish", col: 0, row: 2, label: "WordPress + Canva",  sub: "Publish & design export",    fill: PURPLE },
+      { id: "api_storage", col: 0, row: 3, label: "Google Drive",       sub: "File storage & links",       fill: GREEN  },
+      { id: "api_tasks",   col: 0, row: 4, label: "Asana + Miro",       sub: "Tasks & visual boards",      fill: BLUE   },
+    ],
+    // Col 1 — Triggers
+    [
+      { id: "tr_ui",       col: 1, row: 0, label: "UI (Quick Form)",    sub: "Manual request in app",      fill: DARK   },
+      { id: "tr_mention",  col: 1, row: 1, label: "Slack @mention",     sub: "Direct team request",        fill: "#4A154B" },
+      { id: "tr_webhook",  col: 1, row: 2, label: "Webhook / Zapier",   sub: "External automation",        fill: DARK   },
+      { id: "tr_hs",       col: 1, row: 3, label: "HubSpot Poller",     sub: "Every 5 min — new posts",    fill: ORANGE },
+      { id: "tr_comp",     col: 1, row: 4, label: "Competitor Poller",  sub: "Every 6h — IG/TikTok/X",    fill: PINK   },
+    ],
+    // Col 2 — Roles (personas)
+    [
+      { id: "r_designer",  col: 2, row: 0, label: "Designer",           sub: "SVG ads, Canva, images",     fill: TEAL   },
+      { id: "r_social",    col: 2, row: 1, label: "Social Media",       sub: "Captions + competitor intel",fill: TEAL   },
+      { id: "r_writer",    col: 2, row: 2, label: "Content Writer",     sub: "Copy, blog, Google Ads",     fill: TEAL   },
+      { id: "r_cro",       col: 2, row: 3, label: "CRO / Email",        sub: "Landing pages, A/B, email",  fill: TEAL   },
+      { id: "r_intel",     col: 2, row: 4, label: "Intelligence",       sub: "Library + memory + insights",fill: INDIGO },
+    ],
+    // Col 3 — Actions (tools)
+    [
+      { id: "act_content",  col: 3, row: 0, label: "Generate Content",  sub: "Captions, copy, scripts",    fill: DARK   },
+      { id: "act_design",   col: 3, row: 1, label: "Generate Design",   sub: "SVG ads + AI images",        fill: DARK   },
+      { id: "act_page",     col: 3, row: 2, label: "Build Page / Email",sub: "Landing page + sequences",   fill: DARK   },
+      { id: "act_campaign", col: 3, row: 3, label: "Build Campaign",    sub: "360° plan + RSA + A/B",      fill: DARK   },
+      { id: "act_intel",    col: 3, row: 4, label: "Intel & Memory",    sub: "Competitors + library + memory", fill: INDIGO },
+    ],
+    // Col 4 — Outputs
+    [
+      { id: "out_canva",   col: 4, row: 0, label: "Canva Design",       sub: "Ready to edit & publish",    fill: PURPLE },
+      { id: "out_social",  col: 4, row: 1, label: "HubSpot / Slack",    sub: "Published post or reply",    fill: ORANGE },
+      { id: "out_web",     col: 4, row: 2, label: "WordPress",          sub: "Draft page or blog post",    fill: BLUE   },
+      { id: "out_drive",   col: 4, row: 3, label: "Google Drive",       sub: "File + shareable link",      fill: GREEN  },
+      { id: "out_memory",  col: 4, row: 4, label: "Library & Memory",   sub: "Stored for future tasks",    fill: INDIGO },
+    ],
   ];
 
+  const COL_LABELS = [
+    "APIs / Connectors", "Triggers", "Roles", "Actions", "Outputs",
+  ];
+  const COL_FILLS = [DARK, "#0c2f52", "#0c2f52", "#0c2f52", "#0c2f52"];
+
+  /* ── Build nodes list ── */
+  type ShapeNode = {
+    id: string; x: number; y: number; w: number; h: number;
+    label: string; fill: string; text: string;
+    shape: "rectangle" | "round_rectangle"; fontSize: string;
+  };
+  const nodes: ShapeNode[] = [];
+
+  // Title banner
+  nodes.push({
+    id: "title", x: X0, y: -120, w: TOTAL_W, h: 64,
+    label: "Qoyod Creative OS  —  نظام الذكاء التسويقي",
+    fill: NAVY, text: WHITE, shape: "rectangle", fontSize: "18",
+  });
+  // Sub-banner
+  nodes.push({
+    id: "sub", x: X0, y: -46, w: TOTAL_W, h: 40,
+    label: "Claude Sonnet 4.5  ·  persona routing  ·  long-term memory  ·  cache",
+    fill: GOLD, text: NAVY, shape: "rectangle", fontSize: "13",
+  });
+
+  // Column headers
+  for (let c = 0; c < COLS; c++) {
+    nodes.push({
+      id: `h${c}`, x: lx(c), y: 140, w: CARD_W, h: 56,
+      label: COL_LABELS[c],
+      fill: COL_FILLS[c], text: TEAL, shape: "round_rectangle", fontSize: "14",
+    });
+  }
+
+  // Cards
+  for (const col of columns) {
+    for (const n of col) {
+      nodes.push({
+        id: n.id, x: lx(n.col), y: ry(n.row), w: CARD_W, h: CARD_H,
+        label: `${n.label}\n${n.sub}`,
+        fill: n.fill, text: WHITE, shape: "round_rectangle", fontSize: "12",
+      });
+    }
+  }
+
+  /* ── Create all shapes ── */
   const idMap: Record<string, string> = {};
   for (const n of nodes) {
-    const isBanner = n.shape === "rectangle";
     const item = await post("/shapes", {
       data: {
-        shape: isBanner ? "rectangle" : "round_rectangle",
-        content: `<p style="text-align:center"><strong>${n.label.replace(/\n/g, "</strong><br><strong>")}</strong></p>`,
+        shape: n.shape,
+        content: `<p style="text-align:center"><strong>${n.label.split("\n")[0]}</strong>${
+          n.label.includes("\n") ? `<br><span style="font-size:10px;opacity:0.85">${n.label.split("\n")[1]}</span>` : ""
+        }</p>`,
       },
       style: {
         fillColor: n.fill,
         color: n.text,
         borderColor: n.fill,
-        borderWidth: "2",
-        fontSize: isBanner ? "15" : "12",
+        borderWidth: n.shape === "rectangle" ? "3" : "2",
+        fontSize: n.fontSize,
       },
       geometry: { width: n.w, height: n.h },
       position: { x: n.x, y: n.y },
@@ -359,21 +447,45 @@ async function drawAgentFlow(token: string, boardId: string) {
     idMap[n.id] = item.id;
   }
 
-  /* Connectors */
-  const conns: [string, string][] = [
-    ["t1","core"],["t2","core"],["t3","core"],["t4","core"],["t5","core"],
-    ["core","p1"],["core","p2"],["core","p3"],["core","p4"],["core","p5"],["core","p6"],
-    ["p1","tools"],["p2","tools"],["p3","tools"],["p4","tools"],["p5","tools"],["p6","tools"],
-    ["tools","o1"],["tools","o2"],["tools","o3"],["tools","o4"],["tools","o5"],["tools","o6"],["tools","o7"],
-  ];
-  for (const [from, to] of conns) {
-    if (!idMap[from] || !idMap[to]) continue;
+  /* ── Connectors — one per logical link only ── */
+  const connect = async (a: string, b: string, colour = TEAL, dashed = false) => {
+    if (!idMap[a] || !idMap[b]) return;
     await post("/connectors", {
-      startItem: { id: idMap[from] },
-      endItem: { id: idMap[to] },
-      style: { strokeColor: TEAL, strokeWidth: "2", startStrokeCap: "none", endStrokeCap: "arrow" },
+      startItem: { id: idMap[a] },
+      endItem:   { id: idMap[b] },
+      style: { strokeColor: colour, strokeWidth: "2",
+               strokeStyle: dashed ? "dashed" : "normal",
+               startStrokeCap: "none", endStrokeCap: "arrow" },
     }).catch(() => {});
-  }
+  };
+
+  // APIs → Triggers (5 clean 1:1 links)
+  await connect("api_ai",      "tr_ui",      TEAL);
+  await connect("api_social",  "tr_mention", "#4A154B");
+  await connect("api_social",  "tr_hs",      ORANGE);
+  await connect("api_ai",      "tr_comp",    PINK, true);
+  await connect("api_tasks",   "tr_webhook", BLUE);
+
+  // Triggers → Roles (5 clean links)
+  await connect("tr_ui",      "r_designer", TEAL);
+  await connect("tr_mention", "r_social",   TEAL);
+  await connect("tr_webhook", "r_writer",   TEAL);
+  await connect("tr_hs",      "r_social",   ORANGE);
+  await connect("tr_comp",    "r_intel",    PINK, true);
+
+  // Roles → Actions (5 clean links)
+  await connect("r_designer", "act_design",   TEAL);
+  await connect("r_social",   "act_content",  TEAL);
+  await connect("r_writer",   "act_page",     TEAL);
+  await connect("r_cro",      "act_campaign", TEAL);
+  await connect("r_intel",    "act_intel",    INDIGO);
+
+  // Actions → Outputs (5 clean links)
+  await connect("act_design",   "out_canva",  PURPLE);
+  await connect("act_content",  "out_social", ORANGE);
+  await connect("act_page",     "out_web",    BLUE);
+  await connect("act_campaign", "out_drive",  GREEN);
+  await connect("act_intel",    "out_memory", INDIGO);
 }
 
 export default router;

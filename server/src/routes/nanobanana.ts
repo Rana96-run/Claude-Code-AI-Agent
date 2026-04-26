@@ -104,4 +104,70 @@ router.post("/generate-image", async (req, res) => {
   }
 });
 
+/* POST /api/nb/generate-image-openai — DALL-E 3 / gpt-image-1 via OpenAI API
+   Env: OPENAI_API_KEY (required) */
+router.post("/generate-image-openai", async (req, res) => {
+  try {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) return res.status(500).json({ error: "OPENAI_API_KEY not configured — add it in Railway env vars" });
+
+    const {
+      prompt,
+      model = "dall-e-3",
+      size = "1024x1024",
+      quality = "hd",
+      style = "vivid",
+    } = req.body ?? {};
+    if (!prompt) return res.status(400).json({ error: "prompt required" });
+
+    // gpt-image-1 uses "standard"/"hd" quality; dall-e-3 uses "standard"/"hd"
+    const isGptImage = model === "gpt-image-1";
+
+    const body: Record<string, unknown> = {
+      model,
+      prompt,
+      n: 1,
+      size,
+      response_format: "b64_json",
+    };
+    if (!isGptImage) {
+      body.quality = quality;
+      body.style = style;
+    }
+
+    const response = await fetch("https://api.openai.com/v1/images/generations", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const err = (await response.json()) as { error?: { message?: string } };
+      return res.status(response.status).json({
+        error: err.error?.message ?? `OpenAI HTTP ${response.status}`,
+      });
+    }
+
+    const data = (await response.json()) as {
+      data?: Array<{ b64_json?: string; revised_prompt?: string }>;
+    };
+    const b64 = data.data?.[0]?.b64_json;
+    const revisedPrompt = data.data?.[0]?.revised_prompt;
+    if (!b64) return res.status(500).json({ error: "No image data returned from OpenAI" });
+
+    res.json({
+      mimeType: "image/png",
+      base64: b64,
+      dataUrl: `data:image/png;base64,${b64}`,
+      revised_prompt: revisedPrompt,
+      model,
+    });
+  } catch (e: unknown) {
+    res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+});
+
 export default router;

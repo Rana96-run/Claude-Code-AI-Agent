@@ -49,7 +49,8 @@ const NO_CACHE = new Set([
   "publish_hubspot",
   "slack_post",
   "create_asana_task",
-  "generate_nb_image",   // image gen — always regenerate if asked
+  "generate_nb_image",      // image gen — always regenerate if asked
+  "generate_openai_image",  // DALL-E — always regenerate
 ]);
 
 function ttlFor(tool: string): number {

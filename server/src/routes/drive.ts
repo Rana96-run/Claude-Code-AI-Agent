@@ -1,6 +1,9 @@
 import { Router } from "express";
 import { google } from "googleapis";
 import { Readable } from "stream";
+import fs from "fs";
+import path from "path";
+import os from "os";
 
 const router = Router();
 
@@ -16,13 +19,61 @@ const router = Router();
 
 const FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID ?? "";
 
-function getDriveClient() {
+/** Robustly parse the service-account JSON regardless of how it was set.
+ *  Handles: extra surrounding quotes, escaped newlines in private_key,
+ *  and single-quoted JS objects (from some shells). */
+function parseServiceAccountJson(raw: string): object {
+  let s = raw.trim();
+  // Strip surrounding double-quotes if the whole value was JSON-stringified
+  if (s.startsWith('"') && s.endsWith('"')) {
+    try { s = JSON.parse(s) as string; } catch { /* keep original */ }
+  }
+  // Normalise escaped newlines in private_key (\n → actual newline)
+  s = s.replace(/\\n/g, "\n");
+  return JSON.parse(s);
+}
+
+/** Write service-account JSON to a temp file and return its path.
+ *  Used as fallback when GoogleAuth can't accept the inline credentials. */
+function writeCredsTempFile(creds: object): string {
+  const p = path.join(os.tmpdir(), "gsa_key.json");
+  fs.writeFileSync(p, JSON.stringify(creds), "utf8");
+  return p;
+}
+
+function getServiceAccountCreds(): object | null {
+  // Priority 1: base64-encoded (no newline corruption possible)
+  const b64 = process.env.GOOGLE_SERVICE_ACCOUNT_B64;
+  if (b64) {
+    try {
+      const decoded = Buffer.from(b64, "base64").toString("utf8");
+      return JSON.parse(decoded);
+    } catch { /* fall through */ }
+  }
+  // Priority 2: raw inline JSON
   const inline = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-  const scopes = ["https://www.googleapis.com/auth/drive"];
-  let auth;
   if (inline) {
-    const creds = JSON.parse(inline);
-    auth = new google.auth.GoogleAuth({ credentials: creds, scopes });
+    try { return parseServiceAccountJson(inline); } catch { /* fall through */ }
+  }
+  return null;
+}
+
+function getDriveClient() {
+  const scopes = ["https://www.googleapis.com/auth/drive"];
+  const creds = getServiceAccountCreds();
+  let auth;
+  if (creds) {
+    try {
+      auth = new google.auth.GoogleAuth({ credentials: creds, scopes });
+    } catch {
+      // Fallback: write to temp file
+      try {
+        const tmpPath = writeCredsTempFile(creds);
+        auth = new google.auth.GoogleAuth({ keyFile: tmpPath, scopes });
+      } catch {
+        auth = new google.auth.GoogleAuth({ scopes });
+      }
+    }
   } else {
     auth = new google.auth.GoogleAuth({ scopes });
   }

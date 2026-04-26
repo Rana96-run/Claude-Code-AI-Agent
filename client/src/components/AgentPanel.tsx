@@ -38,6 +38,26 @@ type TaskSummary = {
   steps: number;
 };
 
+/* ── Structured content-gen form config ── */
+const CHANNELS = ["Instagram", "LinkedIn", "TikTok", "Twitter/X", "Snapchat", "Email"] as const;
+const PRODUCTS = [
+  "Qoyod Main",
+  "QFlavours",
+  "QoyodPOS",
+  "QBookkeeping",
+  "E-Invoice (ZATCA Ph2)",
+  "API Integration",
+] as const;
+const FORMATS: Record<string, string> = {
+  post: "كابشن / منشور",
+  reel: "سكربت ريلز",
+  story: "ستوري",
+  ad: "إعلان مدفوع",
+  email: "إيميل",
+  blog: "مقال",
+};
+const AD_SIZES = ["1:1", "4:5", "9:16", "16:9"] as const;
+
 const QUICK_ACTIONS: { label: string; title: string; body: string }[] = [
   {
     label: "تحليل لاندنج",
@@ -115,6 +135,14 @@ export default function AgentPanel() {
   const [err, setErr] = useState<string>("");
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [persona, setPersona] = useState<string>("");
+  const [composerTab, setComposerTab] = useState<"quick" | "free">("quick");
+  /* Quick-form state */
+  const [qfProduct, setQfProduct] = useState<string>(PRODUCTS[0]);
+  const [qfChannel, setQfChannel] = useState<string>(CHANNELS[0]);
+  const [qfFormat, setQfFormat] = useState<string>("post");
+  const [qfSize, setQfSize] = useState<string>("1:1");
+  const [qfScheme, setQfScheme] = useState<string>("auto");
+  const [qfBrief, setQfBrief] = useState<string>("");
 
   const pollRef = useRef<number | null>(null);
 
@@ -213,6 +241,35 @@ export default function AgentPanel() {
       setActiveId(d.task_id);
       setPrompt("");
       setTitle("");
+      refreshList();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function runQuickForm() {
+    const isDesign = qfFormat === "ad";
+    const schemeNote = isDesign && qfScheme !== "auto" ? ` استخدم color_scheme="${qfScheme}".` : isDesign ? " استخدم color_scheme=auto." : "";
+    const body = isDesign
+      ? `اعمل تصميم إعلان ${qfSize} لمنتج ${qfProduct} على ${qfChannel}.${qfBrief ? ` ملاحظات: ${qfBrief}.` : ""} أنتج حجم ${qfSize} فقط.${schemeNote}`
+      : `اكتب ${FORMATS[qfFormat] ?? qfFormat} لمنتج ${qfProduct} على ${qfChannel} فقط — لا تكتب لقنوات أخرى.${qfBrief ? ` تفاصيل: ${qfBrief}.` : ""}`;
+    const t = isDesign
+      ? `تصميم إعلان ${qfSize} — ${qfProduct} على ${qfChannel}`
+      : `${FORMATS[qfFormat]} — ${qfProduct} على ${qfChannel}`;
+    setSending(true);
+    setErr("");
+    try {
+      const r = await fetch("/api/agent/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: t, body, actor: "ui", persona: persona || undefined }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
+      setActiveId(d.task_id);
+      setQfBrief("");
       refreshList();
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -321,93 +378,153 @@ export default function AgentPanel() {
           {/* ── Composer ── */}
           {!activeId && (
             <div style={{ padding: 14, borderBottom: "1px solid rgba(1,53,90,0.5)" }}>
-              {/* Quick-action chips */}
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 8 }}>
-                {QUICK_ACTIONS.map((qa) => (
+
+              {/* Tab switcher */}
+              <div style={{ display: "flex", gap: 5, marginBottom: 10 }}>
+                {(["quick", "free"] as const).map((tab) => (
                   <button
-                    key={qa.label}
-                    onClick={() => { setTitle(qa.title); setPrompt(qa.body); }}
+                    key={tab}
+                    onClick={() => setComposerTab(tab)}
                     style={{
-                      padding: "3px 8px",
-                      fontSize: 10,
-                      borderRadius: 12,
-                      background: "rgba(23,163,163,0.08)",
-                      border: "1px solid rgba(23,163,163,0.3)",
-                      color: "#9fd3d4",
-                      cursor: "pointer",
-                      fontFamily: "inherit",
+                      flex: 1, padding: "5px 0", fontSize: 11, borderRadius: 6, cursor: "pointer",
+                      fontFamily: "inherit", fontWeight: composerTab === tab ? 700 : 400,
+                      background: composerTab === tab ? "rgba(23,163,163,0.18)" : "transparent",
+                      border: `1px solid ${composerTab === tab ? "rgba(23,163,163,0.5)" : "rgba(1,53,90,0.5)"}`,
+                      color: composerTab === tab ? "#17a3a3" : "#6a96aa",
                     }}
-                    title={qa.body}
                   >
-                    {qa.label}
+                    {tab === "quick" ? "🚀 منشئ سريع" : "✏️ أمر حر"}
                   </button>
                 ))}
               </div>
 
-              {/* Persona selector */}
-              {personas.length > 0 && (
-                <select
-                  value={persona}
-                  onChange={(e) => setPersona(e.target.value)}
-                  style={{ ...inputS, cursor: "pointer" }}
-                  title="حدّد دور سمعه — أو اتركه فارغاً ليختار تلقائياً"
-                >
-                  <option value="">— خلّها تختار أو حدّد دور —</option>
-                  {personas.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.label} · {p.tagline}
-                    </option>
-                  ))}
-                </select>
+              {/* ── Quick Form ── */}
+              {composerTab === "quick" && (
+                <>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 6 }}>
+                    <select value={qfProduct} onChange={(e) => setQfProduct(e.target.value)} style={{ ...inputS, marginBottom: 0 }}>
+                      {PRODUCTS.map((p) => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                    <select value={qfChannel} onChange={(e) => setQfChannel(e.target.value)} style={{ ...inputS, marginBottom: 0 }}>
+                      {CHANNELS.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 8 }}>
+                    {Object.entries(FORMATS).map(([k, v]) => (
+                      <button key={k} onClick={() => setQfFormat(k)} style={{
+                        padding: "3px 9px", fontSize: 10.5, borderRadius: 12, cursor: "pointer",
+                        fontFamily: "inherit", fontWeight: qfFormat === k ? 700 : 400,
+                        background: qfFormat === k ? "rgba(23,163,163,0.2)" : "rgba(23,163,163,0.05)",
+                        border: `1px solid ${qfFormat === k ? "rgba(23,163,163,0.6)" : "rgba(23,163,163,0.2)"}`,
+                        color: qfFormat === k ? "#17a3a3" : "#9fd3d4",
+                      }}>{v}</button>
+                    ))}
+                  </div>
+
+                  {qfFormat === "ad" && (
+                    <>
+                      {/* Size picker */}
+                      <div style={{ display: "flex", gap: 5, marginBottom: 6 }}>
+                        {AD_SIZES.map((s) => (
+                          <button key={s} onClick={() => setQfSize(s)} style={{
+                            flex: 1, padding: "4px 0", fontSize: 11, borderRadius: 6, cursor: "pointer",
+                            fontFamily: "inherit", fontWeight: qfSize === s ? 700 : 400,
+                            background: qfSize === s ? "rgba(245,166,35,0.18)" : "transparent",
+                            border: `1px solid ${qfSize === s ? "rgba(245,166,35,0.5)" : "rgba(1,53,90,0.5)"}`,
+                            color: qfSize === s ? "#f5a623" : "#6a96aa",
+                          }}>{s}</button>
+                        ))}
+                      </div>
+                      {/* Color scheme picker */}
+                      <div style={{ marginBottom: 8 }}>
+                        <div style={{ fontSize: 9.5, color: "#2e5468", marginBottom: 4, fontWeight: 700 }}>اللون</div>
+                        <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                          {[
+                            { id: "auto",     label: "تلقائي", bg: "linear-gradient(135deg,#021544,#17A3A4,#01355A,#F4FBFB)", border: "#17A3A4" },
+                            { id: "navy",     label: "نيفي",   bg: "#021544",  border: "#17A3A4" },
+                            { id: "teal",     label: "تيل",    bg: "#17A3A4",  border: "#021544" },
+                            { id: "ocean",    label: "أوشن",   bg: "#01355A",  border: "#17A3A4" },
+                            { id: "light",    label: "فاتح",   bg: "#F4FBFB",  border: "#17A3A4" },
+                            { id: "midnight", label: "ليلي",   bg: "#050E24",  border: "#17A3A4" },
+                            { id: "slate",    label: "سليت",   bg: "#1A2B4A",  border: "#17A3A4" },
+                          ].map((sc) => (
+                            <button key={sc.id} onClick={() => setQfScheme(sc.id)} title={sc.label} style={{
+                              display: "flex", alignItems: "center", gap: 4,
+                              padding: "3px 7px", borderRadius: 8, cursor: "pointer",
+                              border: `2px solid ${qfScheme === sc.id ? sc.border : "rgba(1,53,90,0.4)"}`,
+                              background: "transparent", fontFamily: "inherit",
+                              outline: qfScheme === sc.id ? `1px solid ${sc.border}` : "none",
+                            }}>
+                              <span style={{
+                                display: "inline-block", width: 14, height: 14, borderRadius: 3,
+                                background: sc.bg, border: "1px solid rgba(255,255,255,0.15)", flexShrink: 0,
+                              }} />
+                              <span style={{ fontSize: 9.5, color: qfScheme === sc.id ? "#ddeef4" : "#6a96aa", fontWeight: qfScheme === sc.id ? 700 : 400 }}>
+                                {sc.label}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  <input
+                    value={qfBrief}
+                    onChange={(e) => setQfBrief(e.target.value)}
+                    placeholder="ملاحظات إضافية (اختياري) — مثال: ركّز على ZATCA Phase 2"
+                    style={inputS}
+                  />
+
+                  {/* Quick-action chips */}
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 8 }}>
+                    {QUICK_ACTIONS.map((qa) => (
+                      <button key={qa.label} onClick={() => { setComposerTab("free"); setTitle(qa.title); setPrompt(qa.body); }}
+                        style={{ padding: "2px 7px", fontSize: 9.5, borderRadius: 10, background: "rgba(23,163,163,0.06)", border: "1px solid rgba(23,163,163,0.2)", color: "#6a96aa", cursor: "pointer", fontFamily: "inherit" }}
+                        title={qa.body}>{qa.label}</button>
+                    ))}
+                  </div>
+                </>
               )}
 
-              <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="عنوان المهمة (اختياري)"
-                style={inputS}
-              />
-              <textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="اكتب تفاصيل المهمة هنا — مثال: اعمل إعلان 1:1 عن فاتورة ZATCA Phase 2 لفليفرز، نسخة لـ Instagram، وانشر صفحة هبوط على WordPress."
-                rows={5}
-                style={{ ...inputS, minHeight: 90, resize: "vertical" }}
-              />
+              {/* ── Free-text form ── */}
+              {composerTab === "free" && (
+                <>
+                  {personas.length > 0 && (
+                    <select value={persona} onChange={(e) => setPersona(e.target.value)} style={{ ...inputS, cursor: "pointer" }}>
+                      <option value="">— خلّها تختار أو حدّد دور —</option>
+                      {personas.map((p) => <option key={p.id} value={p.id}>{p.label} · {p.tagline}</option>)}
+                    </select>
+                  )}
+                  <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="عنوان المهمة (اختياري)" style={inputS} />
+                  <textarea
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    placeholder="اكتب تفاصيل المهمة — مثال: اعمل إعلان 1:1 عن ZATCA Ph2 لـ Instagram فقط."
+                    rows={5}
+                    style={{ ...inputS, minHeight: 90, resize: "vertical" }}
+                  />
+                </>
+              )}
+
               {err && (
-                <div
-                  style={{
-                    padding: "6px 10px",
-                    background: "rgba(240,112,112,0.08)",
-                    border: "1px solid rgba(240,112,112,0.3)",
-                    borderRadius: 6,
-                    color: "#f07070",
-                    fontSize: 11,
-                    marginBottom: 8,
-                  }}
-                >
+                <div style={{ padding: "6px 10px", background: "rgba(240,112,112,0.08)", border: "1px solid rgba(240,112,112,0.3)", borderRadius: 6, color: "#f07070", fontSize: 11, marginBottom: 8 }}>
                   {err}
                 </div>
               )}
+
               <button
-                onClick={runAgent}
-                disabled={sending || !prompt.trim()}
+                onClick={composerTab === "quick" ? runQuickForm : runAgent}
+                disabled={sending || (composerTab === "free" && !prompt.trim())}
                 style={{
-                  width: "100%",
-                  padding: "9px 14px",
-                  borderRadius: 7,
-                  border: "none",
-                  background: sending
-                    ? "rgba(23,163,163,0.3)"
-                    : "linear-gradient(135deg,#17a3a3,#13778d)",
-                  color: "#fff",
-                  fontWeight: 700,
-                  fontSize: 12,
-                  cursor: sending ? "default" : "pointer",
-                  fontFamily: "inherit",
+                  width: "100%", padding: "9px 14px", borderRadius: 7, border: "none",
+                  background: sending ? "rgba(23,163,163,0.3)" : "linear-gradient(135deg,#17a3a3,#13778d)",
+                  color: "#fff", fontWeight: 700, fontSize: 12,
+                  cursor: sending ? "default" : "pointer", fontFamily: "inherit",
                 }}
               >
-                {sending ? "جارٍ التشغيل..." : "شغّل سمعه"}
+                {sending ? "جارٍ التشغيل..." : "شغّل سمعه ▶"}
               </button>
             </div>
           )}
