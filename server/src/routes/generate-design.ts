@@ -27,6 +27,7 @@ import {
 import {
   QOYOD_BRAND_PLAYBOOK,
   QOYOD_CREATIVE_RULES,
+  QOYOD_HEADLINE_PATTERNS,
 } from "../lib/brand-context.js";
 import { logger } from "../lib/logger.js";
 
@@ -121,6 +122,8 @@ async function generateDesignBundle(
 ${QOYOD_BRAND_PLAYBOOK}
 
 ${QOYOD_CREATIVE_RULES}
+
+${QOYOD_HEADLINE_PATTERNS}
 
 EXAMPLES OF GOOD SCENE PROMPTS
 
