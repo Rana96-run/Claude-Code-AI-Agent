@@ -24,11 +24,16 @@ let FONTS: FontEntry[] | null = null;
 let fontLoadPromise: Promise<FontEntry[]> | null = null;
 
 /**
- * Fetch IBM Plex Sans Arabic TTF directly from jsdelivr CDN.
- * Satori only accepts TTF/OTF/WOFF — not WOFF2 (which is what Google Fonts
- * serves regardless of User-Agent now).
+ * Try Lama Sans first (Qoyod's brand font, via fontsource on jsdelivr),
+ * fall back to IBM Plex Sans Arabic. Satori only accepts TTF/OTF/WOFF.
  */
-const FONT_URLS: Record<400 | 600 | 700, string> = {
+const LAMA_SANS_URLS: Record<400 | 600 | 700, string> = {
+  400: "https://cdn.jsdelivr.net/npm/@fontsource/lama-sans@5/files/lama-sans-arabic-400-normal.woff",
+  600: "https://cdn.jsdelivr.net/npm/@fontsource/lama-sans@5/files/lama-sans-arabic-600-normal.woff",
+  700: "https://cdn.jsdelivr.net/npm/@fontsource/lama-sans@5/files/lama-sans-arabic-700-normal.woff",
+};
+
+const IBM_PLEX_URLS: Record<400 | 600 | 700, string> = {
   400: "https://cdn.jsdelivr.net/gh/IBM/plex@master/packages/plex-sans-arabic/fonts/complete/ttf/IBMPlexSansArabic-Regular.ttf",
   600: "https://cdn.jsdelivr.net/gh/IBM/plex@master/packages/plex-sans-arabic/fonts/complete/ttf/IBMPlexSansArabic-SemiBold.ttf",
   700: "https://cdn.jsdelivr.net/gh/IBM/plex@master/packages/plex-sans-arabic/fonts/complete/ttf/IBMPlexSansArabic-Bold.ttf",
@@ -46,27 +51,55 @@ async function fetchTtf(url: string): Promise<ArrayBuffer> {
   }
 }
 
+async function tryLoadFamily(
+  name: string,
+  urls: Record<400 | 600 | 700, string>,
+): Promise<FontEntry[] | null> {
+  try {
+    const weights: Array<400 | 600 | 700> = [400, 600, 700];
+    const buffers = await Promise.all(weights.map((w) => fetchTtf(urls[w])));
+    return weights.map((weight, i) => ({
+      name,
+      data: buffers[i],
+      weight,
+      style: "normal" as const,
+    }));
+  } catch (e) {
+    logger.warn({ family: name, err: String(e) }, "design-renderer: family load failed");
+    return null;
+  }
+}
+
 async function loadFonts(): Promise<FontEntry[]> {
   if (FONTS) return FONTS;
   if (fontLoadPromise) return fontLoadPromise;
 
   fontLoadPromise = (async () => {
-    logger.info("design-renderer: loading fonts");
-    const family = "IBM Plex Sans Arabic";
-    const weights: Array<400 | 600 | 700> = [400, 600, 700];
-    const buffers = await Promise.all(weights.map((w) => fetchTtf(FONT_URLS[w])));
-    const entries: FontEntry[] = weights.map((weight, i) => ({
-      name: family,
-      data: buffers[i],
-      weight,
-      style: "normal" as const,
-    }));
+    logger.info("design-renderer: loading fonts (Lama Sans → IBM Plex)");
+    /* Try Qoyod's brand font first, fall back to IBM Plex Sans Arabic */
+    let entries = await tryLoadFamily("Lama Sans", LAMA_SANS_URLS);
+    let family = "Lama Sans";
+    if (!entries) {
+      entries = await tryLoadFamily("IBM Plex Sans Arabic", IBM_PLEX_URLS);
+      family = "IBM Plex Sans Arabic";
+    }
+    if (!entries) {
+      throw new Error("Could not load any Arabic font (Lama Sans or IBM Plex)");
+    }
     FONTS = entries;
-    logger.info({ count: entries.length, total_kb: Math.round(entries.reduce((s, e) => s + e.data.byteLength, 0) / 1024) }, "design-renderer: fonts loaded");
+    logger.info(
+      { family, count: entries.length, total_kb: Math.round(entries.reduce((s, e) => s + e.data.byteLength, 0) / 1024) },
+      "design-renderer: fonts loaded",
+    );
     return entries;
   })();
 
   return fontLoadPromise;
+}
+
+/** Public — exposes the active font family name for prompts / debugging. */
+export function activeFontFamily(): string {
+  return FONTS?.[0]?.name ?? "IBM Plex Sans Arabic";
 }
 
 /* ── Color schemes (kept compatible with old route) ────────────── */
@@ -168,9 +201,16 @@ export interface AdCopy {
 /* ── Template (VDOM tree, Satori-compatible) ───────────────────── */
 
 /**
- * Layout strategy:
- *   1:1, 4:5, 9:16  → image top, copy bottom (vertical split)
- *   16:9            → image left, copy right (horizontal split)
+ * Hybrid layout — AI image fills the entire canvas as a full-bleed background;
+ * Arabic text + brand mark + CTA composited on top with a smart gradient
+ * overlay for legibility. This matches how production designers work in
+ * Photoshop / Canva: the AI paints the scene, the typography is added
+ * with the correct font (Lama Sans / IBM Plex) so Arabic is always crisp.
+ *
+ * Layout per ratio:
+ *   1:1, 4:5    — text overlaid right side (RTL natural), vertical gradient
+ *   9:16        — text overlaid bottom-third, fade up
+ *   16:9        — text overlaid right side, fade left-to-right
  */
 function buildVdom(
   copy: AdCopy,
@@ -180,17 +220,18 @@ function buildVdom(
   width: number,
   height: number,
 ) {
-  const horizontal = ratio === "16:9";
-
-  const imageBlock = heroImageDataUrl
+  /* Full-bleed background — AI image OR a brand-color gradient if image gen
+     failed. Either way, fills the entire canvas. */
+  const background = heroImageDataUrl
     ? {
         type: "div",
         props: {
           style: {
             display: "flex",
-            position: "relative",
-            width: horizontal ? "50%" : "100%",
-            height: horizontal ? "100%" : "55%",
+            position: "absolute",
+            top: 0, left: 0,
+            width: "100%",
+            height: "100%",
             backgroundColor: scheme.bg,
           },
           children: [
@@ -205,22 +246,6 @@ function buildVdom(
                 },
               },
             },
-            // Soft fade overlay where copy meets image
-            {
-              type: "div",
-              props: {
-                style: {
-                  position: "absolute",
-                  display: "flex",
-                  ...(horizontal
-                    ? { right: 0, top: 0, width: "30%", height: "100%" }
-                    : { bottom: 0, left: 0, width: "100%", height: "30%" }),
-                  backgroundImage: horizontal
-                    ? `linear-gradient(to right, transparent, ${scheme.bg})`
-                    : `linear-gradient(to bottom, transparent, ${scheme.bg})`,
-                },
-              },
-            },
           ],
         },
       }
@@ -229,85 +254,140 @@ function buildVdom(
         props: {
           style: {
             display: "flex",
-            width: horizontal ? "50%" : "100%",
-            height: horizontal ? "100%" : "55%",
+            position: "absolute",
+            top: 0, left: 0,
+            width: "100%",
+            height: "100%",
             background: `linear-gradient(135deg, ${scheme.bg}, ${scheme.bg2})`,
           },
           children: [],
         },
       };
 
-  /* Satori does not do bidi reordering — Arabic words render in stored
-     (logical) order which looks reversed visually. Workaround: reverse the
-     space-separated tokens so the visual reading order is correct.
-     Joiners / RTL-marks within a single word are preserved. */
-  const rtl = (s: string): string =>
-    (s || "")
-      .split(/(\s+)/)
-      .filter((t) => t.length > 0)
-      .reverse()
-      .join("");
-
-  // Tighter headline sizes — the previous values overflowed and clipped CTA
-  const headlineSize =
-    ratio === "9:16" ? 92 : ratio === "16:9" ? 76 : 84;
-  const hookSize = ratio === "9:16" ? 38 : ratio === "16:9" ? 32 : 34;
-  const ctaSize = ratio === "9:16" ? 38 : 36;
-  const trustSize = ratio === "9:16" ? 24 : 22;
-
-  // Brand mark sits in the corner of the copy block
-  const brandBlock = {
+  /* Smart gradient overlay for legibility — ratio-aware so text always
+     reads cleanly over any AI background. */
+  const isPortrait = ratio === "9:16" || ratio === "4:5";
+  const isWide = ratio === "16:9";
+  const gradientOverlay = {
     type: "div",
     props: {
       style: {
         display: "flex",
-        flexDirection: "column",
-        alignItems: "flex-end",
-        marginBottom: 18,
+        position: "absolute",
+        top: 0, left: 0,
+        width: "100%",
+        height: "100%",
+        backgroundImage: isWide
+          ? `linear-gradient(to left, ${scheme.bg}EE 0%, ${scheme.bg}AA 35%, transparent 65%)`
+          : isPortrait
+          ? `linear-gradient(to top, ${scheme.bg}F2 0%, ${scheme.bg}CC 30%, ${scheme.bg}55 50%, transparent 80%)`
+          : `linear-gradient(135deg, transparent 30%, ${scheme.bg}77 55%, ${scheme.bg}EE 100%)`,
       },
-      children: [
-        {
-          type: "div",
-          props: {
-            style: {
-              fontSize: width > 1200 ? 56 : 48,
-              fontWeight: 800,
-              color: scheme.accent,
-              lineHeight: 1,
-            },
-            children: rtl("قيود"),
-          },
-        },
-        {
-          type: "div",
-          props: {
-            style: {
-              fontSize: 18,
-              color: scheme.body,
-              opacity: 0.75,
-              marginTop: 4,
-            },
-            children: rtl(copy.tagline || "محاسبة سحابية"),
-          },
-        },
-      ],
+      children: [],
     },
   };
 
-  const copyBlock = {
+  /* Satori has no bidi reordering — reverse space-separated tokens so the
+     visual order matches RTL reading. */
+  const rtl = (s: string): string =>
+    (s || "").split(/(\s+)/).filter((t) => t.length > 0).reverse().join("");
+
+  /* Sizes scaled to ratio. We keep them generous for premium feel. */
+  const headlineSize =
+    ratio === "9:16" ? 96 : ratio === "16:9" ? 78 : 88;
+  const hookSize = ratio === "9:16" ? 40 : ratio === "16:9" ? 32 : 36;
+  const ctaSize = ratio === "9:16" ? 40 : 36;
+  const trustSize = ratio === "9:16" ? 26 : 22;
+  const brandSize = ratio === "9:16" ? 64 : ratio === "16:9" ? 52 : 56;
+
+  /* Container positioning per ratio — text sits in the gradient zone where
+     legibility is highest. */
+  const textContainerStyle =
+    ratio === "16:9"
+      ? {
+          // wide — text on the right half
+          position: "absolute",
+          top: 0,
+          right: 0,
+          width: "55%",
+          height: "100%",
+          padding: "60px 70px",
+          alignItems: "flex-end",
+          justifyContent: "center",
+        }
+      : ratio === "9:16" || ratio === "4:5"
+      ? {
+          // portrait — text in the bottom 55%
+          position: "absolute",
+          bottom: 0,
+          left: 0,
+          width: "100%",
+          height: "55%",
+          padding: ratio === "9:16" ? "60px 70px 80px" : "50px 60px 70px",
+          alignItems: "flex-end",
+          justifyContent: "flex-end",
+        }
+      : {
+          // square — text on the right half
+          position: "absolute",
+          top: 0,
+          right: 0,
+          width: "55%",
+          height: "100%",
+          padding: "55px 60px",
+          alignItems: "flex-end",
+          justifyContent: "center",
+        };
+
+  const textOverlay = {
     type: "div",
     props: {
       style: {
         display: "flex",
         flexDirection: "column",
-        alignItems: "flex-end",
-        justifyContent: "center",
-        padding: width > 1200 ? "50px 70px" : "40px 50px",
-        flex: 1,
         textAlign: "right",
+        ...textContainerStyle,
       },
       children: [
-        brandBlock,
+        // Brand mark "قيود" + tagline (top of text block)
+        {
+          type: "div",
+          props: {
+            style: {
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "flex-end",
+              marginBottom: 18,
+            },
+            children: [
+              {
+                type: "div",
+                props: {
+                  style: {
+                    fontSize: brandSize,
+                    fontWeight: 700,
+                    color: scheme.accent,
+                    lineHeight: 1,
+                  },
+                  children: rtl("قيود"),
+                },
+              },
+              {
+                type: "div",
+                props: {
+                  style: {
+                    fontSize: 18,
+                    color: scheme.body,
+                    opacity: 0.85,
+                    marginTop: 6,
+                  },
+                  children: rtl(copy.tagline || "محاسبة سحابية"),
+                },
+              },
+            ],
+          },
+        },
+        // Headline
         {
           type: "div",
           props: {
@@ -319,10 +399,12 @@ function buildVdom(
               lineHeight: 1.15,
               marginBottom: 16,
               textAlign: "right",
+              textShadow: `0 2px 24px ${scheme.bg}AA`,
             },
             children: rtl(copy.headline),
           },
         },
+        // Hook
         {
           type: "div",
           props: {
@@ -332,12 +414,13 @@ function buildVdom(
               fontWeight: 400,
               color: scheme.body,
               lineHeight: 1.4,
-              marginBottom: 28,
+              marginBottom: 26,
               textAlign: "right",
             },
             children: rtl(copy.hook),
           },
         },
+        // Trust badge (single — per ads guideline)
         {
           type: "div",
           props: {
@@ -354,6 +437,7 @@ function buildVdom(
             children: rtl(copy.trust),
           },
         },
+        // CTA (single — per ads guideline)
         {
           type: "div",
           props: {
@@ -373,18 +457,37 @@ function buildVdom(
     },
   };
 
+  /* Website link footer — qoyod.com always present in the bottom-left
+     corner, subtle so it doesn't compete with the CTA. */
+  const websiteFooter = {
+    type: "div",
+    props: {
+      style: {
+        display: "flex",
+        position: "absolute",
+        bottom: 28,
+        left: 36,
+        fontSize: 18,
+        color: scheme.body,
+        opacity: 0.7,
+        letterSpacing: 1,
+      },
+      children: "qoyod.com",
+    },
+  };
+
   return {
     type: "div",
     props: {
       style: {
         display: "flex",
-        flexDirection: horizontal ? "row" : "column",
+        position: "relative",
         width: "100%",
         height: "100%",
         backgroundColor: scheme.bg,
-        fontFamily: "IBM Plex Sans Arabic",
+        fontFamily: activeFontFamily(),
       },
-      children: [imageBlock, copyBlock],
+      children: [background, gradientOverlay, textOverlay, websiteFooter],
     },
   };
 }
