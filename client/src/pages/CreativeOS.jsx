@@ -976,7 +976,7 @@ export default function CreativeOS(){
       const r=await fetch(`${CANVA_BASE}/auth-url`);
       const d=await r.json();
       if(!d.auth_url)throw new Error("Failed to get auth URL");
-      const popup=window.open(d.auth_url,"canva_auth","width=520,height=680,noopener");
+      const popup=window.open(d.auth_url,"canva_auth","width=520,height=680,popup");
       const handler=(e)=>{
         if(e.data?.type==="canva_auth_success"){window.removeEventListener("message",handler);popup?.close();setCanvaConn(true);setCanvaMsg({ok:T("تم ربط Canva بنجاح ✓","Canva connected ✓")});}
         else if(e.data?.type==="canva_auth_error"){window.removeEventListener("message",handler);popup?.close();setCanvaMsg({err:e.data.error||"Auth failed"});}
