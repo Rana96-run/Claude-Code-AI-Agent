@@ -1,21 +1,15 @@
 /**
- * /api/generate-design — direct AI image generation pipeline
+ * /api/generate-design — direct AI image generation, brand-faithful pipeline
  *
- * Architecture (matches the user's actual workflow shown in Miro):
- *   1. Claude writes a SINGLE comprehensive English image prompt that
- *      describes the COMPLETE final design — composition, lighting, lens,
- *      lighting/mood, all Arabic copy embedded with exact rendering,
- *      brand colors as hex, typography character.
- *   2. Send that prompt to Nano Banana (Gemini 2.5 Flash Image) or
- *      GPT-Image-1. The output IS the final design.
- *   3. (Optional) Satori fallback ONLY if the AI image gen fails entirely.
- *
- * This is NOT HTML/CSS composition. The AI model produces the complete ad
- * with text + branding + layout baked in. User can then download as PNG/JPG
- * or open in Canva to refine.
- *
- * Returns { png, content, scheme, provider, image_prompt, width, height,
- *           rendered_via: 'ai' | 'satori-fallback' }
+ * Architecture (matches the user's Miro workflow + Qoyod Playbook):
+ *   1. Claude (loaded with the full Qoyod Playbook + Ads Guideline) writes
+ *      ONE photographer-level English image prompt that describes the COMPLETE
+ *      final ad — composition, lens, lighting, exact Arabic copy embedded
+ *      as text-in-image, hex brand colors, trust badge styling, CTA styling.
+ *   2. That prompt is passed to GPT-Image-1 (default — best Arabic text
+ *      rendering) or Nano Banana. The model output IS the final ad.
+ *   3. Satori-based composition is kept ONLY as a last-resort fallback
+ *      when both image providers fail.
  */
 
 import { Router } from "express";
@@ -26,6 +20,11 @@ import {
   RATIO_DIMS,
   type AdCopy,
 } from "../lib/design-renderer.js";
+import {
+  QOYOD_BRAND_PLAYBOOK,
+  QOYOD_CREATIVE_RULES,
+  QOYOD_REFERENCE_PROMPT_EXAMPLE,
+} from "../lib/brand-context.js";
 import { logger } from "../lib/logger.js";
 
 const router = Router();
@@ -34,7 +33,7 @@ const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 
 const ANGLES = [
   "direct/benefit-driven — emphasise the outcome the user gets",
-  "fear/loss — what they avoid by using Qoyod (penalties, manual work, errors)",
+  "fear/loss — what they avoid (penalties, manual work, errors)",
   "time/speed — speed and ease, minutes not hours",
   "social proof — joining 25,000+ Saudi businesses",
   "control/clarity — peace of mind, full visibility",
@@ -46,12 +45,21 @@ interface DesignBundle {
   image_prompt: string;
 }
 
-/* Step 1 — Claude writes BOTH the Arabic copy (for fallback / library) AND
-   a comprehensive image prompt that describes the complete final ad.
+/* Balanced-brace JSON extractor — robust to commentary before/after */
+function extractJsonObject(text: string): string | null {
+  let depth = 0, start = -1, inStr = false, esc = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (esc) { esc = false; continue; }
+    if (c === "\\") { esc = true; continue; }
+    if (c === '"') { inStr = !inStr; continue; }
+    if (inStr) continue;
+    if (c === "{") { if (depth === 0) start = i; depth++; }
+    else if (c === "}") { depth--; if (depth === 0 && start !== -1) return text.slice(start, i + 1); }
+  }
+  return null;
+}
 
-   The image prompt is the critical asset. It must be ~200-400 words,
-   photographer-level detailed, embedding the exact Arabic copy that should
-   be rendered IN the image, brand colors as hex, lighting, lens, mood. */
 async function generateDesignBundle(
   product: string,
   message: string,
@@ -68,46 +76,66 @@ async function generateDesignBundle(
   const angle = ANGLES[(variant - 1) % ANGLES.length];
 
   const ctrl = new AbortController();
-  const timeout = setTimeout(() => ctrl.abort(), 30_000);
+  const timeout = setTimeout(() => ctrl.abort(), 35_000);
 
-  const sys =
-    `You are a senior art director who writes complete, photographer-level prompts for AI image generators (Nano Banana / GPT-Image-1). You produce the final design in ONE prompt — composition, lighting, camera lens, mood, brand integration, typography rendering, ALL embedded.
+  /* Full system prompt — playbook + rules + reference example */
+  const sys = `You are the Qoyod AI Graphic Designer. You write a single photographer-level English prompt that an AI image model (GPT-Image-1 / Nano Banana) will render as the COMPLETE final social media ad — text + branding + composition baked in.
 
-Brand: Qoyod (قيود) — Saudi cloud accounting SaaS, ZATCA-certified.
-Brand colors: deep navy #021544 (primary), accent cyan/turquoise #17A3A4, brighter cyan #1FCACB for CTAs.
-Brand voice: confident, Saudi-professional, Fazaa, modern.
-Saudi dialect ONLY for Arabic (مو / وش / ليش — NEVER Egyptian).
+${QOYOD_BRAND_PLAYBOOK}
 
-Your output is JSON. The 'image_prompt' field is the single most important deliverable — it is sent verbatim to the image model. It must be 200-400 words of dense, evocative, technical art direction. Treat the image prompt like a brief to a photographer + designer hybrid. Specify: shot type, lens, lighting, composition, palette as hex, typography character (e.g. "bold modern Arabic sans-serif, crisp"), exact text content that must appear in the image, mood, photographic style or illustration style.
+${QOYOD_CREATIVE_RULES}
 
-NO emojis anywhere.`;
+${QOYOD_REFERENCE_PROMPT_EXAMPLE}
 
-  const usr = `Create a complete social-media ad design for ${product}.
+OUTPUT CONTRACT
+You always return a single JSON object with two top-level keys: "copy" (the structured Arabic copy that appears in the image) and "image_prompt" (the rendering instructions for the AI image model).
+
+The 'copy' fields:
+- headline: 5–7 Arabic words MAX. MSA Arabic for ad copy. Direct, calm, confident.
+- hook: 6–10 Arabic words supporting line. Optional secondary message.
+- cta: 2–3 Arabic words. ONE CTA: 'اشترك الآن' / 'احجز ديمو' / 'ابدأ تجربتك' / 'اطلب عرض'.
+- trust: max 4 Arabic words. ONE trust element ONLY: 'ZATCA-معتمد' / 'هيئة الزكاة والضريبة' / '+25,000 شركة' / 'SOCPA' / similar.
+- tagline: 2–3 Arabic words under the brand mark (e.g. 'محاسبة سحابية', 'محاسبة معتمدة').
+
+The 'image_prompt' is THE deliverable. It MUST:
+- Be 250–500 words of dense, photographer-level English.
+- Open with shot type + lens (e.g. 'Extreme close-up macro photo, Canon 100mm lens', 'Editorial product still-life, 50mm', 'Cinematic flat illustration, isometric overhead', 'Editorial portrait of Saudi business owner, 85mm, natural light').
+- Specify composition for ${ratio} aspect ratio.
+- Specify lighting: cinematic rim light, color temp, mood (e.g. 'dramatic side rim light in cyan #1FCACB, navy ambient fill, soft volumetric haze').
+- Brand integration: the Qoyod brand mark "قيود" rendered subtly in cyan #17A3A4 in the lower-right corner. Tagline below it in muted body text.
+- Render the EXACT Arabic copy from the 'copy' object as text-in-image. Quote each phrase verbatim. After each phrase add: 'every Arabic letter razor sharp, crisp modern Arabic sans-serif, bold weight, white #FFFFFF on the navy background, perfectly legible'.
+- Trust element: rendered as a single pill badge with the trust text. ONE only.
+- CTA: rendered as a single rounded button with cyan #1FCACB fill, navy #021544 text, with the CTA text. ONE only.
+- Mood/style: cinematic, photorealistic, 8K. OR for non-photo: editorial flat-design illustration, no 3D, clean lines.
+- NEVER include: stock-photo aesthetic, multiple trust badges, more than one CTA, watermarks, emojis, Egyptian Arabic, gradients/colors outside the brand palette, 3D heavy renders, drop shadows.
+- Mention the visual subject — real Saudi product UI screenshot, real Saudi business owner photo (modest professional dress), or clean editorial composition. NO stock photo people.
+
+This is a Saudi B2B SaaS ad. Calm, trust-building, professional. Match the macro reference example's level of technical detail. NO emojis anywhere.`;
+
+  const usr = `Build a complete social-media ad for ${product}.
 
 Inputs:
-- Main message: "${message}"
-- Concept (this variant): "${concept}"
-- Art direction hint: "${artDirection}"
-- Variant angle to lean into: ${angle}
-- Hook hint: "${hook}"
-- CTA hint: "${cta}"
-- Trust element: "${trust}"
+- Main Arabic message: "${message}"
+- Concept (this variant): "${concept || "use your judgement"}"
+- Art direction hint: "${artDirection || "editorial photoreal or flat brand illustration"}"
+- Variant angle: ${angle}
+- Hook hint: "${hook || "(your call — pick a Saudi SME pain point)"}"
+- CTA hint: "${cta || "اشترك الآن"}"
+- Trust hint: "${trust || "ZATCA-معتمد"}"
 - Aspect ratio: ${ratio}
 - Color scheme: ${scheme.name} (bg ${scheme.bg}, accent ${scheme.accent}, cta ${scheme.cta_fill})
 
-Return JSON:
+Return JSON ONLY (no markdown, no commentary):
 {
   "copy": {
-    "headline": "2-4 Arabic words, hero headline",
-    "hook": "6-10 Arabic words, supporting line",
-    "cta": "2-3 Arabic words for the CTA button",
-    "trust": "max 4 Arabic words for the trust badge",
-    "tagline": "2-3 Arabic words under the brand mark"
+    "headline": "5–7 Arabic words, hero headline",
+    "hook": "6–10 Arabic words, supporting line",
+    "cta": "2–3 Arabic words, button label",
+    "trust": "max 4 Arabic words, ONE trust element",
+    "tagline": "2–3 Arabic words under brand mark"
   },
-  "image_prompt": "Single comprehensive English prompt, 200-400 words, that the AI image model will render directly into the FINAL ad. MUST include: 1) Shot type and lens (e.g. 'extreme close-up macro photo, 100mm lens', 'editorial product still-life, 50mm', 'flat illustrated composition', '3D isometric render'). 2) Composition (where things sit in the frame for ${ratio}). 3) Lighting (e.g. 'cinematic rim light from upper-left, navy fill, cyan accent reflections'). 4) Brand integration: place the Qoyod brand mark 'قيود' top-right area, render in cyan #17A3A4 over navy #021544 background. 5) Exact Arabic text that must appear AS RENDERED TEXT IN THE IMAGE — copy verbatim from the 'copy' object above (headline, hook, trust badge, CTA). Each Arabic phrase should be specified with its exact characters and described as 'crisp Arabic sans-serif, bold weight, white #FFFFFF on navy #021544' or similar. 6) Mood and style descriptors (cinematic, photoreal, 8K, premium financial). 7) Trust element rendered as a pill badge with the trust text. 8) CTA rendered as a rounded button with the CTA text on cyan #1FCACB fill. 9) DO NOT add emojis, watermarks, stock-photo logos, or other Arabic text not specified above. 10) The aspect should fit ${ratio} naturally."
-}
-
-The 'image_prompt' is THE deliverable — write it as if you are paying a top-tier image AI to render the final ad in one shot.`;
+  "image_prompt": "Single 250-500 word English prompt as specified in the system message — this is the EXACT prompt that will be sent to the AI image model. Include all elements: shot type, lens, composition, lighting, hex colors, exact Arabic copy verbatim with rendering instructions, trust badge styling, CTA button styling, brand mark, mood. Make it photographer-level detailed."
+}`;
 
   try {
     const r = await fetch(ANTHROPIC_URL, {
@@ -120,7 +148,7 @@ The 'image_prompt' is THE deliverable — write it as if you are paying a top-ti
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 1500,
+        max_tokens: 2200,
         temperature: 0.85,
         system: sys,
         messages: [{ role: "user", content: usr }],
@@ -133,32 +161,24 @@ The 'image_prompt' is THE deliverable — write it as if you are paying a top-ti
     const text = parsed.content?.[0]?.text ?? "";
     const clean = text.replace(/```json\n?|\n?```/g, "").trim();
 
-    // Balanced-brace extractor (Claude sometimes adds prose after the JSON)
-    let depth = 0, start = -1, inStr = false, esc = false, jsonStr = "";
-    for (let i = 0; i < clean.length; i++) {
-      const c = clean[i];
-      if (esc) { esc = false; continue; }
-      if (c === "\\") { esc = true; continue; }
-      if (c === '"') { inStr = !inStr; continue; }
-      if (inStr) continue;
-      if (c === "{") { if (depth === 0) start = i; depth++; }
-      else if (c === "}") { depth--; if (depth === 0 && start !== -1) { jsonStr = clean.slice(start, i + 1); break; } }
+    const block = extractJsonObject(clean);
+    if (block) {
+      try {
+        return JSON.parse(block) as DesignBundle;
+      } catch { /* fall through to fallback */ }
     }
 
-    try {
-      return JSON.parse(jsonStr) as DesignBundle;
-    } catch {
-      return {
-        copy: {
-          headline: message || "أدِر أعمالك بذكاء",
-          hook: hook || "فاتورة إلكترونية متوافقة مع زاتكا",
-          cta: cta || "ابدأ مجاناً",
-          trust: trust || "زاتكا المرحلة الثانية",
-          tagline: "محاسبة سحابية",
-        },
-        image_prompt: `A premium social media ad for Qoyod (Saudi cloud accounting, ZATCA-certified). ${concept || message}. ${ratio} aspect ratio. Cinematic lighting on deep navy #021544 background with cyan #17A3A4 accents. Render Arabic headline "${message || "أدِر أعمالك بذكاء"}" in bold modern sans-serif white text top-right. Brand mark "قيود" in cyan top-right corner. Cyan #1FCACB rounded CTA button with text "${cta || "ابدأ مجاناً"}" lower-center. Trust badge "${trust || "زاتكا المرحلة الثانية"}" as pill above the CTA. Premium photoreal style, 8K, no watermarks, no extra text.`,
-      };
-    }
+    // graceful fallback
+    return {
+      copy: {
+        headline: message || "أدر أعمالك بثقة",
+        hook: hook || "محاسبة معتمدة من ZATCA",
+        cta: cta || "ابدأ تجربتك",
+        trust: trust || "ZATCA-معتمد",
+        tagline: "محاسبة سحابية",
+      },
+      image_prompt: `Editorial close-up of a Saudi product UI screenshot for Qoyod cloud accounting. ${ratio} aspect ratio. Deep navy #021544 background with cyan #17A3A4 accent rim light, dramatic side lighting. Render Arabic headline "${message || "أدر أعمالك بثقة"}" in bold modern Arabic sans-serif, white #FFFFFF, perfectly legible, every letter razor sharp. Trust badge pill with "${trust || "ZATCA-معتمد"}" in cyan fill. Cyan #1FCACB rounded CTA button with text "${cta || "ابدأ تجربتك"}" in navy. Brand mark "قيود" lower-right in cyan. Cinematic photorealistic 8K. No stock, no 3D, no extra text.`,
+    };
   } finally {
     clearTimeout(timeout);
   }
@@ -177,8 +197,8 @@ router.post("/generate-design", async (req, res) => {
     product = "Qoyod Main",
     message = "",
     hook = "",
-    cta = "ابدأ مجاناً",
-    trust = "زاتكا المرحلة الثانية",
+    cta = "",
+    trust = "",
     ratio = "1:1",
     concept = "",
     art_direction = "",
@@ -191,13 +211,12 @@ router.post("/generate-design", async (req, res) => {
   const scheme = resolveScheme(color_scheme);
 
   try {
-    /* 1. Claude writes copy + comprehensive image prompt */
     const { copy, image_prompt } = await generateDesignBundle(
       product, message, hook, cta, trust, concept, art_direction,
       ratio, Number(variant) || 1, scheme, apiKey,
     );
 
-    /* 2. AI image generation — this IS the final design */
+    /* AI image generation — this IS the final ad */
     const ai = await generateHeroImage(image_prompt, image_provider as ImageProvider, ratio);
 
     if (ai) {
@@ -214,8 +233,7 @@ router.post("/generate-design", async (req, res) => {
       return;
     }
 
-    /* 3. AI image gen failed — fall back to Satori composition so the user
-       still sees something. Logged so we know when this happens. */
+    /* Last-resort Satori fallback when both AI providers fail */
     logger.warn(
       { image_provider, product },
       "[generate-design] AI image gen failed, falling back to Satori",
