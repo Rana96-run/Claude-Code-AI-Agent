@@ -324,7 +324,7 @@ function renderSVG(
 
   /* ── 1:1  (1080 × 1080) ─ Instagram Square ──────────────────── */
   if (ratio === "1:1") {
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="100%" height="auto">
   <!-- Background -->
   <rect width="${w}" height="${h}" fill="${BG}"/>
   <!-- Decorative arcs -->
@@ -355,7 +355,7 @@ function renderSVG(
 
   /* ── 4:5  (1080 × 1350) ─ Instagram Portrait ─────────────────── */
   if (ratio === "4:5") {
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="100%" height="auto">
   <rect width="${w}" height="${h}" fill="${BG}"/>
   <!-- Decorative arcs -->
   <circle cx="${w}" cy="0" r="600" fill="${G}" opacity="0.10"/>
@@ -385,7 +385,7 @@ function renderSVG(
 
   /* ── 9:16  (1080 × 1920) ─ Stories / Reels ──────────────────── */
   if (ratio === "9:16") {
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="100%" height="auto">
   <rect width="${w}" height="${h}" fill="${BG}"/>
   <circle cx="${w}" cy="0" r="700" fill="${G}" opacity="0.09"/>
   <circle cx="${w}" cy="0" r="440" fill="${G}" opacity="0.07"/>
@@ -416,7 +416,7 @@ function renderSVG(
   if (ratio === "16:9") {
     const rEdge = w - 90;
     const rCX   = w * 0.73;
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="100%" height="auto">
   <rect width="${w}" height="${h}" fill="${BG}"/>
   <!-- Left illustration circles -->
   <circle cx="${w * 0.25}" cy="${h / 2}" r="${h * 0.62}" fill="${G}" opacity="0.09"/>

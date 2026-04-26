@@ -1909,11 +1909,11 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
                         <div style={{padding:12}}>
                           {svg?(
                             <div style={{marginBottom:10}}>
-                              <div style={{borderRadius:8,overflow:"hidden",border:"1px solid rgba(23,163,164,.25)",marginBottom:8,background:"#021544",display:"flex",alignItems:"center",justifyContent:"center",minHeight:200}}>
+                              <div style={{borderRadius:8,overflow:"hidden",border:"1px solid rgba(23,163,164,.25)",marginBottom:8,background:"#021544",width:"100%"}}>
                                 <img
                                   src={`data:image/svg+xml;utf8,${encodeURIComponent(svg)}`}
                                   alt={`Variant ${num} preview`}
-                                  style={{maxWidth:"100%",maxHeight:"60vh",width:"auto",height:"auto",display:"block",objectFit:"contain"}}
+                                  style={{width:"100%",height:"auto",display:"block"}}
                                 />
                               </div>
                               <div style={{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap"}}>
