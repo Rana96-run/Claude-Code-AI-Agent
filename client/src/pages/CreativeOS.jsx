@@ -778,15 +778,40 @@ export default function CreativeOS(){
   },[]);
 
   const genContent=useCallback(async()=>{
-    const px=PRODUCTS.find(p=>p.v===prod)||PRODUCTS[0];
     const ff=FEATURES.find(f=>f.v===featFocus);
     const fctx=ff?(lang==="en"?ff.desc_en:ff.desc_ar):"";
     const{names:prodNames,desc:prodDesc}=buildProdCtx(prod,prodExtras,lang);
     const ol=lang==="en"?"Write ALL copy in English. Professional, concise.":"Write ALL copy in Saudi dialect ONLY (مو/وش/ليش/يكلفك). NEVER Egyptian (مش/ايه/بتاعك).";
-    const sys=`Senior performance copywriter for Qoyod — Saudi cloud accounting SaaS, ZATCA-accredited.\n${ol}\n${QOYOD_VOICE}\nProduct: ${prodDesc}\n${fctx?"Feature: "+fctx:""}\nRule: ONE clear message, zero hype.\nReturn ONLY valid JSON (no markdown):\n{"ad_copy":{"hook":"strong 1-2 line opening","body":"2-3 lines body text","cta":"button label"},"google_headlines":["≤30 chars","≤30 chars","≤30 chars"],"google_descriptions":["≤90 chars desc 1","≤90 chars desc 2"],"captions":{"instagram":"ready-to-post caption with 4-5 hashtags","linkedin":"professional caption no hashtags"}}`;
+    // Build channel-specific output spec
+    let chanSpec="";
+    let outFmt="";
+    if(chan==="Google Ads"){
+      chanSpec="Google Search RSA. All headlines and descriptions in English. STRICT: each headline ≤30 chars (count carefully). Each description ≤90 chars. Write exactly 15 headlines and 4 descriptions.";
+      outFmt=`{"ad_copy":{"hook":"...","body":"...","cta":"..."},"google_headlines":["h1","h2","h3","h4","h5","h6","h7","h8","h9","h10","h11","h12","h13","h14","h15"],"google_descriptions":["d1 ≤90 chars","d2 ≤90 chars","d3 ≤90 chars","d4 ≤90 chars"]}`;
+    }else if(chan==="LinkedIn"){
+      chanSpec="LinkedIn professional post. No hashtags. 150-250 words. B2B tone. English or Arabic per language setting.";
+      outFmt=`{"ad_copy":{"hook":"...","body":"...","cta":"..."},"caption":"LinkedIn post 150-250 words, professional tone, no hashtags"}`;
+    }else if(chan==="Twitter/X"){
+      chanSpec="Twitter/X post. Max 280 chars. Punchy, direct. 2-3 relevant hashtags.";
+      outFmt=`{"ad_copy":{"hook":"...","body":"...","cta":"..."},"caption":"tweet ≤280 chars with 2-3 hashtags"}`;
+    }else if(chan==="TikTok"){
+      chanSpec="TikTok video caption + script hook. Conversational, trending format. 3-5 hashtags.";
+      outFmt=`{"ad_copy":{"hook":"...","body":"...","cta":"..."},"caption":"TikTok caption with hook + 3-5 hashtags"}`;
+    }else if(chan==="Snapchat"){
+      chanSpec="Snapchat ad caption. Ultra-short, punchy, direct. Max 100 chars visible. Young professional audience.";
+      outFmt=`{"ad_copy":{"hook":"...","body":"...","cta":"..."},"caption":"Snapchat caption ≤100 chars"}`;
+    }else if(chan==="Facebook"){
+      chanSpec="Facebook post. Conversational, 80-160 words. 3-4 relevant hashtags. Suitable for Meta feed.";
+      outFmt=`{"ad_copy":{"hook":"...","body":"...","cta":"..."},"caption":"Facebook post 80-160 words with 3-4 hashtags"}`;
+    }else{
+      // Instagram default
+      chanSpec="Instagram post caption. Engaging, 80-150 words. 4-5 targeted Arabic + English hashtags. Ready to post.";
+      outFmt=`{"ad_copy":{"hook":"...","body":"...","cta":"..."},"caption":"Instagram caption 80-150 words with 4-5 hashtags"}`;
+    }
+    const sys=`Senior performance copywriter for Qoyod — Saudi cloud accounting SaaS, ZATCA-accredited.\n${ol}\n${QOYOD_VOICE}\nProduct: ${prodDesc}\n${fctx?"Feature: "+fctx:""}\nChannel: ${chan}. ${chanSpec}\nRule: ONE clear message per output. No emojis. Generate ONLY for ${chan} — do not include other channels.\nReturn ONLY valid JSON (no markdown):\n${outFmt}`;
     const usr=`Products:${prodNames} Channel:${chan} Audience:${funnel} Sector:${sector} Feature:${ff?.ar||"general"} Note:${extraNote||"none"}`;
     setCl(true);setCe("");setCr(null);
-    try{setCr(await callAI(sys,usr,1200));}catch(e){setCe(e.message);}finally{setCl(false);}
+    try{setCr(await callAI(sys,usr,chan==="Google Ads"?1800:1200));}catch(e){setCe(e.message);}finally{setCl(false);}
   },[lang,prod,prodExtras,chan,funnel,sector,featFocus,extraNote,buildProdCtx]);
 
   const genContentAB=useCallback(async()=>{
@@ -836,11 +861,15 @@ export default function CreativeOS(){
     try{setBRes(await callAI(sys,usr));}catch(e){setBErr(e.message);}finally{setBLd(false);}
   },[lang,bProd,bProdExtras,bMsg,bHook,bCta,bPlaces,bTrust,bStyle,numVariants,buildProdCtx]);
 
+  /* Rotate color scheme per variant so each variant has a clearly different look */
+  const VARIANT_SCHEMES=["navy","ocean","midnight","teal","slate","light"];
+
   const genDesign=useCallback(async(variantNum,briefOverride)=>{
     const brief=briefOverride||bRes;
     if(!brief)return;
     const data=brief[`variant${variantNum}`]||{};
     const ratio=bPlaces[0]||"1:1";
+    const scheme=VARIANT_SCHEMES[(variantNum-1)%VARIANT_SCHEMES.length];
     setDesignLds(p=>({...p,[variantNum]:true}));
     setDesignErrs(p=>({...p,[variantNum]:""}));
     setDesignSvgs(p=>({...p,[variantNum]:null}));
@@ -848,9 +877,16 @@ export default function CreativeOS(){
       const r=await fetch(`/api/generate-design`,{
         method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
-          product:bProd,message:bMsg,hook:bHook,cta:bCta||"ابدأ الآن",
-          trust:bTrust,ratio,concept:data.concept||"",
-          art_direction:data.art_direction||"",color_accent:data.color_accent||"#17A3A4",
+          product:bProd,
+          message:bMsg,
+          hook:bHook,
+          cta:bCta||"ابدأ الآن",
+          trust:bTrust,
+          ratio,
+          concept:data.concept||"",
+          art_direction:data.art_direction||"",
+          color_scheme:scheme,
+          variant:variantNum,
         }),
       });
       const json=await r.json();
@@ -884,6 +920,47 @@ export default function CreativeOS(){
     a.href=url;a.download=`qoyod-ad-variant${variantNum}.svg`;
     document.body.appendChild(a);a.click();
     setTimeout(()=>{URL.revokeObjectURL(url);document.body.removeChild(a);},500);
+  };
+
+  /* Render SVG → PNG/JPG via canvas. scale=2 produces a sharper raster. */
+  const svgToRaster=async(svgStr,format="png",scale=2)=>{
+    // Parse viewBox to get target dimensions
+    const m=svgStr.match(/viewBox="0 0 (\d+) (\d+)"/);
+    const w=m?parseInt(m[1],10):1080;
+    const h=m?parseInt(m[2],10):1080;
+    // Create blob URL for the SVG
+    const svgBlob=new Blob([svgStr],{type:"image/svg+xml;charset=utf-8"});
+    const svgUrl=URL.createObjectURL(svgBlob);
+    // Load it as an image
+    const img=new Image();
+    img.crossOrigin="anonymous";
+    await new Promise((res,rej)=>{img.onload=res;img.onerror=rej;img.src=svgUrl;});
+    // Draw to canvas at scaled-up resolution
+    const canvas=document.createElement("canvas");
+    canvas.width=w*scale;canvas.height=h*scale;
+    const ctx=canvas.getContext("2d");
+    if(format==="jpg"||format==="jpeg"){
+      // JPG has no transparency — paint navy background
+      ctx.fillStyle="#021544";
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+    }
+    ctx.drawImage(img,0,0,canvas.width,canvas.height);
+    URL.revokeObjectURL(svgUrl);
+    const mime=format==="jpg"||format==="jpeg"?"image/jpeg":"image/png";
+    return new Promise(res=>canvas.toBlob(res,mime,0.95));
+  };
+
+  const downloadRaster=async(svgStr,variantNum,format)=>{
+    try{
+      const blob=await svgToRaster(svgStr,format,2);
+      if(!blob)return;
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement("a");
+      a.href=url;
+      a.download=`qoyod-ad-variant${variantNum}.${format==="jpg"||format==="jpeg"?"jpg":"png"}`;
+      document.body.appendChild(a);a.click();
+      setTimeout(()=>{URL.revokeObjectURL(url);document.body.removeChild(a);},500);
+    }catch(e){console.error("raster export failed",e);alert("Export failed: "+(e?.message||e));}
   };
 
   const CANVA_BASE=`/api/canva`;
@@ -1384,8 +1461,8 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
         <div style={{display:"flex",alignItems:"center",gap:9}}>
           <div style={{width:30,height:30,background:"linear-gradient(135deg,#17a3a3,#13778d)",borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,color:"#fff"}}>Q</div>
           <div>
-            <div style={{fontSize:12.5,fontWeight:700}}>Qoyod Creative OS</div>
-            <div style={{fontSize:9.5,color:"#2e5468",marginTop:1}}>{T("نظام الإنتاج الإبداعي","Creative Production System")}</div>
+            <div style={{fontSize:12.5,fontWeight:700}}>Somaa Content Agent</div>
+            <div style={{fontSize:9.5,color:"#2e5468",marginTop:1}}>{T("وكيل المحتوى الذكي","AI Content Agent")}</div>
           </div>
         </div>
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
@@ -1435,7 +1512,7 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
                 </Fld>
                 <Fld label={T("القناة","Channel")}>
                   <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-                    {["Instagram","Facebook","TikTok","Snapchat","LinkedIn","Twitter/X"].map(v=><Seg key={v} ch={v} on={chan===v} onClick={()=>setChan(v)}/>)}
+                    {["Instagram","Facebook","TikTok","Snapchat","LinkedIn","Twitter/X","Google Ads"].map(v=><Seg key={v} ch={v} on={chan===v} onClick={()=>setChan(v)}/>)}
                   </div>
                 </Fld>
                 <button onClick={()=>setAdvContent(v=>!v)} style={{display:"flex",alignItems:"center",gap:5,background:"none",border:"none",color:"#2e5468",fontSize:10.5,cursor:"pointer",padding:"4px 0",fontFamily:"inherit"}}>
@@ -1531,13 +1608,22 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
                   <div style={cHead}>
                     <span style={{fontSize:11.5,fontWeight:600,color:pctx.color}}>{lang==="ar"?pctx.ar:pctx.v} · {chan} · {funnel}</span>
                     <div style={{display:"flex",gap:5,alignItems:"center"}}>
-                      <Btn ch={T("نسخ الكل","Copy All")} xs onClick={()=>copyText(`${cr.ad_copy?.hook}\n\n${cr.ad_copy?.body}\n\nCTA: ${cr.ad_copy?.cta}\n\nGoogle:\n${(cr.google_headlines||[]).join("\n")}\n\n${cr.google_descriptions?.join("\n")||""}\n\nInstagram:\n${cr.captions?.instagram}`)}/>
-                      <button onClick={()=>uploadToDrive(`${cr.ad_copy?.hook}\n\n${cr.ad_copy?.body}\n\nCTA: ${cr.ad_copy?.cta}\n\nGoogle Headlines:\n${(cr.google_headlines||[]).join("\n")}\n\nDescriptions:\n${(cr.google_descriptions||[]).join("\n")}\n\nInstagram:\n${cr.captions?.instagram}\n\nLinkedIn:\n${cr.captions?.linkedin||""}`,"qoyod-ad-copy.txt","text/plain","cr")} disabled={driveLd["cr"]} style={{padding:"3px 8px",borderRadius:4,border:"1px solid rgba(66,133,244,.4)",background:"rgba(66,133,244,.1)",color:driveLinks["cr"]?"#5dc87a":"#4285f4",fontSize:9.5,cursor:"pointer",fontFamily:"inherit",fontWeight:600,opacity:driveLd["cr"]?.6:1}}>
+                      <Btn ch={T("نسخ الكل","Copy All")} xs onClick={()=>{
+                        const base=`${cr.ad_copy?.hook}\n\n${cr.ad_copy?.body}\n\nCTA: ${cr.ad_copy?.cta}`;
+                        if(chan==="Google Ads")copyText(`${base}\n\nGoogle Headlines:\n${(cr.google_headlines||[]).map((h,i)=>`H${i+1}: ${h}`).join("\n")}\n\nDescriptions:\n${(cr.google_descriptions||[]).map((d,i)=>`D${i+1}: ${d}`).join("\n")}`);
+                        else copyText(`${base}\n\n${chan} Caption:\n${cr.caption||""}`);
+                      }}/>
+                      <button onClick={()=>{
+                        const base=`${cr.ad_copy?.hook}\n\n${cr.ad_copy?.body}\n\nCTA: ${cr.ad_copy?.cta}`;
+                        const full=chan==="Google Ads"?`${base}\n\nGoogle Headlines:\n${(cr.google_headlines||[]).map((h,i)=>`H${i+1}: ${h}`).join("\n")}\n\nDescriptions:\n${(cr.google_descriptions||[]).map((d,i)=>`D${i+1}: ${d}`).join("\n")}`:`${base}\n\n${chan} Caption:\n${cr.caption||""}`;
+                        uploadToDrive(full,"qoyod-ad-copy.txt","text/plain","cr");
+                      }} disabled={driveLd["cr"]} style={{padding:"3px 8px",borderRadius:4,border:"1px solid rgba(66,133,244,.4)",background:"rgba(66,133,244,.1)",color:driveLinks["cr"]?"#5dc87a":"#4285f4",fontSize:9.5,cursor:"pointer",fontFamily:"inherit",fontWeight:600,opacity:driveLd["cr"]?.6:1}}>
                         {driveLd["cr"]?"↑…":driveLinks["cr"]?<a href={driveLinks["cr"]} target="_blank" rel="noreferrer" style={{color:"#5dc87a",textDecoration:"none"}}>✓ Drive</a>:"☁ Drive"}
                       </button>
                     </div>
                   </div>
                   <div style={cBody}>
+                    {/* Ad Copy block — always shown */}
                     <div style={{marginBottom:12}}>
                       <p style={{fontSize:8.5,color:"#6a96aa",marginBottom:6,textTransform:"uppercase",letterSpacing:".04em"}}>{T("نسخة الإعلان","Ad Copy")}</p>
                       <div style={{padding:"10px 12px",background:"rgba(23,163,164,.05)",borderRadius:8,direction:"rtl"}}>
@@ -1546,34 +1632,34 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
                         <Tag ch={cr.ad_copy?.cta} green style={{fontSize:11}}/>
                       </div>
                     </div>
-                    <div style={{marginBottom:12}}>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                        <p style={{fontSize:8.5,color:"#6a96aa",textTransform:"uppercase",letterSpacing:".04em"}}>Google Ads</p>
-                        <Btn ch={T("نسخ","Copy")} xs onClick={()=>copyText([...(cr.google_headlines||[]),...(cr.google_descriptions||[])].join("\n"))}/>
-                      </div>
-                      <div style={{display:"flex",flexDirection:"column",gap:3,marginBottom:6}}>
-                        {(cr.google_headlines||[]).map((h,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:8.5,color:"#17a3a3",fontWeight:700,minWidth:18}}>H{i+1}</span><p style={{fontSize:11.5,color:"#ddeef4",direction:"ltr",textAlign:"left",flex:1}}>{h}</p><span style={{fontSize:8,color:h.length>30?"#f07070":"#2e5468"}}>{h.length}/30</span></div>)}
-                      </div>
-                      <div style={{display:"flex",flexDirection:"column",gap:3}}>
-                        {(cr.google_descriptions||[]).map((d,i)=><div key={i} style={{display:"flex",alignItems:"flex-start",gap:6}}><span style={{fontSize:8.5,color:"#6a96aa",fontWeight:700,minWidth:18,paddingTop:1}}>D{i+1}</span><p style={{fontSize:11,color:"#bbd4e0",direction:"ltr",textAlign:"left",flex:1,lineHeight:1.5}}>{d}</p><span style={{fontSize:8,color:d.length>90?"#f07070":"#2e5468"}}>{d.length}/90</span></div>)}
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                        <p style={{fontSize:8.5,color:"#6a96aa",textTransform:"uppercase",letterSpacing:".04em"}}>{T("الكابشن","Captions")}</p>
-                        <Btn ch="Copy IG" xs onClick={()=>copyText(cr.captions?.instagram||"")}/>
-                      </div>
-                      <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                        <div style={{padding:"8px 10px",background:"rgba(7,22,48,.7)",borderRadius:6,direction:"rtl"}}>
-                          <p style={{fontSize:8.5,color:"#e1306c",marginBottom:4,fontWeight:600}}>Instagram</p>
-                          <p style={{fontSize:11,lineHeight:1.7,color:"#ddeef4"}}>{cr.captions?.instagram}</p>
+                    {/* Google Ads — only when Google Ads channel is selected */}
+                    {chan==="Google Ads"&&(
+                      <div style={{marginBottom:12}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                          <p style={{fontSize:8.5,color:"#6a96aa",textTransform:"uppercase",letterSpacing:".04em"}}>Google RSA — Headlines ({cr.google_headlines?.length||0}/15)</p>
+                          <Btn ch={T("نسخ","Copy")} xs onClick={()=>copyText([...(cr.google_headlines||[]).map((h,i)=>`H${i+1}: ${h}`),...(cr.google_descriptions||[]).map((d,i)=>`D${i+1}: ${d}`)].join("\n"))}/>
                         </div>
-                        {cr.captions?.linkedin&&<div style={{padding:"8px 10px",background:"rgba(7,22,48,.7)",borderRadius:6,direction:"rtl"}}>
-                          <p style={{fontSize:8.5,color:"#0a66c2",marginBottom:4,fontWeight:600}}>LinkedIn</p>
-                          <p style={{fontSize:11,lineHeight:1.7,color:"#bbd4e0"}}>{cr.captions?.linkedin}</p>
-                        </div>}
+                        <div style={{display:"flex",flexDirection:"column",gap:3,marginBottom:8}}>
+                          {(cr.google_headlines||[]).map((h,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:8.5,color:"#17a3a3",fontWeight:700,minWidth:22}}>H{i+1}</span><p style={{fontSize:11.5,color:"#ddeef4",direction:"ltr",textAlign:"left",flex:1}}>{h}</p><span style={{fontSize:8,color:h.length>30?"#f07070":"#2e5468"}}>{h.length}/30</span></div>)}
+                        </div>
+                        <p style={{fontSize:8.5,color:"#6a96aa",marginBottom:4,textTransform:"uppercase"}}>Descriptions ({cr.google_descriptions?.length||0}/4)</p>
+                        <div style={{display:"flex",flexDirection:"column",gap:3}}>
+                          {(cr.google_descriptions||[]).map((d,i)=><div key={i} style={{display:"flex",alignItems:"flex-start",gap:6}}><span style={{fontSize:8.5,color:"#6a96aa",fontWeight:700,minWidth:22,paddingTop:1}}>D{i+1}</span><p style={{fontSize:11,color:"#bbd4e0",direction:"ltr",textAlign:"left",flex:1,lineHeight:1.5}}>{d}</p><span style={{fontSize:8,color:d.length>90?"#f07070":"#2e5468"}}>{d.length}/90</span></div>)}
+                        </div>
                       </div>
-                    </div>
+                    )}
+                    {/* Channel caption — for all social channels */}
+                    {chan!=="Google Ads"&&(cr.caption||cr.captions)&&(
+                      <div>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                          <p style={{fontSize:8.5,color:"#6a96aa",textTransform:"uppercase",letterSpacing:".04em"}}>{chan} {T("كابشن","Caption")}</p>
+                          <Btn ch={T("نسخ","Copy")} xs onClick={()=>copyText(cr.caption||cr.captions?.instagram||"")}/>
+                        </div>
+                        <div style={{padding:"10px 12px",background:"rgba(7,22,48,.7)",borderRadius:8,direction:"rtl"}}>
+                          <p style={{fontSize:11,lineHeight:1.8,color:"#ddeef4"}}>{cr.caption||cr.captions?.instagram}</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <Btn ch={T("✦ أنشئ التصميم في استوديو التصميم","✦ Open in Design Studio")} line full onClick={()=>{setBMsg(cr.ad_copy?.hook||"");setBHook(cr.ad_copy?.hook||"");setBCta(cr.ad_copy?.cta||"");setTab("brief");}} style={{marginTop:4}}/>
@@ -1811,7 +1897,7 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
                     ✦ {T(`أنشئ تصاميم الكل (${numVariants})`,`Generate All Visuals (${numVariants})`)}
                   </button>
                 </div>
-                <div style={{display:"grid",gridTemplateColumns:numVariants===1?"1fr":"repeat(auto-fill,minmax(220px,1fr))",gap:10,marginBottom:14}}>
+                <div style={{display:"grid",gridTemplateColumns:numVariants===1?"1fr":numVariants===2?"repeat(2,1fr)":"repeat(auto-fill,minmax(360px,1fr))",gap:14,marginBottom:14}}>
                   {Array.from({length:numVariants},(_,i)=>i+1).map(num=>{
                     const data=bRes[`variant${num}`];
                     const svg=designSvgs[num];
@@ -1823,15 +1909,25 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
                         <div style={{padding:12}}>
                           {svg?(
                             <div style={{marginBottom:10}}>
-                              <div style={{borderRadius:8,overflow:"hidden",border:"1px solid rgba(23,163,164,.25)",marginBottom:8,background:"#021544"}}
-                                dangerouslySetInnerHTML={{__html:svg.replace(/<svg /,'<svg style="width:100%;height:auto;display:block;" ')}}
-                              />
-                              <div style={{display:"flex",gap:6,marginBottom:6}}>
-                                <button onClick={()=>downloadSvg(svg,num)} style={{flex:1,padding:"6px 0",borderRadius:6,border:"1px solid rgba(23,163,164,.4)",background:"rgba(23,163,164,.1)",color:"#17a3a3",fontSize:10.5,cursor:"pointer",fontFamily:"inherit",fontWeight:600}}>
-                                  ⬇ {T("تحميل SVG","Download SVG")}
+                              <div style={{borderRadius:8,overflow:"hidden",border:"1px solid rgba(23,163,164,.25)",marginBottom:8,background:"#021544",display:"flex",alignItems:"center",justifyContent:"center",minHeight:200}}>
+                                <img
+                                  src={`data:image/svg+xml;utf8,${encodeURIComponent(svg)}`}
+                                  alt={`Variant ${num} preview`}
+                                  style={{maxWidth:"100%",maxHeight:"60vh",width:"auto",height:"auto",display:"block",objectFit:"contain"}}
+                                />
+                              </div>
+                              <div style={{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap"}}>
+                                <button onClick={()=>downloadRaster(svg,num,"png")} style={{flex:1,padding:"6px 0",borderRadius:6,border:"1px solid rgba(23,163,164,.4)",background:"rgba(23,163,164,.1)",color:"#17a3a3",fontSize:10.5,cursor:"pointer",fontFamily:"inherit",fontWeight:600}}>
+                                  {T("تحميل PNG","Download PNG")}
                                 </button>
-                                <button onClick={()=>uploadToDrive(svg,`qoyod-design-v${num}.svg`,"image/svg+xml",`svg-${num}`)} disabled={driveLd[`svg-${num}`]} style={{padding:"6px 10px",borderRadius:6,border:"1px solid rgba(66,133,244,.4)",background:"rgba(66,133,244,.1)",color:driveLinks[`svg-${num}`]?"#5dc87a":"#4285f4",fontSize:10,cursor:"pointer",fontFamily:"inherit",fontWeight:600,opacity:driveLd[`svg-${num}`]?.6:1}} title="حفظ في Google Drive">
-                                  {driveLd[`svg-${num}`]?"↑…":driveLinks[`svg-${num}`]?"✓ Drive":"☁ Drive"}
+                                <button onClick={()=>downloadRaster(svg,num,"jpg")} style={{flex:1,padding:"6px 0",borderRadius:6,border:"1px solid rgba(23,163,164,.4)",background:"rgba(23,163,164,.1)",color:"#17a3a3",fontSize:10.5,cursor:"pointer",fontFamily:"inherit",fontWeight:600}}>
+                                  {T("تحميل JPG","Download JPG")}
+                                </button>
+                                <button onClick={()=>downloadSvg(svg,num)} style={{padding:"6px 10px",borderRadius:6,border:"1px solid rgba(23,163,164,.25)",background:"transparent",color:"#6a96aa",fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>
+                                  SVG
+                                </button>
+                                <button onClick={()=>uploadToDrive(svg,`qoyod-design-v${num}.svg`,"image/svg+xml",`svg-${num}`)} disabled={driveLd[`svg-${num}`]} style={{padding:"6px 10px",borderRadius:6,border:"1px solid rgba(66,133,244,.4)",background:"rgba(66,133,244,.1)",color:driveLinks[`svg-${num}`]?"#5dc87a":"#4285f4",fontSize:10,cursor:"pointer",fontFamily:"inherit",fontWeight:600,opacity:driveLd[`svg-${num}`]?.6:1}} title="Save to Google Drive">
+                                  {driveLd[`svg-${num}`]?"…":driveLinks[`svg-${num}`]?"Drive ✓":"Drive"}
                                 </button>
                                 <button onClick={()=>genDesign(num)} style={{padding:"6px 10px",borderRadius:6,border:"1px solid rgba(255,255,255,.1)",background:"none",color:"#6a96aa",fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>
                                   {T("أعد الإنشاء","Retry")}
