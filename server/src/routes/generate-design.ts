@@ -28,6 +28,8 @@ import {
   QOYOD_BRAND_PLAYBOOK,
   QOYOD_CREATIVE_RULES,
   QOYOD_HEADLINE_PATTERNS,
+  QOYOD_PERSONAS,
+  QOYOD_SECTOR_CONTEXT,
 } from "../lib/brand-context.js";
 import { logger } from "../lib/logger.js";
 
@@ -109,6 +111,8 @@ async function generateDesignBundle(
   variant: number,
   scheme: { name: string; bg: string; accent: string; cta_fill: string },
   apiKey: string,
+  persona: string,
+  sector: string,
 ): Promise<DesignBundle> {
   const angle = ANGLES[(variant - 1) % ANGLES.length];
 
@@ -124,6 +128,10 @@ ${QOYOD_BRAND_PLAYBOOK}
 ${QOYOD_CREATIVE_RULES}
 
 ${QOYOD_HEADLINE_PATTERNS}
+
+${persona ? QOYOD_PERSONAS + `\n\nFOR THIS DESIGN — TARGET PERSONA: ${persona}` : ""}
+
+${sector ? QOYOD_SECTOR_CONTEXT + `\n\nFOR THIS DESIGN — TARGET SECTOR: ${sector}` : ""}
 
 EXAMPLES OF GOOD SCENE PROMPTS
 
@@ -232,6 +240,8 @@ router.post("/generate-design", async (req, res) => {
     variant = 1,
     color_scheme,
     image_provider = "auto",
+    persona = "",        // P1..P6 or persona description (optional)
+    sector = "",         // retail / f&b / construction / e-commerce / healthcare / enterprise / bookkeeping
   } = req.body ?? {};
 
   const [w, h] = RATIO_DIMS[ratio] ?? [1080, 1080];
@@ -242,6 +252,7 @@ router.post("/generate-design", async (req, res) => {
     const { copy, image_prompt } = await generateDesignBundle(
       product, message, hook, cta, trust, concept, art_direction,
       ratio, Number(variant) || 1, scheme, apiKey,
+      String(persona), String(sector),
     );
 
     /* 2. AI → render the scene (per-provider tuning) */

@@ -154,6 +154,97 @@ PATTERN 6 — Bookkeeping-specific
 
 When Claude writes a headline, it MUST follow one of these formulas. Length: 5–7 Arabic words (ads guideline rule).`;
 
+export const QOYOD_PERSONAS = `BUYER PERSONAS — pick ONE and design specifically for them
+Sourced from the team's buyer-persona research in Drive. Each persona drives
+visual style, channel format, hook tone, and trust angle.
+
+P1 — Ahmed · صاحب بقالة / محل صغير
+  Age 30-60 · vocational · Riyadh/Jeddah/Dammam · Snapchat + IG + WhatsApp
+  Decision maker. Traditional. Bargain-oriented. Cash-flow focused.
+  Visual style: bold simple direct, big readable text, real shop interior or hand-held POS.
+  Hook tone: practical, no-nonsense ("ودّع الأخطاء", "كل حساباتك في مكان واحد").
+  Pain: manual receipts, late VAT, no time to learn complex software.
+
+P2 — Fatima · مديرة مطعم / صاحبة كوفي
+  Age 30-40 · bachelor's · F&B · Instagram + TikTok + Snapchat + Sahl
+  Consults with owner but final operational say.
+  Visual style: editorial restaurant scene, real Saudi server, kitchen/cashier UI.
+  Hook tone: speed-of-service, organized chaos solved ("نظام واحد يدير مطعمك").
+  Pain: app overload (Hungerstation/Jahez/Mrsool), inventory leakage, peak-hour stress.
+
+P3 — Khalid · مقاول / صاحب شركة مقاولات
+  Age 50-60 · bachelor's/engineering · construction · Facebook + LinkedIn + IG + Google
+  Decision maker. Independent. Experience-driven.
+  Visual style: project site or blueprint close-up, formal product UI, hard hat optional.
+  Hook tone: control over costs, warranty letters, project tracking ("من المناقصة إلى التسليم").
+  Pain: cost leakage between projects, retention bonds, ZATCA on staged invoicing.
+
+P4 — Sarah · مؤسسة متجر إلكتروني
+  Age 25-35 · bachelor's · E-commerce · Instagram + TikTok + Sahl + Facebook
+  Decision maker, may consult with marketing team. Highly social-active.
+  Visual style: clean modern flat-lay, mobile-first composition, dynamic.
+  Hook tone: growth-data-driven ("تابع أرقامك أول بأول"), fits investor reporting.
+  Pain: sales-to-accounting integration, VAT on cross-border, returns/refunds tracking.
+
+P5 — Omar · طبيب أسنان / صاحب عيادة
+  Age 40-55 · doctorate · healthcare · LinkedIn + IG + Google + TikTok
+  Decision maker, may consult admin.
+  Visual style: clean clinical aesthetic, ZATCA badge prominent, no human portrait.
+  Hook tone: professional, compliance-first, peace of mind ("التزامك الضريبي بدون تعقيد").
+  Pain: medical billing, insurance reconciliation, ZATCA Phase 2 readiness.
+
+P6 — Ali · CFO / Finance Director (mid-large company)
+  Age 45-55 · MBA · service/tech · LinkedIn + Twitter + Email + YouTube
+  Influencer (recommends), not always sole decision maker.
+  Visual style: corporate editorial, dashboard close-up, integration diagrams.
+  Hook tone: enterprise-grade ("تحكم مالي شامل", "تكامل مع أنظمتك التشغيلية").
+  Pain: multi-entity consolidation, audit-readiness, API integration.
+
+PICK BY PERSONA → CHANNEL
+  Snapchat / TikTok ⇒ P1, P2, P4
+  Instagram         ⇒ P2, P4, P5 (and P1 in Saudi dialect mode)
+  LinkedIn          ⇒ P3, P5, P6 (and P2 for restaurant chains)
+  Google Search     ⇒ P3, P5, P6
+  Twitter / X       ⇒ P6, P3
+  Facebook          ⇒ P1, P3, P5`;
+
+export const QOYOD_SECTOR_CONTEXT = `SECTOR-SPECIFIC DESIGN DIRECTIVES — use the sector input to pick visual subject + hook angle
+
+RETAIL (P1 grocery / supermarket / mobile shop)
+  Visual: real shop interior, cashier counter, real POS device, products on shelves.
+  Hook: "كل حساباتك في مكان واحد", "ودّع العشوائية", "نظّم شغلك المالي".
+  Avoid: stock photo people smiling at laptops.
+
+F&B (P2 restaurants / coffee shops / food trucks — uses QFlavours product)
+  Visual: kitchen ticket display, cashier screen, table-management UI, real server.
+  Hook: "نظام واحد يدير مطعمك", "بيانات لحظية لقرارات دقيقة", "كل طلباتك في شاشة وحدة".
+  Avoid: foreign-style restaurant clichés. Show local Saudi/Khaleeji F&B context.
+
+CONSTRUCTION (P3 contractors / mid-large projects)
+  Visual: blueprint close-up, project site, retention bond document, dashboard with project KPIs.
+  Hook: "من المناقصة إلى التسليم", "اعرف التكاليف الحقيقية لكل مشروع", "تابع محجوز ضمان حسن التنفيذ".
+  Avoid: hard-hat-stock-photo cliché. Lead with documents/UI, not workers.
+
+E-COMMERCE (P4 founders / online stores)
+  Visual: phone showing checkout, product flat-lay, clean dashboard with revenue chart.
+  Hook: "كل فواتيرك في مكان واحد بضغطة من جوالك", "تابع أرقامك أول بأول".
+  Avoid: shopping-cart icon clichés. Show real product photography aesthetic.
+
+HEALTHCARE (P5 clinics / dental / specialists)
+  Visual: clean clinical UI, document close-up, ZATCA compliance badge prominent.
+  Hook: "التزامك الضريبي بدون تعقيد", calm-professional outcome promise.
+  Avoid: stock medical imagery. Use product UI or document macro.
+
+ENTERPRISE / FINANCE (P6 CFO / large-company finance)
+  Visual: corporate editorial, integration diagram (Systems → Qoyod), dashboard close-up.
+  Hook: "تحكم مالي شامل لأعمالك الكبيرة", "تكامل وربط الأنظمة".
+  Avoid: SME messaging. This is enterprise-tier — formal, integrated, audit-ready.
+
+BOOKKEEPING SERVICE (cross-sector — outsourced)
+  Visual: SOCPA-certified accountant working remotely, bookkeeper dashboard, deliverables list.
+  Hook: "خلّ فريق قيود يمسك الدفاتر", "محاسبون متخصصون + منصة قيود".
+  Avoid: claims like "100% no errors". Lead with trust + transparency.`;
+
 export const QOYOD_REFERENCE_PROMPT_EXAMPLE = `EXAMPLE OF AN EXCELLENT SCENE-ONLY PROMPT (mimic the photographer-level detail, hex colors, lens, lighting, composition, BUT do NOT instruct the model to render Arabic text in the image — text is added by typography compositor in post)
 
 "Editorial product photography. Premium tablet device on a clean dark navy #021544 surface, screen displaying the Qoyod cloud accounting dashboard interface in soft glowing detail — clean rows of financial data, subtle cyan #17A3A4 UI accents, navy chrome. Tablet tilted 15 degrees toward camera, partial Saudi business owner's hand resting beside it (modest professional dress, sleeve visible). Background: deep navy #021544 with soft cyan #1FCACB rim light from upper-left, gentle volumetric haze. Right two-thirds of frame intentionally empty for typography overlay in post. NO text on the screen. NO logos. NO watermarks. Cinematic 8K, Canon 50mm at f/2.0, photorealistic."
