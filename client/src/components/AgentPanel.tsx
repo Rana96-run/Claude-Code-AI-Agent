@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 
 /* ══════════════════════════════════════════════════════════════════
-   AgentPanel — floating panel that lets the team:
-     • send a free-form prompt / task to the Creative Agent
-     • see the live activity feed (steps, tool calls, tool results)
-     • jump to outputs (Canva / WordPress / HubSpot / Drive links)
-     • inspect past tasks (last 50 in memory)
-   Arabic / RTL by default, tucks into the right edge of the screen.
+   AgentPanel — لوحة سمعه، المساعد التسويقي الذكي لفريق قيود
+   • تشغيل مهام المحتوى مباشرةً أو عبر الأتمتة
+   • متابعة الخطوات والمخرجات في الوقت الفعلي
+   • تاريخ آخر 50 مهمة
+   • تحريك النافذة بالسحب (Drag)، RTL بالكامل
    ══════════════════════════════════════════════════════════════════ */
 
 type TaskStep = {
@@ -43,22 +42,22 @@ const QUICK_ACTIONS: { label: string; title: string; body: string }[] = [
   {
     label: "تحليل لاندنج",
     title: "تحليل صفحة هبوط",
-    body: "حلّل الصفحة https://qoyod.com — ركّز على الوضوح، CTA، الثقة، ومدى ملاءمتها للسوق السعودي. اقترح 5 تحسينات فورية.",
+    body: "حلّل الصفحة https://qoyod.com — ركّز على الوضوح، CTA، عناصر الثقة، ومدى ملاءمتها للسوق السعودي. اقترح 5 تحسينات فورية.",
   },
   {
     label: "بريف → خطة",
     title: "تحويل بريف لخطة",
-    body: "عندي فكرة حملة: إطلاق وحدة الفاتورة الإلكترونية لمطاعم QFlavours. حوّل هذا البريف إلى خطة كاملة (جمهور، قنوات، رسائل، KPIs).",
+    body: "عندي فكرة حملة: إطلاق وحدة الفاتورة الإلكترونية لمطاعم QFlavours. حوّل هذا البريف إلى خطة تسويقية كاملة (جمهور، قنوات، رسائل، KPIs).",
   },
   {
     label: "فيديو 30ث",
-    title: "فيديو قصير",
-    body: "اكتب سكربت فيديو 30 ثانية TikTok عن QoyodPOS للتجار بالتجزئة، هوك قوي أول 1.5 ثانية، CTA: ابدأ مجاناً.",
+    title: "سكربت فيديو قصير",
+    body: "اكتب سكربت فيديو 30 ثانية لـ TikTok عن QoyodPOS للتجار بالتجزئة، هوك قوي في أول 1.5 ثانية، CTA: ابدأ مجاناً.",
   },
   {
     label: "A/B Test",
-    title: "خطة A/B",
-    body: "صمّم A/B test لصفحة الهبوط الرئيسية لـ Qoyod — الفرضية: تغيير الـ hero headline من تقني إلى عاطفي يرفع CVR.",
+    title: "خطة A/B Test",
+    body: "صمّم A/B test لصفحة الهبوط الرئيسية لـ Qoyod — الفرضية: تغيير الـ Hero Headline من تقني إلى عاطفي يرفع معدل التحويل.",
   },
   {
     label: "إعلان + كانفا",
@@ -66,18 +65,18 @@ const QUICK_ACTIONS: { label: string; title: string; body: string }[] = [
     body: "اعمل إعلان 1:1 عن Qoyod Main (ZATCA Phase 2)، نسخة سعودية، ثم ارفعه لـ Canva كتصميم جديد.",
   },
   {
-    label: "ايميل سيكوينس",
-    title: "ايميلات تغذية",
-    body: "اكتب سلسلة 4 ايميلات لأصحاب المحلات الصغار الذين جرّبوا QoyodPOS ولم يكملوا التفعيل.",
+    label: "إيميل سيكونس",
+    title: "سلسلة إيميلات تغذية",
+    body: "اكتب سلسلة 4 إيميلات لأصحاب المحلات الصغار الذين جرّبوا QoyodPOS ولم يكملوا التفعيل.",
   },
   {
     label: "كالندر محتوى",
-    title: "كالندر محتوى",
-    body: "ابني كالندر محتوى 2 أسابيع لـ Qoyod على Instagram + LinkedIn + Twitter، قطاع: مطاعم.",
+    title: "خطة محتوى أسبوعين",
+    body: "ابنِ كالندر محتوى لأسبوعين لـ Qoyod على Instagram وLinkedIn وX، قطاع: مطاعم.",
   },
   {
     label: "SEO meta",
-    title: "SEO meta",
+    title: "وسوم SEO",
     body: "اكتب SEO meta (title + description + keywords + OG) لصفحة 'الفاتورة الإلكترونية للمطاعم' بالعربي.",
   },
 ];
@@ -98,8 +97,15 @@ type Persona = {
   tools: string[];
 };
 
+/* Default position: top-right corner */
+const DEFAULT_POS = () => ({
+  x: window.innerWidth - 440,
+  y: 52,
+});
+
 export default function AgentPanel() {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState(DEFAULT_POS);
   const [prompt, setPrompt] = useState("");
   const [title, setTitle] = useState("");
   const [sending, setSending] = useState(false);
@@ -112,15 +118,44 @@ export default function AgentPanel() {
 
   const pollRef = useRef<number | null>(null);
 
+  /* ── Drag logic ── */
+  const dragRef = useRef<{ active: boolean; startX: number; startY: number; originX: number; originY: number }>({
+    active: false, startX: 0, startY: 0, originX: 0, originY: 0,
+  });
+
+  function onDragStart(e: React.MouseEvent<HTMLDivElement>) {
+    dragRef.current = { active: true, startX: e.clientX, startY: e.clientY, originX: pos.x, originY: pos.y };
+    e.preventDefault();
+  }
+
+  useEffect(() => {
+    function onMouseMove(e: MouseEvent) {
+      if (!dragRef.current.active) return;
+      const dx = e.clientX - dragRef.current.startX;
+      const dy = e.clientY - dragRef.current.startY;
+      const newX = Math.max(0, Math.min(window.innerWidth - 440, dragRef.current.originX + dx));
+      const newY = Math.max(0, Math.min(window.innerHeight - 60, dragRef.current.originY + dy));
+      setPos({ x: newX, y: newY });
+    }
+    function onMouseUp() {
+      dragRef.current.active = false;
+    }
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+    return () => {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+    };
+  }, []);
+
+  /* ── Data fetching ── */
   async function refreshList() {
     try {
       const r = await fetch("/api/agent/tasks");
       if (!r.ok) return;
       const d = await r.json();
       setList(d.tasks ?? []);
-    } catch {
-      /* ignore */
-    }
+    } catch { /* ignore */ }
   }
 
   async function refreshActive(id: string) {
@@ -130,17 +165,11 @@ export default function AgentPanel() {
       const d: Task = await r.json();
       setTask(d);
       if (d.status === "done" || d.status === "error") {
-        if (pollRef.current) {
-          clearInterval(pollRef.current);
-          pollRef.current = null;
-        }
+        if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
       }
-    } catch {
-      /* ignore */
-    }
+    } catch { /* ignore */ }
   }
 
-  /* Pull persona catalog once when the panel opens */
   useEffect(() => {
     if (!open || personas.length) return;
     fetch("/api/agent/personas")
@@ -161,10 +190,7 @@ export default function AgentPanel() {
     refreshActive(activeId);
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = window.setInterval(() => refreshActive(activeId), 1500);
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-      pollRef.current = null;
-    };
+    return () => { if (pollRef.current) clearInterval(pollRef.current); pollRef.current = null; };
   }, [activeId]);
 
   async function runAgent() {
@@ -197,7 +223,7 @@ export default function AgentPanel() {
 
   return (
     <>
-      {/* Floating launcher button */}
+      {/* ── Floating launcher button ── */}
       <button
         onClick={() => setOpen((o) => !o)}
         style={{
@@ -216,17 +242,17 @@ export default function AgentPanel() {
           fontFamily: "inherit",
           boxShadow: "0 4px 14px rgba(2,21,68,0.4)",
         }}
-        title="Creative Agent"
+        title="سمعه — مساعدك التسويقي"
       >
-        {open ? "× إغلاق الوكيل" : "🤖 وكيل الإبداع"}
+        {open ? "× إغلاق" : "🤖 سمعه"}
       </button>
 
       {open && (
         <div
           style={{
             position: "fixed",
-            top: 52,
-            right: 10,
+            top: pos.y,
+            left: pos.x,
             width: 420,
             maxWidth: "calc(100vw - 20px)",
             maxHeight: "calc(100vh - 70px)",
@@ -243,29 +269,40 @@ export default function AgentPanel() {
             boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
           }}
         >
-          {/* Header tabs */}
+          {/* ── Header (drag handle) ── */}
           <div
+            onMouseDown={onDragStart}
             style={{
               padding: "10px 14px",
               borderBottom: "1px solid rgba(1,53,90,0.6)",
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
+              cursor: "grab",
+              userSelect: "none",
             }}
           >
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#17a3a3" }}>
-                وكيل المحتوى والإبداع
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontSize: 14 }}>🤖</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: "#17a3a3" }}>سمعه</span>
+                <span style={{
+                  fontSize: 9,
+                  padding: "1px 6px",
+                  borderRadius: 8,
+                  background: "rgba(23,163,163,0.12)",
+                  border: "1px solid rgba(23,163,163,0.3)",
+                  color: "#6a96aa",
+                  fontWeight: 600,
+                }}>AI</span>
               </div>
               <div style={{ fontSize: 10, color: "#6a96aa", marginTop: 2 }}>
-                Qoyod Creative Agent · يعمل تلقائياً عند ذكره أو تكليفه
+                مساعدك التسويقي الذكي · يعمل تلقائياً أو عند التكليف المباشر
               </div>
             </div>
             <button
-              onClick={() => {
-                setActiveId(null);
-                setTask(null);
-              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={() => { setActiveId(null); setTask(null); }}
               style={{
                 padding: "3px 8px",
                 fontSize: 10,
@@ -277,23 +314,19 @@ export default function AgentPanel() {
                 fontFamily: "inherit",
               }}
             >
-              جديد
+              مهمة جديدة
             </button>
           </div>
 
-          {/* Composer */}
+          {/* ── Composer ── */}
           {!activeId && (
             <div style={{ padding: 14, borderBottom: "1px solid rgba(1,53,90,0.5)" }}>
-              {/* Quick-action chips — prefill common jobs. Saves typing
-                  and demonstrates the new analyzer / brief / video / A-B tools. */}
+              {/* Quick-action chips */}
               <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 8 }}>
                 {QUICK_ACTIONS.map((qa) => (
                   <button
                     key={qa.label}
-                    onClick={() => {
-                      setTitle(qa.title);
-                      setPrompt(qa.body);
-                    }}
+                    onClick={() => { setTitle(qa.title); setPrompt(qa.body); }}
                     style={{
                       padding: "3px 8px",
                       fontSize: 10,
@@ -310,15 +343,16 @@ export default function AgentPanel() {
                   </button>
                 ))}
               </div>
-              {/* Persona selector — leave on "تلقائي" to let the dispatcher pick */}
+
+              {/* Persona selector */}
               {personas.length > 0 && (
                 <select
                   value={persona}
                   onChange={(e) => setPersona(e.target.value)}
                   style={{ ...inputS, cursor: "pointer" }}
-                  title="اختر دور الوكيل (يُستنتج تلقائياً إذا تُرك فارغاً)"
+                  title="حدّد دور سمعه — أو اتركه فارغاً ليختار تلقائياً"
                 >
-                  <option value="">— اختيار تلقائي للدور —</option>
+                  <option value="">— اختر الدور أو اتركه تلقائياً —</option>
                   {personas.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.label} · {p.tagline}
@@ -326,6 +360,7 @@ export default function AgentPanel() {
                   ))}
                 </select>
               )}
+
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
@@ -335,7 +370,7 @@ export default function AgentPanel() {
               <textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
-                placeholder="اكتب المهمة — مثال: اعمل إعلان 1:1 عن فاتورة إلكترونية ZATCA Phase 2 لفليفرز + نسخة لـ Instagram، وانشر صفحة هبوط في WordPress."
+                placeholder="اكتب تفاصيل المهمة هنا — مثال: اعمل إعلان 1:1 عن فاتورة ZATCA Phase 2 لفليفرز، نسخة لـ Instagram، وانشر صفحة هبوط على WordPress."
                 rows={5}
                 style={{ ...inputS, minHeight: 90, resize: "vertical" }}
               />
@@ -372,133 +407,81 @@ export default function AgentPanel() {
                   fontFamily: "inherit",
                 }}
               >
-                {sending ? "جارٍ الإرسال..." : "تشغيل الوكيل"}
+                {sending ? "جارٍ التشغيل..." : "شغّل سمعه"}
               </button>
             </div>
           )}
 
-          {/* Task detail view */}
+          {/* ── Task detail view ── */}
           {activeId && task && (
             <div style={{ flex: 1, overflowY: "auto", padding: 14 }}>
-              <div
-                style={{
-                  display: "flex",
-                  gap: 6,
-                  alignItems: "center",
-                  marginBottom: 10,
-                  flexWrap: "wrap",
-                }}
-              >
+              <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
                 <span
                   style={{
-                    fontSize: 10,
-                    padding: "2px 8px",
-                    borderRadius: 4,
-                    background: `${statusColor[task.status]}22`,
-                    color: statusColor[task.status],
-                    border: `1px solid ${statusColor[task.status]}66`,
-                    fontWeight: 700,
+                    fontSize: 10, padding: "2px 8px", borderRadius: 4,
+                    background: `${statusColor[task.status]}22`, color: statusColor[task.status],
+                    border: `1px solid ${statusColor[task.status]}66`, fontWeight: 700,
                   }}
                 >
                   {task.status}
                 </span>
                 <span style={{ fontSize: 10, color: "#6a96aa" }}>
-                  {task.trigger.source}
-                  {task.trigger.actor ? ` · ${task.trigger.actor}` : ""}
+                  {task.trigger.source}{task.trigger.actor ? ` · ${task.trigger.actor}` : ""}
                 </span>
-                <span style={{ fontSize: 10, color: "#2e5468", marginRight: "auto" }}>
-                  #{task.id}
-                </span>
+                <span style={{ fontSize: 10, color: "#2e5468", marginRight: "auto" }}>#{task.id}</span>
               </div>
               {task.trigger.title && (
-                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
-                  {task.trigger.title}
-                </div>
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>{task.trigger.title}</div>
               )}
               {task.trigger.body && (
-                <div
-                  style={{
-                    fontSize: 11,
-                    color: "#aac5d5",
-                    lineHeight: 1.6,
-                    marginBottom: 10,
-                    padding: 8,
-                    background: "#02102a",
-                    borderRadius: 6,
-                    border: "1px solid rgba(1,53,90,0.4)",
-                  }}
-                >
+                <div style={{
+                  fontSize: 11, color: "#aac5d5", lineHeight: 1.6, marginBottom: 10,
+                  padding: 8, background: "#02102a", borderRadius: 6, border: "1px solid rgba(1,53,90,0.4)",
+                }}>
                   {task.trigger.body}
                 </div>
               )}
 
-              <div style={{ fontSize: 10, color: "#2e5468", marginBottom: 6, fontWeight: 700 }}>
-                خطوات الوكيل
-              </div>
+              <div style={{ fontSize: 10, color: "#2e5468", marginBottom: 6, fontWeight: 700 }}>خطوات التنفيذ</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
-                {task.steps.map((s, i) => (
-                  <StepRow key={i} step={s} />
-                ))}
+                {task.steps.map((s, i) => <StepRow key={i} step={s} />)}
                 {task.status !== "done" && task.status !== "error" && (
                   <div style={{ fontSize: 10, color: "#f5a623", padding: "4px 0" }}>
-                    <Spinner /> جارٍ العمل...
+                    <Spinner /> سمعه تعمل على المهمة...
                   </div>
                 )}
               </div>
 
               {Object.keys(task.outputs).length > 0 && (
                 <div style={{ marginTop: 10 }}>
-                  <div
-                    style={{
-                      fontSize: 10,
-                      color: "#2e5468",
-                      marginBottom: 6,
-                      fontWeight: 700,
-                    }}
-                  >
-                    المخرجات
-                  </div>
+                  <div style={{ fontSize: 10, color: "#2e5468", marginBottom: 6, fontWeight: 700 }}>المخرجات</div>
                   <OutputsBlock outputs={task.outputs} />
                 </div>
               )}
 
               {task.summary && (
-                <div
-                  style={{
-                    marginTop: 10,
-                    padding: 10,
-                    background: "rgba(23,163,163,0.08)",
-                    borderRadius: 7,
-                    border: "1px solid rgba(23,163,163,0.3)",
-                    fontSize: 12,
-                    lineHeight: 1.7,
-                    color: "#ddeef4",
-                    whiteSpace: "pre-wrap",
-                  }}
-                >
+                <div style={{
+                  marginTop: 10, padding: 10, background: "rgba(23,163,163,0.08)",
+                  borderRadius: 7, border: "1px solid rgba(23,163,163,0.3)",
+                  fontSize: 12, lineHeight: 1.7, color: "#ddeef4", whiteSpace: "pre-wrap",
+                }}>
                   {task.summary}
                 </div>
               )}
 
               {task.error && (
-                <div
-                  style={{
-                    marginTop: 10,
-                    padding: 8,
-                    background: "rgba(240,112,112,0.08)",
-                    borderRadius: 7,
-                    border: "1px solid rgba(240,112,112,0.3)",
-                    color: "#f07070",
-                    fontSize: 11,
-                  }}
-                >
+                <div style={{
+                  marginTop: 10, padding: 8, background: "rgba(240,112,112,0.08)",
+                  borderRadius: 7, border: "1px solid rgba(240,112,112,0.3)",
+                  color: "#f07070", fontSize: 11,
+                }}>
                   {task.error}
                 </div>
               )}
             </div>
           )}
 
-          {/* Recent tasks list */}
+          {/* ── Recent tasks list ── */}
           {!activeId && (
             <div style={{ flex: 1, overflowY: "auto" }}>
               <div style={{ padding: "8px 14px", fontSize: 10, color: "#2e5468", fontWeight: 700 }}>
@@ -513,36 +496,16 @@ export default function AgentPanel() {
                 <div
                   key={t.id}
                   onClick={() => setActiveId(t.id)}
-                  style={{
-                    padding: "8px 14px",
-                    borderTop: "1px solid rgba(1,53,90,0.4)",
-                    cursor: "pointer",
-                    background: "transparent",
-                  }}
+                  style={{ padding: "8px 14px", borderTop: "1px solid rgba(1,53,90,0.4)", cursor: "pointer", background: "transparent" }}
                   onMouseEnter={(e) => (e.currentTarget.style.background = "#02102a")}
                   onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
                 >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                      marginBottom: 3,
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontSize: 9,
-                        padding: "1px 6px",
-                        borderRadius: 3,
-                        background: `${statusColor[t.status]}22`,
-                        color: statusColor[t.status],
-                        border: `1px solid ${statusColor[t.status]}55`,
-                        fontWeight: 700,
-                      }}
-                    >
-                      {t.status}
-                    </span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                    <span style={{
+                      fontSize: 9, padding: "1px 6px", borderRadius: 3,
+                      background: `${statusColor[t.status]}22`, color: statusColor[t.status],
+                      border: `1px solid ${statusColor[t.status]}55`, fontWeight: 700,
+                    }}>{t.status}</span>
                     <span style={{ fontSize: 9, color: "#2e5468" }}>{t.source}</span>
                     <span style={{ fontSize: 9, color: "#2e5468", marginRight: "auto" }}>
                       {new Date(t.created_at).toLocaleTimeString("ar", { hour12: false })}
@@ -563,33 +526,17 @@ export default function AgentPanel() {
 
 function StepRow({ step }: { step: TaskStep }) {
   const bg = {
-    think: "#02102a",
-    tool_use: "rgba(245,166,35,0.07)",
-    tool_result: "rgba(23,163,163,0.07)",
-    error: "rgba(240,112,112,0.08)",
-    finish: "rgba(93,200,122,0.07)",
+    think: "#02102a", tool_use: "rgba(245,166,35,0.07)",
+    tool_result: "rgba(23,163,163,0.07)", error: "rgba(240,112,112,0.08)", finish: "rgba(93,200,122,0.07)",
   }[step.kind];
   const color = {
-    think: "#aac5d5",
-    tool_use: "#f5a623",
-    tool_result: "#17a3a3",
-    error: "#f07070",
-    finish: "#5dc87a",
+    think: "#aac5d5", tool_use: "#f5a623",
+    tool_result: "#17a3a3", error: "#f07070", finish: "#5dc87a",
   }[step.kind];
   return (
-    <div
-      style={{
-        padding: "6px 8px",
-        background: bg,
-        borderRadius: 5,
-        borderRight: `2px solid ${color}`,
-        fontSize: 10.5,
-        lineHeight: 1.6,
-      }}
-    >
+    <div style={{ padding: "6px 8px", background: bg, borderRadius: 5, borderRight: `2px solid ${color}`, fontSize: 10.5, lineHeight: 1.6 }}>
       <div style={{ fontSize: 9, color, fontWeight: 700, marginBottom: 2 }}>
-        {step.kind}
-        {step.tool ? ` · ${step.tool}` : ""}
+        {step.kind}{step.tool ? ` · ${step.tool}` : ""}
       </div>
       {step.message && (
         <div style={{ color: "#ddeef4", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
@@ -615,31 +562,22 @@ function OutputsBlock({ outputs }: { outputs: Record<string, unknown> }) {
   const add = (label: string, url?: unknown) =>
     typeof url === "string" && url && links.push({ label, url });
   add("Canva", outputs.canva_edit_url);
-  add("Canva View", outputs.canva_view_url);
+  add("Canva (معاينة)", outputs.canva_view_url);
   add("WordPress", outputs.wordpress_edit_url);
-  add("WordPress Preview", outputs.wordpress_preview_url);
+  add("WordPress (معاينة)", outputs.wordpress_preview_url);
   add("HubSpot", outputs.hubspot_edit_url);
-  add("HubSpot Preview", outputs.hubspot_preview_url);
+  add("HubSpot (معاينة)", outputs.hubspot_preview_url);
   add("Drive", outputs.drive_link);
-  add("Nano Banana Image", outputs.nb_image_drive_link);
+  add("Nano Banana — صورة", outputs.nb_image_drive_link);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
       {links.map((l) => (
-        <a
-          key={l.url}
-          href={l.url}
-          target="_blank"
-          rel="noreferrer"
+        <a key={l.url} href={l.url} target="_blank" rel="noreferrer"
           style={{
-            fontSize: 11,
-            color: "#17a3a3",
-            textDecoration: "none",
-            padding: "4px 8px",
-            background: "rgba(23,163,163,0.08)",
-            border: "1px solid rgba(23,163,163,0.25)",
-            borderRadius: 5,
-            direction: "ltr",
-            textAlign: "left",
+            fontSize: 11, color: "#17a3a3", textDecoration: "none",
+            padding: "4px 8px", background: "rgba(23,163,163,0.08)",
+            border: "1px solid rgba(23,163,163,0.25)", borderRadius: 5,
+            direction: "ltr", textAlign: "left",
           }}
         >
           {l.label} ↗
@@ -647,7 +585,7 @@ function OutputsBlock({ outputs }: { outputs: Record<string, unknown> }) {
       ))}
       {Array.isArray(outputs.svgs) && (outputs.svgs as unknown[]).length > 0 && (
         <div style={{ fontSize: 10, color: "#6a96aa" }}>
-          SVGs generated: {(outputs.svgs as unknown[]).length}
+          SVGs: {(outputs.svgs as unknown[]).length}
         </div>
       )}
     </div>
@@ -656,19 +594,11 @@ function OutputsBlock({ outputs }: { outputs: Record<string, unknown> }) {
 
 function Spinner() {
   return (
-    <span
-      style={{
-        display: "inline-block",
-        width: 8,
-        height: 8,
-        borderRadius: "50%",
-        border: "1.5px solid rgba(245,166,35,0.3)",
-        borderTopColor: "#f5a623",
-        animation: "qspin 0.7s linear infinite",
-        verticalAlign: "-1px",
-        marginLeft: 4,
-      }}
-    />
+    <span style={{
+      display: "inline-block", width: 8, height: 8, borderRadius: "50%",
+      border: "1.5px solid rgba(245,166,35,0.3)", borderTopColor: "#f5a623",
+      animation: "qspin 0.7s linear infinite", verticalAlign: "-1px", marginLeft: 4,
+    }} />
   );
 }
 
