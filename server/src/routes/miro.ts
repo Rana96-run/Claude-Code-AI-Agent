@@ -645,6 +645,84 @@ async function drawDesignerPipeline(token: string, boardId: string) {
   await connect("s_typo",   "s_out",    TEAL);
 }
 
+/* Delete only the designer pipeline diagram (items in its drawn region OR
+   whose content matches a known pipeline label). Leaves everything else
+   on the board untouched. */
+async function cleanupDesignerPipeline(token: string, boardId: string): Promise<number> {
+  const hdrs = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+
+  // Region we drew into (matches drawDesignerPipeline geometry — see above).
+  const REGION = { xMin: 1400, xMax: 3500, yMin: -2200, yMax: -1100 };
+  const PIPELINE_LABELS = new Set([
+    "Qoyod Designer Pipeline",
+    "1 · BRIEF", "2 · CLAUDE", "3 · AI IMAGE", "4 · TYPOGRAPHY", "5 · OUTPUT",
+    "Brief Inputs", "Claude — Brain", "AI Image — Painter", "Compositor — Layout", "Final Design",
+    "Product / Message", "Channel & Ratio", "Image Provider",
+    "Arabic Copy", "Scene Prompt (EN)", "Headline Pattern",
+    "GPT-Image-1", "Nano Banana", "No Text in Image",
+    "Brand Mark", "Headline + Hook", "ZATCA + CTA",
+    "PNG / JPG", "Save to Drive", "Open in Canva",
+    "Reference scene-prompt style",
+  ]);
+
+  let cursor: string | undefined;
+  let deleted = 0;
+  do {
+    const url = cursor
+      ? `${MIRO_API}/boards/${boardId}/items?limit=50&cursor=${cursor}`
+      : `${MIRO_API}/boards/${boardId}/items?limit=50`;
+    const r = await fetch(url, { headers: hdrs });
+    if (!r.ok) break;
+    const data = (await r.json()) as {
+      data?: Array<{
+        id: string;
+        type?: string;
+        position?: { x?: number; y?: number };
+        data?: { content?: string };
+      }>;
+      cursor?: string;
+    };
+    const items = data.data ?? [];
+    for (const item of items) {
+      const x = item.position?.x ?? 0;
+      const y = item.position?.y ?? 0;
+      const inRegion =
+        x >= REGION.xMin && x <= REGION.xMax &&
+        y >= REGION.yMin && y <= REGION.yMax;
+      const labelHit = !!Array.from(PIPELINE_LABELS).find((l) =>
+        (item.data?.content ?? "").includes(l),
+      );
+      if (inRegion || labelHit) {
+        await fetch(`${MIRO_API}/boards/${boardId}/items/${item.id}`, {
+          method: "DELETE",
+          headers: hdrs,
+        }).catch(() => {});
+        deleted++;
+      }
+    }
+    cursor = data.cursor;
+  } while (cursor);
+  return deleted;
+}
+
+/* POST /api/miro/cleanup-designer-pipeline — removes ONLY the pipeline
+   diagram (by region + content match), leaving the rest of the board
+   untouched. */
+router.post("/cleanup-designer-pipeline", async (req, res) => {
+  if (!miroToken) return res.status(401).json({ error: "Not connected to Miro" });
+  const boardId =
+    (req.body as { board_id?: string }).board_id ??
+    process.env.MIRO_BOARD_ID;
+  if (!boardId) return res.status(400).json({ error: "board_id required" });
+  try {
+    const count = await cleanupDesignerPipeline(miroToken.access_token, boardId);
+    res.json({ ok: true, deleted: count, view_link: `https://miro.com/app/board/${boardId}/` });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    res.status(500).json({ error: msg });
+  }
+});
+
 /* POST /api/miro/draw-designer-pipeline — adds the 5-step designer flow
    to an existing board. Pass { board_id } in body or set MIRO_BOARD_ID. */
 router.post("/draw-designer-pipeline", async (req, res) => {
