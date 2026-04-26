@@ -10,6 +10,7 @@
 import satori from "satori";
 import { Resvg } from "@resvg/resvg-js";
 import { logger } from "./logger.js";
+import { getBrandLogoDataUrlSync } from "./brand-assets.js";
 
 /* ── Font loader (cached at module level) ──────────────────────── */
 
@@ -339,6 +340,84 @@ function buildVdom(
           justifyContent: "center",
         };
 
+  /* If the official logo PNG is loaded, use it as a real image — otherwise
+     fall back to the typographic mark "قيود". */
+  const logoDataUrl = getBrandLogoDataUrlSync();
+  const logoBlock = logoDataUrl
+    ? {
+        type: "div",
+        props: {
+          style: {
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "flex-end",
+            marginBottom: 18,
+          },
+          children: [
+            {
+              type: "img",
+              props: {
+                src: logoDataUrl,
+                style: {
+                  width: ratio === "9:16" ? 180 : ratio === "16:9" ? 150 : 160,
+                  height: "auto",
+                  objectFit: "contain",
+                },
+              },
+            },
+            {
+              type: "div",
+              props: {
+                style: {
+                  fontSize: 16,
+                  color: scheme.body,
+                  opacity: 0.7,
+                  marginTop: 8,
+                },
+                children: rtl(copy.tagline || "محاسبة سحابية"),
+              },
+            },
+          ],
+        },
+      }
+    : {
+        type: "div",
+        props: {
+          style: {
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "flex-end",
+            marginBottom: 18,
+          },
+          children: [
+            {
+              type: "div",
+              props: {
+                style: {
+                  fontSize: brandSize,
+                  fontWeight: 700,
+                  color: scheme.accent,
+                  lineHeight: 1,
+                },
+                children: rtl("قيود"),
+              },
+            },
+            {
+              type: "div",
+              props: {
+                style: {
+                  fontSize: 18,
+                  color: scheme.body,
+                  opacity: 0.85,
+                  marginTop: 6,
+                },
+                children: rtl(copy.tagline || "محاسبة سحابية"),
+              },
+            },
+          ],
+        },
+      };
+
   const textOverlay = {
     type: "div",
     props: {
@@ -349,44 +428,8 @@ function buildVdom(
         ...textContainerStyle,
       },
       children: [
-        // Brand mark "قيود" + tagline (top of text block)
-        {
-          type: "div",
-          props: {
-            style: {
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "flex-end",
-              marginBottom: 18,
-            },
-            children: [
-              {
-                type: "div",
-                props: {
-                  style: {
-                    fontSize: brandSize,
-                    fontWeight: 700,
-                    color: scheme.accent,
-                    lineHeight: 1,
-                  },
-                  children: rtl("قيود"),
-                },
-              },
-              {
-                type: "div",
-                props: {
-                  style: {
-                    fontSize: 18,
-                    color: scheme.body,
-                    opacity: 0.85,
-                    marginTop: 6,
-                  },
-                  children: rtl(copy.tagline || "محاسبة سحابية"),
-                },
-              },
-            ],
-          },
-        },
+        // Brand mark — official PNG when loaded, typographic fallback otherwise
+        logoBlock,
         // Headline
         {
           type: "div",

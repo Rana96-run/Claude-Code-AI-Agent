@@ -645,6 +645,8 @@ export default function CreativeOS(){
   const[bPlaces,setBPlaces]=useState(["1:1","4:5","9:16"]);
   const[bStyle,setBStyle]=useState("device_dashboard");
   const[bTrust,setBTrust]=useState("ZATCA Logo");
+  const[bPersona,setBPersona]=useState("");
+  const[bSector,setBSector]=useState("");
   const[bRes,setBRes]=useState(null);
   const[bLd,setBLd]=useState(false);
   const[bErr,setBErr]=useState("");
@@ -914,6 +916,8 @@ export default function CreativeOS(){
           color_scheme:scheme,
           variant:variantNum,
           image_provider:imageProvider,
+          persona:bPersona,
+          sector:bSector,
         }),
       });
       const json=await r.json();
@@ -926,7 +930,7 @@ export default function CreativeOS(){
     }finally{
       setDesignLds(p=>({...p,[variantNum]:false}));
     }
-  },[bRes,bProd,bMsg,bHook,bCta,bTrust,bPlaces,imageProvider]);
+  },[bRes,bProd,bMsg,bHook,bCta,bTrust,bPlaces,imageProvider,bPersona,bSector]);
 
   const genDirectDesigns=useCallback(async()=>{
     if(!bMsg){setBErr(T("اكتب الرسالة الرئيسية أولاً","Enter the main message first"));return;}
@@ -1778,6 +1782,31 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
                 <div style={row2}>
                   <Fld label={T("المنتج / الخدمة / العرض","Product / Service / Offer")}><GroupedProductChips selected={bProd} onSelect={setBProd} lang={lang} extras={bProdExtras} onToggleExtra={v=>toggleExtra(v,setBProdExtras)}/></Fld>
                   <Fld label={T("عنصر الثقة","Trust")}><div style={{display:"flex",flexWrap:"wrap",gap:4}}>{[["ZATCA Logo","ZATCA"],["Approved","معتمد"],["25K Companies","25K"],["SOCPA","SOCPA"]].map(([v,l])=><Seg key={v} ch={l} on={bTrust===v} onClick={()=>setBTrust(v)}/>)}</div></Fld>
+                </div>
+                <div style={row2}>
+                  <Fld label={T("الشريحة المستهدفة","Target Persona")}>
+                    <select value={bPersona} onChange={e=>setBPersona(e.target.value)}>
+                      <option value="">{T("— تلقائي —","— Auto —")}</option>
+                      <option value="P1">P1 · Ahmed — صاحب بقالة / محل صغير</option>
+                      <option value="P2">P2 · Fatima — مديرة مطعم / كوفي</option>
+                      <option value="P3">P3 · Khalid — مقاول / مشاريع</option>
+                      <option value="P4">P4 · Sarah — مؤسسة متجر إلكتروني</option>
+                      <option value="P5">P5 · Omar — طبيب / عيادة</option>
+                      <option value="P6">P6 · Ali — CFO / Finance Director</option>
+                    </select>
+                  </Fld>
+                  <Fld label={T("القطاع","Sector")}>
+                    <select value={bSector} onChange={e=>setBSector(e.target.value)}>
+                      <option value="">{T("— تلقائي —","— Auto —")}</option>
+                      <option value="retail">{T("التجزئة","Retail")}</option>
+                      <option value="f&b">{T("المطاعم والكافيهات","F&B")}</option>
+                      <option value="construction">{T("المقاولات","Construction")}</option>
+                      <option value="e-commerce">{T("التجارة الإلكترونية","E-commerce")}</option>
+                      <option value="healthcare">{T("الصحة","Healthcare")}</option>
+                      <option value="enterprise">{T("شركات كبيرة / مؤسسات","Enterprise / Finance")}</option>
+                      <option value="bookkeeping">{T("مسك الدفاتر","Bookkeeping Service")}</option>
+                    </select>
+                  </Fld>
                 </div>
                 <Fld label={T("الرسالة الرئيسية","Main Message")}><input value={bMsg} onChange={e=>setBMsg(e.target.value)} placeholder={T("مثال: فواتير إلكترونية معتمدة","e.g. certified invoices")}/></Fld>
                 <div style={row2}>
