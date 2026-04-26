@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "start": "npx serve dist -s -l ${PORT:-3000}"
   },
   "dependencies": {
     "react": "^18.3.1",
