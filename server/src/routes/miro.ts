@@ -488,4 +488,178 @@ async function drawAgentFlow(token: string, boardId: string) {
   await connect("act_intel",    "out_memory", INDIGO);
 }
 
+/* ── Designer Pipeline — 5-step diagram of the AI graphic-designer flow ──
+   Reflects the actual production architecture:
+     1. Brief inputs
+     2. Claude (loaded with Playbook + Ads Guideline + Headline patterns)
+        → outputs Arabic copy + scene-only English image prompt
+     3. AI image model (GPT-Image-1 / Nano Banana) → paints scene only
+     4. Satori typography compositor (Lama Sans → IBM Plex fallback)
+        → composites brand mark, ZATCA badge, CTA, qoyod.com on top
+     5. Outputs (PNG / JPG / Drive / Open in Canva) */
+async function drawDesignerPipeline(token: string, boardId: string) {
+  const BASE = `${MIRO_API}/boards/${boardId}`;
+  const hdrs = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+  const post = async (path: string, body: object) => {
+    const r = await fetch(`${BASE}${path}`, { method: "POST", headers: hdrs, body: JSON.stringify(body) });
+    const d = (await r.json()) as { message?: string; description?: string; id?: string };
+    if (!r.ok) throw new Error(`${path}: ${d.message || d.description || JSON.stringify(d)}`);
+    return d as { id: string };
+  };
+
+  const NAVY = "#021544", TEAL = "#17A3A4", CYAN = "#1FCACB";
+  const GOLD = "#F5A623", GREEN = "#22C55E", PURPLE = "#7D2AE8";
+  const DARK = "#0f2744", WHITE = "#FFFFFF";
+
+  /* Layout — five columns left to right (Brief → Claude → AI Image → Compositor → Outputs)
+     Painted into a fresh region so it doesn't overlap any existing diagrams. */
+  const STEP_W = 280, STEP_H = 100, GAP_X = 110;
+  const COLS = 5;
+  const TOTAL_W = COLS * STEP_W + (COLS - 1) * GAP_X;
+  const X0 = 1500;            // sit to the right of any existing content
+  const Y_TITLE = -2000;
+  const Y_HEADER = Y_TITLE + 120;
+  const Y_STEP = Y_HEADER + 110;
+  const Y_DETAIL_START = Y_STEP + STEP_H + 40;
+  const cx = (col: number) => X0 + col * (STEP_W + GAP_X) + STEP_W / 2;
+  const lx = (col: number) => X0 + col * (STEP_W + GAP_X);
+
+  type Node = { id: string; x: number; y: number; w: number; h: number; label: string; sub?: string; fill: string; text: string; shape: "rectangle" | "round_rectangle"; font: string };
+  const nodes: Node[] = [];
+
+  /* Title banner */
+  nodes.push({
+    id: "dp_title", x: X0, y: Y_TITLE, w: TOTAL_W, h: 80,
+    label: "Qoyod Designer Pipeline",
+    sub: "AI Graphic Designer  ·  Hybrid AI scene + typography composition",
+    fill: NAVY, text: WHITE, shape: "rectangle", font: "20",
+  });
+
+  /* Column headers */
+  const headers = [
+    { id: "h_brief", label: "1 · BRIEF", fill: DARK },
+    { id: "h_claude", label: "2 · CLAUDE", fill: GOLD },
+    { id: "h_ai", label: "3 · AI IMAGE", fill: PURPLE },
+    { id: "h_typo", label: "4 · TYPOGRAPHY", fill: TEAL },
+    { id: "h_out", label: "5 · OUTPUT", fill: GREEN },
+  ];
+  headers.forEach((h, c) => {
+    nodes.push({
+      id: h.id, x: lx(c), y: Y_HEADER, w: STEP_W, h: 60,
+      label: h.label, fill: h.fill, text: WHITE, shape: "rectangle", font: "16",
+    });
+  });
+
+  /* Main step cards */
+  const steps: Array<{id: string; title: string; sub: string; col: number; fill: string}> = [
+    { id: "s_brief",  title: "Brief Inputs",          sub: "product · message · hook · ratio · channel · scheme · provider", col: 0, fill: DARK },
+    { id: "s_claude", title: "Claude — Brain",        sub: "loaded with Playbook + Ads Guideline + Headline Patterns",       col: 1, fill: GOLD },
+    { id: "s_ai",     title: "AI Image — Painter",    sub: "GPT-Image-1 (default) · Nano Banana (alt) · scene only",         col: 2, fill: PURPLE },
+    { id: "s_typo",   title: "Compositor — Layout",   sub: "Satori + Lama Sans  ·  brand · ZATCA · CTA · qoyod.com",         col: 3, fill: TEAL },
+    { id: "s_out",    title: "Final Design",          sub: "PNG / JPG / Drive / Open in Canva",                              col: 4, fill: GREEN },
+  ];
+  steps.forEach((s) => {
+    nodes.push({
+      id: s.id, x: lx(s.col), y: Y_STEP, w: STEP_W, h: STEP_H,
+      label: s.title, sub: s.sub, fill: s.fill, text: WHITE,
+      shape: "round_rectangle", font: "15",
+    });
+  });
+
+  /* Detail cards under each step (3 per step, stacked) */
+  const details: Array<{id: string; col: number; row: number; label: string; sub: string; fill: string}> = [
+    /* Brief details */
+    { id: "d_brief_1", col: 0, row: 0, label: "Product / Message", sub: "what & for whom", fill: DARK },
+    { id: "d_brief_2", col: 0, row: 1, label: "Channel & Ratio",   sub: "1:1 · 4:5 · 9:16 · 16:9", fill: DARK },
+    { id: "d_brief_3", col: 0, row: 2, label: "Image Provider",    sub: "auto · Nano Banana · GPT-Image", fill: DARK },
+
+    /* Claude details */
+    { id: "d_claude_1", col: 1, row: 0, label: "Arabic Copy",        sub: "headline 5-7 words · hook · CTA · trust · tagline", fill: GOLD },
+    { id: "d_claude_2", col: 1, row: 1, label: "Scene Prompt (EN)",  sub: "250-400 words · lens · light · hex · NO text",      fill: GOLD },
+    { id: "d_claude_3", col: 1, row: 2, label: "Headline Pattern",   sub: "question · command · outcome · sector formula",      fill: GOLD },
+
+    /* AI image details */
+    { id: "d_ai_1", col: 2, row: 0, label: "GPT-Image-1",     sub: "editorial · product UI · sharp", fill: PURPLE },
+    { id: "d_ai_2", col: 2, row: 1, label: "Nano Banana",     sub: "cinematic · volumetric · atmospheric", fill: PURPLE },
+    { id: "d_ai_3", col: 2, row: 2, label: "No Text in Image",sub: "leaves clean space for typography", fill: PURPLE },
+
+    /* Typography compositor details */
+    { id: "d_typo_1", col: 3, row: 0, label: "Brand Mark",      sub: "قيود + QOYOD bilingual · cyan #17A3A4", fill: TEAL },
+    { id: "d_typo_2", col: 3, row: 1, label: "Headline + Hook", sub: "Lama Sans · RTL · drop-shadow", fill: TEAL },
+    { id: "d_typo_3", col: 3, row: 2, label: "ZATCA + CTA",     sub: "هيئة الزكاة والضريبة  ·  اشترك الآن", fill: TEAL },
+
+    /* Output details */
+    { id: "d_out_1", col: 4, row: 0, label: "PNG / JPG",     sub: "1080×1080 · 1080×1350 · 1080×1920 · 1920×1080", fill: GREEN },
+    { id: "d_out_2", col: 4, row: 1, label: "Save to Drive", sub: "auto-organized in Creative OS folder", fill: GREEN },
+    { id: "d_out_3", col: 4, row: 2, label: "Open in Canva", sub: "deep-link · no OAuth · drag-in flow", fill: GREEN },
+  ];
+  const DETAIL_H = 70, DETAIL_GAP = 14;
+  details.forEach((d) => {
+    nodes.push({
+      id: d.id, x: lx(d.col), y: Y_DETAIL_START + d.row * (DETAIL_H + DETAIL_GAP), w: STEP_W, h: DETAIL_H,
+      label: d.label, sub: d.sub, fill: d.fill, text: WHITE,
+      shape: "round_rectangle", font: "12",
+    });
+  });
+
+  /* Reference example footer — the macro phone prompt that sets the bar */
+  nodes.push({
+    id: "ref_example", x: X0, y: Y_DETAIL_START + 3 * (DETAIL_H + DETAIL_GAP) + 30, w: TOTAL_W, h: 100,
+    label: "Reference scene-prompt style",
+    sub: "Editorial product photography · Canon 50mm f/2.0 · navy #021544 + cyan #17A3A4 rim light · empty right side for typography · no text in image",
+    fill: NAVY, text: CYAN, shape: "round_rectangle", font: "12",
+  });
+
+  const idMap: Record<string, string> = {};
+  for (const n of nodes) {
+    const item = await post("/shapes", {
+      data: {
+        shape: n.shape,
+        content: `<p style="text-align:center"><strong>${n.label}</strong>${
+          n.sub ? `<br><span style="font-size:11px;opacity:0.85">${n.sub}</span>` : ""
+        }</p>`,
+      },
+      style: {
+        fillColor: n.fill, color: n.text, borderColor: n.fill,
+        borderWidth: n.shape === "rectangle" ? "3" : "2",
+        fontSize: n.font,
+      },
+      geometry: { width: n.w, height: n.h },
+      position: { x: n.x, y: n.y },
+    });
+    idMap[n.id] = item.id;
+  }
+
+  /* Connectors — horizontal flow between the 5 main steps */
+  const connect = async (a: string, b: string, color = TEAL) => {
+    if (!idMap[a] || !idMap[b]) return;
+    await post("/connectors", {
+      startItem: { id: idMap[a] },
+      endItem: { id: idMap[b] },
+      style: { strokeColor: color, strokeWidth: "3", startStrokeCap: "none", endStrokeCap: "arrow" },
+    }).catch(() => {});
+  };
+  await connect("s_brief",  "s_claude", TEAL);
+  await connect("s_claude", "s_ai",     GOLD);
+  await connect("s_ai",     "s_typo",   PURPLE);
+  await connect("s_typo",   "s_out",    TEAL);
+}
+
+/* POST /api/miro/draw-designer-pipeline — adds the 5-step designer flow
+   to an existing board. Pass { board_id } in body or set MIRO_BOARD_ID. */
+router.post("/draw-designer-pipeline", async (req, res) => {
+  if (!miroToken) return res.status(401).json({ error: "Not connected to Miro" });
+  const boardId =
+    (req.body as { board_id?: string }).board_id ??
+    process.env.MIRO_BOARD_ID;
+  if (!boardId) return res.status(400).json({ error: "board_id required" });
+  try {
+    await drawDesignerPipeline(miroToken.access_token, boardId);
+    res.json({ ok: true, view_link: `https://miro.com/app/board/${boardId}/` });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    res.status(500).json({ error: msg });
+  }
+});
+
 export default router;
