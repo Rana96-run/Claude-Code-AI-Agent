@@ -1467,7 +1467,8 @@ router.post("/webhook", async (req, res) => {
          rss_competitor     → social_media     (competitor analysis)
          google_review      → pr_comms         (review response)
          typeform_brief     → orchestrator     (content brief)
-         youtube_published  → social_media     (repurpose to social)
+         youtube_published      → social_media  (repurpose to social)
+         social_media_published → social_media  (cross-platform repurpose)
     */
     const zap = p.zap_type ?? "generic";
     const personaMap: Record<string, string> = {
@@ -1477,10 +1478,11 @@ router.post("/webhook", async (req, res) => {
       sheets_brief:      "orchestrator",
       calendly_booking:  "content_creator",
       linkedin_lead:     "email_lifecycle",
-      rss_competitor:    "social_media",
-      google_review:     "pr_comms",
-      typeform_brief:    "orchestrator",
-      youtube_published: "social_media",
+      rss_competitor:        "social_media",
+      google_review:         "pr_comms",
+      typeform_brief:        "orchestrator",
+      youtube_published:     "social_media",
+      social_media_published:"social_media",
     };
     const titleMap: Record<string, string> = {
       hs_new_lead:       `New lead: ${p.contact_name ?? p.email ?? "unknown"}`,
@@ -1491,8 +1493,9 @@ router.post("/webhook", async (req, res) => {
       linkedin_lead:     `LinkedIn lead: ${p.first_name ?? ""} ${p.last_name ?? ""}`,
       rss_competitor:    `Competitor post: ${p.title ?? p.feed_title ?? ""}`,
       google_review:     `New review (${p.rating ?? "?"}★): ${p.reviewer_name ?? ""}`,
-      typeform_brief:    `Brief: ${p.title ?? p.form_name ?? ""}`,
-      youtube_published: `New video: ${p.video_title ?? ""}`,
+      typeform_brief:         `Brief: ${p.title ?? p.form_name ?? ""}`,
+      youtube_published:      `New video: ${p.video_title ?? ""}`,
+      social_media_published: `Social post published: ${p.post_title ?? p.title ?? ""}`,
     };
     const bodyParts = Object.entries(p)
       .filter(([k]) => !["_zapier","zap_type"].includes(k))
