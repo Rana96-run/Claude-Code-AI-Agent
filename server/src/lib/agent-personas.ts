@@ -17,7 +17,6 @@ export type PersonaId =
   | "content_creator"
   | "cro"
   | "email_lifecycle"
-  | "pr_comms"
   | "editor_qa"
   | "orchestrator"; // the default — has access to everything, picks on its own
 
@@ -169,9 +168,9 @@ export const PERSONAS: Record<PersonaId, PersonaDef> = {
 
   email_lifecycle: {
     id: "email_lifecycle",
-    label: "مسوّق البريد",
+    label: "إيميل & سيكونس",
     label_en: "Email / Lifecycle Marketer",
-    tagline: "welcome + nurture + winback sequences",
+    tagline: "welcome · nurture · winback",
     tools: [
       "build_email_sequence",
       "generate_content",
@@ -190,26 +189,6 @@ export const PERSONAS: Record<PersonaId, PersonaDef> = {
     match: ["email", "ايميل", "بريد", "nurture", "drip", "sequence", "سلسلة"],
   },
 
-  pr_comms: {
-    id: "pr_comms",
-    label: "PR / اتصالات",
-    label_en: "PR & Comms",
-    tagline: "press releases · partnership announcements",
-    tools: [
-      "build_press_release",
-      "generate_content",
-      "review_copy",
-      "translate_copy",
-      "save_to_drive",
-    ],
-    prompt: `ROLE: PR & Comms. Write for Saudi tech press (Arabian Business AR, Asharq Business, Argaam).
-- Bilingual by default (ar + en side by side).
-- Lead with news value, not the brand. Embargo line at top when requested.
-- Include boilerplate: "قيود منصة محاسبة سحابية سعودية معتمدة من ZATCA (المرحلة 2)، تخدم أكثر من 25,000 شركة…"
-`,
-    match: ["pr", "press", "بيان صحفي", "إعلام", "partnership", "شراكة", "launch", "إطلاق"],
-  },
-
   editor_qa: {
     id: "editor_qa",
     label: "محرر / جودة",
@@ -226,9 +205,9 @@ export const PERSONAS: Record<PersonaId, PersonaDef> = {
 
   orchestrator: {
     id: "orchestrator",
-    label: "الوكيل العام",
+    label: "كل الأدوات",
     label_en: "Orchestrator",
-    tagline: "full toolbox — multi-step work",
+    tagline: "كل شي في مهمة وحدة",
     tools: [], // empty = all tools
     prompt: `ROLE: Creative Orchestrator. You have access to every tool and can coordinate a multi-specialist workflow in a single task.
 - For complex requests, first call brief_to_spec, then execute specialist tools in sequence.

@@ -297,7 +297,7 @@ export default function AgentPanel() {
                 }}>AI</span>
               </div>
               <div style={{ fontSize: 10, color: "#6a96aa", marginTop: 2 }}>
-                مساعدك التسويقي الذكي · يعمل تلقائياً أو عند التكليف المباشر
+                تشتغل بنفسها أو بأمر منك — تسويق ذكي 24/7
               </div>
             </div>
             <button
@@ -352,7 +352,7 @@ export default function AgentPanel() {
                   style={{ ...inputS, cursor: "pointer" }}
                   title="حدّد دور سمعه — أو اتركه فارغاً ليختار تلقائياً"
                 >
-                  <option value="">— اختر الدور أو اتركه تلقائياً —</option>
+                  <option value="">— خلّها تختار أو حدّد دور —</option>
                   {personas.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.label} · {p.tagline}

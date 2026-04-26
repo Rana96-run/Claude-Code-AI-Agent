@@ -1518,6 +1518,9 @@ router.post("/webhook", async (req, res) => {
       body: JSON.stringify(e),
       context: { portalId: e.portalId, objectId: e.objectId, event_type: e.subscriptionType },
     };
+  } else if (Array.isArray(p.events) && p.events.length === 0) {
+    /* Asana keep-alive ping — empty events[], nothing to process */
+    return res.status(200).json({ ok: true, ignored: "empty_events" });
   } else if (Array.isArray(p.events) && p.events.length > 0) {
     /* Asana webhook — events[] with per-event resource.
        We pick the first task-related event; dedup handles burst bodies. */

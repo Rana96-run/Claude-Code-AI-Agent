@@ -137,6 +137,22 @@ router.post("/update-board", async (req, res) => {
   }
 });
 
+/* Draw سمعه agent-specific workflow onto an existing board */
+router.post("/draw-agent-flow", async (req, res) => {
+  if (!miroToken) return res.status(401).json({ error: "Not connected to Miro" });
+  const boardId =
+    (req.body as { board_id?: string }).board_id ??
+    process.env.MIRO_BOARD_ID;
+  if (!boardId) return res.status(400).json({ error: "board_id required or set MIRO_BOARD_ID" });
+  try {
+    await drawAgentFlow(miroToken.access_token, boardId);
+    res.json({ ok: true, view_link: `https://miro.com/app/board/${boardId}/` });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    res.status(500).json({ error: msg });
+  }
+});
+
 async function drawWorkflow(token: string, boardId: string) {
   const BASE = `${MIRO_API}/boards/${boardId}`;
   const hdrs = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
@@ -252,6 +268,110 @@ async function drawWorkflow(token: string, boardId: string) {
         startStrokeCap: "none",
         endStrokeCap: "arrow",
       },
+    }).catch(() => {});
+  }
+}
+
+async function drawAgentFlow(token: string, boardId: string) {
+  const BASE = `${MIRO_API}/boards/${boardId}`;
+  const hdrs = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+  const post = async (path: string, body: object) => {
+    const r = await fetch(`${BASE}${path}`, {
+      method: "POST",
+      headers: hdrs,
+      body: JSON.stringify(body),
+    });
+    const d = (await r.json()) as { message?: string; description?: string; id?: string };
+    if (!r.ok) throw new Error(`${path}: ${d.message || d.description || JSON.stringify(d)}`);
+    return d as { id: string };
+  };
+
+  const NAVY = "#021544", TEAL = "#17A3A4", GOLD = "#F5A623",
+    GREEN = "#22C55E", PURPLE = "#7D2AE8", ORANGE = "#ff7a59",
+    DARK = "#0f2744", WHITE = "#FFFFFF", RED = "#ef4444";
+
+  /* ── Layout constants ── */
+  const BW = 1400;          // banner width
+  const COL = 5;            // trigger columns
+  const TW = 220, TH = 65;  // trigger box size
+  const PW = 160, PH = 60;  // persona box
+  const OW = 160, OH = 60;  // output box
+
+  const TY = 100, CY = 250, PY = 410, TOOLY = 560, OUTY = 720;
+  const tXs = [-440, -220, 0, 220, 440];   // 5 trigger x positions
+  const pXs = [-480, -300, -120, 60, 240, 420]; // 6 persona x positions
+  const oXs = [-490, -310, -130, 50, 230, 410, 590]; // 7 output x positions
+
+  type Node = { id: string; x: number; y: number; w: number; h: number; label: string; fill: string; text: string; shape?: string };
+  const nodes: Node[] = [
+    /* Title banner */
+    { id: "title", x: 0, y: 0, w: BW, h: 70, label: "سمعه — وكيل التسويق الذكي | كيف تشتغل؟", fill: NAVY, text: WHITE, shape: "rectangle" },
+
+    /* Trigger row */
+    { id: "t1", x: tXs[0], y: TY, w: TW, h: TH, label: "UI يدوي\nشغّل سمعه", fill: DARK, text: WHITE },
+    { id: "t2", x: tXs[1], y: TY, w: TW, h: TH, label: "Webhook\nAsana / HubSpot", fill: DARK, text: WHITE },
+    { id: "t3", x: tXs[2], y: TY, w: TW, h: TH, label: "Zapier\nأتمتة خارجية", fill: DARK, text: WHITE },
+    { id: "t4", x: tXs[3], y: TY, w: TW, h: TH, label: "Slack @mention\nتكليف مباشر", fill: DARK, text: WHITE },
+    { id: "t5", x: tXs[4], y: TY, w: TW, h: TH, label: "Scheduled\nمواعيد تلقائية", fill: DARK, text: WHITE },
+
+    /* Core processing */
+    { id: "core", x: 0, y: CY, w: BW, h: 70, label: "سمعه Core · Claude Sonnet 4.5 | اختيار شخصية → dedup → ذاكرة → cache الأدوات", fill: GOLD, text: NAVY, shape: "rectangle" },
+
+    /* Personas */
+    { id: "p1", x: pXs[0], y: PY, w: PW, h: PH, label: "مصمم جرافيك\nSVG · Canva · صور", fill: TEAL, text: WHITE },
+    { id: "p2", x: pXs[1], y: PY, w: PW, h: PH, label: "متخصص السوشيال\nمحتوى + تحليل", fill: TEAL, text: WHITE },
+    { id: "p3", x: pXs[2], y: PY, w: PW, h: PH, label: "كاتب محتوى\nكوبي · مدونة · RSA", fill: TEAL, text: WHITE },
+    { id: "p4", x: pXs[3], y: PY, w: PW, h: PH, label: "أخصائي CRO\nلاندنج · A/B · SEO", fill: TEAL, text: WHITE },
+    { id: "p5", x: pXs[4], y: PY, w: PW, h: PH, label: "إيميل & سيكونس\nwelcome · nurture", fill: TEAL, text: WHITE },
+    { id: "p6", x: pXs[5], y: PY, w: PW, h: PH, label: "كل الأدوات\nمهام متعددة", fill: PURPLE, text: WHITE },
+
+    /* Tools summary row */
+    { id: "tools", x: 0, y: TOOLY, w: BW, h: 70, label: "20+ أداة | SVG · صور AI · محتوى · إيميلات · لاندنج · خطط حملات · SEO · A/B · هاشتاقات · مراجعة...", fill: DARK, text: TEAL, shape: "rectangle" },
+
+    /* Outputs */
+    { id: "o1", x: oXs[0], y: OUTY, w: OW, h: OH, label: "Canva\nتصميم جاهز", fill: PURPLE, text: WHITE },
+    { id: "o2", x: oXs[1], y: OUTY, w: OW, h: OH, label: "Google Drive\nملفات + SVG", fill: GREEN, text: WHITE },
+    { id: "o3", x: oXs[2], y: OUTY, w: OW, h: OH, label: "WordPress\nمسودة نشر", fill: "#21759b", text: WHITE },
+    { id: "o4", x: oXs[3], y: OUTY, w: OW, h: OH, label: "HubSpot\nصفحة / بريد", fill: ORANGE, text: WHITE },
+    { id: "o5", x: oXs[4], y: OUTY, w: OW, h: OH, label: "Miro Board\nخريطة ومسار", fill: "#FFD02F", text: NAVY },
+    { id: "o6", x: oXs[5], y: OUTY, w: OW, h: OH, label: "Slack\nرد تلقائي", fill: "#4A154B", text: WHITE },
+    { id: "o7", x: oXs[6], y: OUTY, w: OW, h: OH, label: "Asana Task\nمهمة متابعة", fill: RED, text: WHITE },
+  ];
+
+  const idMap: Record<string, string> = {};
+  for (const n of nodes) {
+    const isBanner = n.shape === "rectangle";
+    const item = await post("/shapes", {
+      data: {
+        shape: isBanner ? "rectangle" : "round_rectangle",
+        content: `<p style="text-align:center"><strong>${n.label.replace(/\n/g, "</strong><br><strong>")}</strong></p>`,
+      },
+      style: {
+        fillColor: n.fill,
+        color: n.text,
+        borderColor: n.fill,
+        borderWidth: "2",
+        fontSize: isBanner ? "15" : "12",
+      },
+      geometry: { width: n.w, height: n.h },
+      position: { x: n.x, y: n.y },
+    });
+    idMap[n.id] = item.id;
+  }
+
+  /* Connectors */
+  const conns: [string, string][] = [
+    ["t1","core"],["t2","core"],["t3","core"],["t4","core"],["t5","core"],
+    ["core","p1"],["core","p2"],["core","p3"],["core","p4"],["core","p5"],["core","p6"],
+    ["p1","tools"],["p2","tools"],["p3","tools"],["p4","tools"],["p5","tools"],["p6","tools"],
+    ["tools","o1"],["tools","o2"],["tools","o3"],["tools","o4"],["tools","o5"],["tools","o6"],["tools","o7"],
+  ];
+  for (const [from, to] of conns) {
+    if (!idMap[from] || !idMap[to]) continue;
+    await post("/connectors", {
+      startItem: { id: idMap[from] },
+      endItem: { id: idMap[to] },
+      style: { strokeColor: TEAL, strokeWidth: "2", startStrokeCap: "none", endStrokeCap: "arrow" },
     }).catch(() => {});
   }
 }
