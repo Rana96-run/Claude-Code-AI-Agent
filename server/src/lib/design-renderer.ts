@@ -24,33 +24,26 @@ let FONTS: FontEntry[] | null = null;
 let fontLoadPromise: Promise<FontEntry[]> | null = null;
 
 /**
- * Trick: requesting Google Fonts CSS with an old User-Agent makes the API
- * return TTF URLs (Satori only accepts TTF/OTF/WOFF, not WOFF2).
+ * Fetch IBM Plex Sans Arabic TTF directly from jsdelivr CDN.
+ * Satori only accepts TTF/OTF/WOFF — not WOFF2 (which is what Google Fonts
+ * serves regardless of User-Agent now).
  */
-async function fetchTtfFromGoogleFonts(family: string, weight: number): Promise<ArrayBuffer> {
-  const cssUrl = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(
-    family,
-  )}:wght@${weight}&display=swap`;
-  const cssRes = await fetch(cssUrl, {
-    headers: {
-      // Old WebKit asks for TTF rather than WOFF2
-      "User-Agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8) AppleWebKit/536.25 (KHTML, like Gecko) Version/6.0 Safari/536.25",
-    },
-  });
-  if (!cssRes.ok) {
-    throw new Error(`Failed to fetch font CSS: HTTP ${cssRes.status}`);
+const FONT_URLS: Record<400 | 600 | 700, string> = {
+  400: "https://cdn.jsdelivr.net/gh/IBM/plex@master/packages/plex-sans-arabic/fonts/complete/ttf/IBMPlexSansArabic-Regular.ttf",
+  600: "https://cdn.jsdelivr.net/gh/IBM/plex@master/packages/plex-sans-arabic/fonts/complete/ttf/IBMPlexSansArabic-SemiBold.ttf",
+  700: "https://cdn.jsdelivr.net/gh/IBM/plex@master/packages/plex-sans-arabic/fonts/complete/ttf/IBMPlexSansArabic-Bold.ttf",
+};
+
+async function fetchTtf(url: string): Promise<ArrayBuffer> {
+  const ctrl = new AbortController();
+  const timeout = setTimeout(() => ctrl.abort(), 15_000);
+  try {
+    const r = await fetch(url, { signal: ctrl.signal });
+    if (!r.ok) throw new Error(`Font fetch HTTP ${r.status} for ${url}`);
+    return await r.arrayBuffer();
+  } finally {
+    clearTimeout(timeout);
   }
-  const css = await cssRes.text();
-  const m = css.match(/url\((https:\/\/[^)]+\.ttf)\)/);
-  if (!m) {
-    throw new Error("No TTF URL found in font CSS — Google may have switched format");
-  }
-  const fontRes = await fetch(m[1]);
-  if (!fontRes.ok) {
-    throw new Error(`Failed to fetch TTF: HTTP ${fontRes.status}`);
-  }
-  return fontRes.arrayBuffer();
 }
 
 async function loadFonts(): Promise<FontEntry[]> {
@@ -61,7 +54,7 @@ async function loadFonts(): Promise<FontEntry[]> {
     logger.info("design-renderer: loading fonts");
     const family = "IBM Plex Sans Arabic";
     const weights: Array<400 | 600 | 700> = [400, 600, 700];
-    const buffers = await Promise.all(weights.map((w) => fetchTtfFromGoogleFonts(family, w)));
+    const buffers = await Promise.all(weights.map((w) => fetchTtf(FONT_URLS[w])));
     const entries: FontEntry[] = weights.map((weight, i) => ({
       name: family,
       data: buffers[i],
@@ -69,7 +62,7 @@ async function loadFonts(): Promise<FontEntry[]> {
       style: "normal" as const,
     }));
     FONTS = entries;
-    logger.info({ count: entries.length }, "design-renderer: fonts loaded");
+    logger.info({ count: entries.length, total_kb: Math.round(entries.reduce((s, e) => s + e.data.byteLength, 0) / 1024) }, "design-renderer: fonts loaded");
     return entries;
   })();
 
@@ -244,6 +237,24 @@ function buildVdom(
         },
       };
 
+  /* Satori does not do bidi reordering — Arabic words render in stored
+     (logical) order which looks reversed visually. Workaround: reverse the
+     space-separated tokens so the visual reading order is correct.
+     Joiners / RTL-marks within a single word are preserved. */
+  const rtl = (s: string): string =>
+    (s || "")
+      .split(/(\s+)/)
+      .filter((t) => t.length > 0)
+      .reverse()
+      .join("");
+
+  // Tighter headline sizes — the previous values overflowed and clipped CTA
+  const headlineSize =
+    ratio === "9:16" ? 92 : ratio === "16:9" ? 76 : 84;
+  const hookSize = ratio === "9:16" ? 38 : ratio === "16:9" ? 32 : 34;
+  const ctaSize = ratio === "9:16" ? 38 : 36;
+  const trustSize = ratio === "9:16" ? 24 : 22;
+
   // Brand mark sits in the corner of the copy block
   const brandBlock = {
     type: "div",
@@ -252,31 +263,31 @@ function buildVdom(
         display: "flex",
         flexDirection: "column",
         alignItems: "flex-end",
-        marginBottom: 24,
+        marginBottom: 18,
       },
       children: [
         {
           type: "div",
           props: {
             style: {
-              fontSize: width > 1200 ? 64 : 56,
+              fontSize: width > 1200 ? 56 : 48,
               fontWeight: 800,
               color: scheme.accent,
               lineHeight: 1,
             },
-            children: "قيود",
+            children: rtl("قيود"),
           },
         },
         {
           type: "div",
           props: {
             style: {
-              fontSize: 22,
+              fontSize: 18,
               color: scheme.body,
               opacity: 0.75,
-              marginTop: 6,
+              marginTop: 4,
             },
-            children: copy.tagline || "محاسبة سحابية",
+            children: rtl(copy.tagline || "محاسبة سحابية"),
           },
         },
       ],
@@ -291,48 +302,42 @@ function buildVdom(
         flexDirection: "column",
         alignItems: "flex-end",
         justifyContent: "center",
-        padding: width > 1200 ? "60px 80px" : "50px 60px",
+        padding: width > 1200 ? "50px 70px" : "40px 50px",
         flex: 1,
         textAlign: "right",
-        // Satori applies direction inside text via the lang/RTL trick
       },
       children: [
         brandBlock,
-        // Headline
         {
           type: "div",
           props: {
             style: {
-              fontSize: ratio === "9:16" ? 110 : ratio === "16:9" ? 92 : 100,
-              fontWeight: 800,
+              display: "flex",
+              fontSize: headlineSize,
+              fontWeight: 700,
               color: scheme.headline,
-              lineHeight: 1.1,
-              marginBottom: 20,
-              maxWidth: "100%",
+              lineHeight: 1.15,
+              marginBottom: 16,
               textAlign: "right",
-              width: "100%",
             },
-            children: copy.headline,
+            children: rtl(copy.headline),
           },
         },
-        // Hook
         {
           type: "div",
           props: {
             style: {
-              fontSize: 36,
+              display: "flex",
+              fontSize: hookSize,
               fontWeight: 400,
               color: scheme.body,
               lineHeight: 1.4,
-              marginBottom: 36,
-              maxWidth: "100%",
+              marginBottom: 28,
               textAlign: "right",
-              width: "100%",
             },
-            children: copy.hook,
+            children: rtl(copy.hook),
           },
         },
-        // Trust badge
         {
           type: "div",
           props: {
@@ -340,16 +345,15 @@ function buildVdom(
               display: "flex",
               backgroundColor: scheme.trust_fill,
               color: scheme.trust_text,
-              padding: "14px 32px",
+              padding: "12px 28px",
               borderRadius: 100,
-              fontSize: 24,
+              fontSize: trustSize,
               fontWeight: 600,
-              marginBottom: 28,
+              marginBottom: 22,
             },
-            children: copy.trust,
+            children: rtl(copy.trust),
           },
         },
-        // CTA button
         {
           type: "div",
           props: {
@@ -357,12 +361,12 @@ function buildVdom(
               display: "flex",
               backgroundColor: scheme.cta_fill,
               color: scheme.cta_text,
-              padding: "22px 60px",
+              padding: "18px 50px",
               borderRadius: 100,
-              fontSize: 40,
+              fontSize: ctaSize,
               fontWeight: 700,
             },
-            children: copy.cta,
+            children: rtl(copy.cta),
           },
         },
       ],
@@ -380,7 +384,7 @@ function buildVdom(
         backgroundColor: scheme.bg,
         fontFamily: "IBM Plex Sans Arabic",
       },
-      children: horizontal ? [imageBlock, copyBlock] : [imageBlock, copyBlock],
+      children: [imageBlock, copyBlock],
     },
   };
 }

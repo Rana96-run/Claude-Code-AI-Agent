@@ -2,6 +2,7 @@ import app from "./app.js";
 import { startSocialPoller } from "./lib/hubspot-social-poller.js";
 import { startCompetitorPoller } from "./lib/competitor-poller.js";
 import { startWeeklyDigest } from "./lib/weekly-digest.js";
+import { warmDesignRenderer } from "./lib/design-renderer.js";
 
 const port = Number(process.env.PORT) || 8080;
 
@@ -11,4 +12,6 @@ app.listen(port, () => {
   startSocialPoller();
   startCompetitorPoller();
   startWeeklyDigest();
+  // Pre-load Arabic font cache so the first design call isn't slow
+  warmDesignRenderer();
 });

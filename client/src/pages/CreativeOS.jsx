@@ -553,6 +553,23 @@ function GroupedProductChips({selected,onSelect,lang,extras=[],onToggleExtra=()=
 /* ─── API ─── */
 /* CHANGED: now calls our own /api/generate backend instead of Anthropic directly.
    This keeps the API key secret on the server. */
+/* Extract the first balanced {...} block from text. Robust to commentary
+   before/after the JSON, braces inside strings, and Claude's occasional
+   "Here's the JSON: {...}\n\nNote: ..." pattern. */
+function extractFirstJsonObject(text){
+  let depth=0,start=-1,inStr=false,esc=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(esc){esc=false;continue;}
+    if(c==="\\"){esc=true;continue;}
+    if(c==='"'){inStr=!inStr;continue;}
+    if(inStr)continue;
+    if(c==="{"){if(depth===0)start=i;depth++;}
+    else if(c==="}"){depth--;if(depth===0&&start!==-1)return text.slice(start,i+1);}
+  }
+  return null;
+}
+
 async function callAI(sys,usr,max_tokens=1400,raw_text=false){
   const res=await fetch("/api/generate",{
     method:"POST",
@@ -567,9 +584,15 @@ async function callAI(sys,usr,max_tokens=1400,raw_text=false){
   const text=(d.content||[]).map(b=>b.text||"").join("").trim();
   if(raw_text)return text;
   const clean=text.replace(/```json\n?|\n?```/g,"").trim();
-  const fi=clean.indexOf("{"),li=clean.lastIndexOf("}");
-  if(fi===-1)throw new Error("AI did not return valid JSON");
-  return JSON.parse(clean.slice(fi,li+1));
+  const block=extractFirstJsonObject(clean);
+  if(!block)throw new Error("AI did not return valid JSON");
+  try{return JSON.parse(block);}
+  catch(e){
+    // Last-ditch fallback: try the original slice approach
+    const fi=clean.indexOf("{"),li=clean.lastIndexOf("}");
+    if(fi!==-1&&li>fi)return JSON.parse(clean.slice(fi,li+1));
+    throw e;
+  }
 }
 
 /* ─── APP ─── */
@@ -682,9 +705,7 @@ export default function CreativeOS(){
   const[syncLd,setSyncLd]=useState(false);
   const[syncResult,setSyncResult]=useState(null);
   const[syncErr,setSyncErr]=useState("");
-  const[nbPrompts,setNbPrompts]=useState({});
-  const[nbRefining,setNbRefining]=useState({});
-  const[nbRefineErrs,setNbRefineErrs]=useState({});
+  /* (Nano-Banana SVG refinement removed with the new design pipeline.) */
   const[lpQuickDlLd,setLpQuickDlLd]=useState(false);
   const[lpQuickWpLd,setLpQuickWpLd]=useState(false);
   const[lpQuickHsLd,setLpQuickHsLd]=useState(false);
@@ -920,15 +941,6 @@ export default function CreativeOS(){
       Array.from({length:numVariants},(_,i)=>i+1).forEach(num=>genDesign(num,brief));
     }catch(e){setBErr(e.message);}finally{setBLd(false);}
   },[lang,bProd,bProdExtras,bMsg,bHook,bCta,bPlaces,bTrust,bStyle,numVariants,genDesign,buildProdCtx]);
-
-  const downloadSvg=(svgStr,variantNum)=>{
-    const blob=new Blob([svgStr],{type:"image/svg+xml"});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement("a");
-    a.href=url;a.download=`qoyod-ad-variant${variantNum}.svg`;
-    document.body.appendChild(a);a.click();
-    setTimeout(()=>{URL.revokeObjectURL(url);document.body.removeChild(a);},500);
-  };
 
   /* Convert PNG data URL → Blob for download */
   const dataUrlToBlob=(dataUrl)=>{
