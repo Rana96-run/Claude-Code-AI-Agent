@@ -288,10 +288,10 @@ function buildVdom(
     },
   };
 
-  /* Satori has no bidi reordering — reverse space-separated tokens so the
-     visual order matches RTL reading. */
-  const rtl = (s: string): string =>
-    (s || "").split(/(\s+)/).filter((t) => t.length > 0).reverse().join("");
+  /* Satori 0.10+ supports direction:'rtl' natively — no manual token reversal.
+     We just pass the Arabic string as-is; the engine handles BiDi and
+     multi-line wrapping correctly when direction is set on the element. */
+  const ar = (s: string): string => s || "";
 
   /* Adaptive font sizes — shrink the headline if it's too long so we never
      wrap into 5+ lines. Each Arabic word averages ~5 chars. */
@@ -375,12 +375,13 @@ function buildVdom(
               type: "div",
               props: {
                 style: {
+                  direction: "rtl",
                   fontSize: 16,
                   color: scheme.body,
                   opacity: 0.7,
                   marginTop: 8,
                 },
-                children: rtl(copy.tagline || "محاسبة سحابية"),
+                children: ar(copy.tagline || "محاسبة سحابية"),
               },
             },
           ],
@@ -400,24 +401,26 @@ function buildVdom(
               type: "div",
               props: {
                 style: {
+                  direction: "rtl",
                   fontSize: brandSize,
                   fontWeight: 700,
                   color: scheme.accent,
                   lineHeight: 1,
                 },
-                children: rtl("قيود"),
+                children: ar("قيود"),
               },
             },
             {
               type: "div",
               props: {
                 style: {
+                  direction: "rtl",
                   fontSize: 18,
                   color: scheme.body,
                   opacity: 0.85,
                   marginTop: 6,
                 },
-                children: rtl(copy.tagline || "محاسبة سحابية"),
+                children: ar(copy.tagline || "محاسبة سحابية"),
               },
             },
           ],
@@ -430,8 +433,10 @@ function buildVdom(
       style: {
         display: "flex",
         flexDirection: "column",
+        direction: "rtl",
         textAlign: "right",
         ...textContainerStyle,
+        alignItems: "flex-end", // physical right edge — RTL doesn't flip this in column flex
       },
       children: [
         // Brand mark — official PNG when loaded, typographic fallback otherwise
@@ -442,15 +447,17 @@ function buildVdom(
           props: {
             style: {
               display: "flex",
+              direction: "rtl",
               fontSize: headlineSize,
               fontWeight: 700,
               color: scheme.headline,
-              lineHeight: 1.15,
+              lineHeight: 1.2,
               marginBottom: 16,
               textAlign: "right",
               textShadow: `0 2px 24px ${scheme.bg}AA`,
+              width: "100%",
             },
-            children: rtl(copy.headline),
+            children: ar(copy.headline),
           },
         },
         // Hook
@@ -459,14 +466,16 @@ function buildVdom(
           props: {
             style: {
               display: "flex",
+              direction: "rtl",
               fontSize: hookSize,
               fontWeight: 400,
               color: scheme.body,
-              lineHeight: 1.4,
+              lineHeight: 1.5,
               marginBottom: 26,
               textAlign: "right",
+              width: "100%",
             },
-            children: rtl(copy.hook),
+            children: ar(copy.hook),
           },
         },
         // Trust badge (single — per ads guideline)
@@ -475,6 +484,7 @@ function buildVdom(
           props: {
             style: {
               display: "flex",
+              direction: "rtl",
               backgroundColor: scheme.trust_fill,
               color: scheme.trust_text,
               padding: "12px 28px",
@@ -483,7 +493,7 @@ function buildVdom(
               fontWeight: 600,
               marginBottom: 22,
             },
-            children: rtl(copy.trust),
+            children: ar(copy.trust),
           },
         },
         // CTA (single — per ads guideline)
@@ -492,6 +502,7 @@ function buildVdom(
           props: {
             style: {
               display: "flex",
+              direction: "rtl",
               backgroundColor: scheme.cta_fill,
               color: scheme.cta_text,
               padding: "18px 50px",
@@ -499,7 +510,7 @@ function buildVdom(
               fontSize: ctaSize,
               fontWeight: 700,
             },
-            children: rtl(copy.cta),
+            children: ar(copy.cta),
           },
         },
       ],
