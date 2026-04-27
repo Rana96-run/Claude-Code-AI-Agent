@@ -858,11 +858,12 @@ export default function CreativeOS(){
     if(!campTheme){setCampErr(T("اكتب موضوع الحملة","Enter a campaign theme"));return;}
     const ol=lang==="en"?"Copy in English.":"Arabic copy in Saudi dialect. Not Egyptian.";
     const budgetCtx=campBudget?`Total budget: ${campBudget} SAR`:"Budget: not specified";
-    const adCopiesSchema=campChs.slice(0,3).map(c=>`{"channel":"${c}","format":"...","hook":"...","body":"...","cta":"...","trust":"..."}`).join(",");
-    const sys=`Senior creative director for Qoyod. ${ol}\n${QOYOD_VOICE}\nProduce one ad copy per channel listed in Channels field (ALL of them). Return ONLY valid JSON:\n{"campaign_name":"...","core_message":"...","target_stage":"TOF/MOF/BOF","timeline":{"weeks":${campDuration||4},"phases":[{"week":"Week 1-2","focus":"...","action":"..."},{"week":"Week 3-4","focus":"...","action":"..."}]},"hooks":[{"type":"...","text":"...","channel":"...","strength":85},{"type":"...","text":"...","channel":"...","strength":80}],"ad_copies":[${adCopiesSchema}],"budget_split":{${campChs.map(c=>`"${c}":"...%"`).join(",")}},"kpis":["...","...","..."]}`;
+    const adCopiesSchema=campChs.map(c=>`{"channel":"${c}","format":"...","hook":"...","body":"...","cta":"...","trust":"..."}`).join(",");
+    const tokenBudget=Math.min(1800+campChs.length*500,7000);
+    const sys=`Senior creative director for Qoyod. ${ol}\n${QOYOD_VOICE}\nProduce EXACTLY one ad_copy entry for EACH channel shown in the ad_copies array — no more, no fewer. Return ONLY valid JSON:\n{"campaign_name":"...","core_message":"...","target_stage":"TOF/MOF/BOF","timeline":{"weeks":${campDuration||4},"phases":[{"week":"Week 1-2","focus":"...","action":"..."},{"week":"Week 3-4","focus":"...","action":"..."}]},"hooks":[{"type":"...","text":"...","channel":"...","strength":85},{"type":"...","text":"...","channel":"...","strength":80}],"ad_copies":[${adCopiesSchema}],"budget_split":{${campChs.map(c=>`"${c}":"...%"`).join(",")}},"kpis":["...","...","..."]}`;
     const usr=`Type:${campType} Theme:"${campTheme}" Obj:${campObj} Channels:${campChs.join(",")} Duration:${campDuration} weeks Scope:${campScope} ${budgetCtx} Context:${campCtx||"standard"}`;
     setCampLd(true);setCampErr("");setCampRes(null);
-    try{setCampRes(await callAI(sys,usr,4000));}catch(e){setCampErr(e.message);}finally{setCampLd(false);}
+    try{setCampRes(await callAI(sys,usr,tokenBudget));}catch(e){setCampErr(e.message);}finally{setCampLd(false);}
   },[lang,campType,campTheme,campObj,campChs,campCtx,campBudget,campDuration,campScope]);
 
   const runScan=useCallback(async()=>{
