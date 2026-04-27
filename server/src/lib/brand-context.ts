@@ -309,3 +309,47 @@ WHY THIS WORKS:
 4. Clean screen glow = tech credibility without showing actual text
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `;
+
+/**
+ * Classic Qoyod brand style — a reference layout, not a hard template.
+ * Use this as one valid direction among many. Mix, evolve, and subvert
+ * as the concept calls for — just keep brand colors and RTL intact.
+ */
+export const QOYOD_CLASSIC_STYLE = `
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+QOYOD CLASSIC STYLE REFERENCE — Gradient Background Ad
+(A known good starting point — feel free to evolve beyond this)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FORMAT: Square (1:1) · Vertical (9:16) · Horizontal (16:9) — all work
+DIRECTION: RTL Arabic throughout
+
+BACKGROUND:
+Gradient at 45° — navy #021544 top-right → teal #01355A bottom-left.
+Clean, no texture, no noise. The gradient IS the atmosphere.
+
+LAYOUT (RTL):
+- Large bold Arabic headline → top-right, anchored, dominant
+- Supporting line / hook → below headline, lighter weight
+- Trust badge (ZATCA / +25,000 شركة) → mid area, pill shape
+- CTA button → bottom-center, electric blue #1FCACB fill, navy text
+  Label: "اشترك الآن" or "ابدأ تجربتك" (2–3 words max)
+- QOYOD white logo → bottom-right, small, dignified
+
+TYPOGRAPHY:
+- Headline: 700 weight, white #FFFFFF, 60–80px
+- Hook: 400 weight, light teal #9FE5E6, 28–34px
+- CTA: 700 weight, navy #021544 on cyan #1FCACB pill
+
+WHY THIS WORKS:
+- Zero visual noise — the message IS the design
+- Gradient creates depth without a photo
+- Works for any product, any sector, any ratio
+- Fast to produce, reliable across placements
+
+WHEN TO USE THIS vs a cinematic photo style:
+- Use gradient when the message is the hero (strong copy-led ads)
+- Use cinematic photo when the scene emotion sells the product
+- Mix: gradient background + product UI floating in it = best of both
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`;

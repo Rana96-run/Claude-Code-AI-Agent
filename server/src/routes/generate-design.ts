@@ -31,6 +31,7 @@ import {
   QOYOD_PERSONAS,
   QOYOD_SECTOR_CONTEXT,
   IDEAL_DESIGN_REFERENCE,
+  QOYOD_CLASSIC_STYLE,
 } from "../lib/brand-context.js";
 import { logger } from "../lib/logger.js";
 
@@ -134,8 +135,13 @@ ${persona ? QOYOD_PERSONAS + `\n\nFOR THIS DESIGN — TARGET PERSONA: ${persona}
 
 ${sector ? QOYOD_SECTOR_CONTEXT + `\n\nFOR THIS DESIGN — TARGET SECTOR: ${sector}` : ""}
 
-GOLD-STANDARD DESIGN REFERENCE — always aim for THIS level of quality:
+DESIGN REFERENCES — use these as inspiration, not rigid templates. Evolve, mix, and subvert as the concept demands:
+
+REFERENCE 1 — Cinematic photo-based (high drama):
 ${IDEAL_DESIGN_REFERENCE}
+
+REFERENCE 2 — Classic Qoyod gradient (copy-led, clean):
+${QOYOD_CLASSIC_STYLE}
 
 EXAMPLES OF GOOD SCENE PROMPTS
 
