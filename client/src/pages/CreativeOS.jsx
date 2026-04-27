@@ -574,7 +574,9 @@ async function callAI(sys,usr,max_tokens=1400,raw_text=false){
   const res=await fetch("/api/generate",{
     method:"POST",
     headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({system:sys,user:usr,max_tokens})
+    // json_mode: true forces assistant prefill with "{" on the server,
+    // guaranteeing Claude starts the response as a JSON object.
+    body:JSON.stringify({system:sys,user:usr,max_tokens,json_mode:!raw_text})
   });
   if(!res.ok){
     const e=await res.json().catch(()=>({}));
@@ -583,15 +585,19 @@ async function callAI(sys,usr,max_tokens=1400,raw_text=false){
   const d=await res.json();
   const text=(d.content||[]).map(b=>b.text||"").join("").trim();
   if(raw_text)return text;
+  // With json_mode the response already starts with "{" — clean up just in case
   const clean=text.replace(/```json\n?|\n?```/g,"").trim();
-  const block=extractFirstJsonObject(clean);
-  if(!block)throw new Error("AI did not return valid JSON");
-  try{return JSON.parse(block);}
-  catch(e){
-    // Last-ditch fallback: try the original slice approach
-    const fi=clean.indexOf("{"),li=clean.lastIndexOf("}");
-    if(fi!==-1&&li>fi)return JSON.parse(clean.slice(fi,li+1));
-    throw e;
+  try{return JSON.parse(clean);}
+  catch{
+    // Fallback: extract first balanced JSON object
+    const block=extractFirstJsonObject(clean);
+    if(!block)throw new Error("AI did not return valid JSON");
+    try{return JSON.parse(block);}
+    catch(e){
+      const fi=clean.indexOf("{"),li=clean.lastIndexOf("}");
+      if(fi!==-1&&li>fi)return JSON.parse(clean.slice(fi,li+1));
+      throw e;
+    }
   }
 }
 
