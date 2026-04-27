@@ -357,7 +357,7 @@ function buildVdom(
     const words = (text || "").trim().split(/\s+/).filter(Boolean);
     if (!words.length) return { type: "div", props: { style: { display: "flex" }, children: "" } };
 
-    const spacing = Math.round(Number(wordStyle.fontSize) * 0.18);
+    const spacing = Math.round(Number(wordStyle.fontSize) * 0.13);
     const wStyle: Record<string, unknown> = {
       display: "flex",
       fontSize: wordStyle.fontSize,
@@ -447,11 +447,15 @@ function buildVdom(
   const ctaSize = ratio === "9:16" ? 36 : 32;
   const trustSize = ratio === "9:16" ? 24 : 20;
 
-  /* Container positioning per ratio.
-     RTL layout rules from production designs:
-     - 16:9 landscape : text RIGHT half, visual LEFT half
-     - 9:16 / 4:5 portrait : text TOP full-width (not bottom column)
-     - 1:1 square : text TOP-RIGHT column */
+  /* Container positioning per ratio + scheme.
+     Dark schemes:
+       - 16:9 → text RIGHT half, visual LEFT half
+       - 9:16 / 4:5 → text TOP full-width
+       - 1:1 → text TOP-RIGHT column
+     Light schemes (match production graphic-design refs):
+       - 16:9 → text RIGHT half (same — visual/mockup lives on left)
+       - 9:16 → text TOP full-width (same)
+       - 1:1 → text TOP full-width (refs 1, 4, 5 all show centered top text) */
   const textContainerStyle =
     ratio === "16:9"
       ? {
@@ -465,7 +469,6 @@ function buildVdom(
         }
       : ratio === "9:16"
       ? {
-          // portrait: text spans full width at the TOP — visual fills bottom
           position: "absolute",
           top: 0, left: 0,
           width: "100%", height: "48%",
@@ -484,8 +487,19 @@ function buildVdom(
           alignItems: "flex-end",
           justifyContent: "flex-start",
         }
+      : lightBg
+      ? {
+          // 1:1 light scheme — full-width top zone (matches refs 1, 4, 5)
+          position: "absolute",
+          top: 0, left: 0,
+          width: "100%", height: "52%",
+          paddingTop: 55, paddingBottom: 30,
+          paddingLeft: 60, paddingRight: 60,
+          alignItems: "center",
+          justifyContent: "flex-start",
+        }
       : {
-          // 1:1 square — text top-right column
+          // 1:1 dark scheme — text top-right column
           position: "absolute",
           top: 0, right: 0,
           width: "55%", height: "100%",

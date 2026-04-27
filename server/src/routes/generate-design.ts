@@ -280,8 +280,8 @@ router.post("/generate-design", async (req, res) => {
       "2d_character": "minimal 2D flat illustration with one Saudi character, clean vector style, light gradient background",
       Before_After: "split-screen before/after — chaos vs calm, dramatic lighting contrast",
       Saudi_Person: "editorial portrait of a Saudi business owner, modest professional dress, soft natural light",
-      mockup_light: "MacBook laptop + iPhone side by side showing Qoyod dashboard, light cyan-to-white gradient background, clean studio product photography, no people, generous empty space for text",
-      mockup_dark: "MacBook laptop showing Qoyod dashboard on a deep navy #021544 background, cyan rim light, premium product photography",
+      mockup_light: "MacBook Pro laptop angled at 15 degrees showing a financial dashboard UI on screen, placed on a clean white surface. Background is a soft light cyan-to-white gradient (#D6F4F9 top to #FFFFFF bottom). Studio product photography lighting, no shadows, ultra-clean minimal composition. NO people, NO text overlays, NO logos on devices. The bottom 55% of the frame is filled with the device mockup; the TOP 45% is left completely empty/clean gradient — this space is reserved for typography that will be composited in post.",
+      mockup_dark: "MacBook Pro laptop angled at 15 degrees showing a Qoyod financial dashboard on screen, placed on a deep navy #021544 surface. Dramatic cyan #17A3A4 rim light from upper left. Premium dark product photography. Bottom 55% is the device; top 45% is clear dark navy — reserved for text overlay in post.",
     };
     /* Light schemes should bias toward device mockup / clean bg style */
     const isLightSch = ["light_cyan","light_purple","light"].includes(scheme.name);
@@ -297,8 +297,13 @@ router.post("/generate-design", async (req, res) => {
 
     /* 2. AI → render the scene (per-provider tuning) */
     const isVeo = image_provider === "veo2" || image_provider === "veo3";
+    /* For light schemes, append a hard reminder to keep the bg clean */
+    const lightScheme = ["light_cyan","light_purple","light"].includes(scheme.name);
+    const promptWithSchemeHint = lightScheme
+      ? `${image_prompt}\n\nCRITICAL: This design uses a LIGHT background. The scene must have a clean, light gradient background (cyan-to-white or lavender-to-white). NO dark backgrounds. Leave the top portion of the frame completely empty/clear for text overlay.`
+      : image_prompt;
     const tunedPrompt = tuneForProvider(
-      image_prompt,
+      promptWithSchemeHint,
       (image_provider === "auto" ? "auto" : image_provider) as ImageProvider,
     );
 
