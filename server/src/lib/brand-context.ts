@@ -427,6 +427,149 @@ RTL TEXT PLACEMENT:
 `;
 
 /**
+ * Unified QOYOD & Q-Flavours Brand Design System
+ * Source of truth for canvas, colors, layout, typography, visual style,
+ * and CTA across all QOYOD products.
+ */
+export const QOYOD_UNIFIED_DESIGN_SYSTEM = `
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+UNIFIED QOYOD & Q-FLAVOURS BRAND DESIGN SYSTEM
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CANVAS: 1080×1080px (1:1 square) — standard for all social media ads.
+
+━━ BRAND IDENTITY ━━
+
+QOYOD MAIN:
+  Colors:
+    Primary:    Navy #021544 / Dark Navy #0B1B3A
+    Secondary:  Cyan #00B4D8 / Electric Blue #5B9FFF
+    Accent:     Light Blue → Purple gradients
+    Background: White, Light Cyan, or gradient (cyan→purple / blue→cyan)
+  Logo: "QOYOD" wordmark in Navy — bottom-right corner
+  Typography: Lama Sans (Black=headlines, Bold=subheads, Medium/Regular=body)
+
+Q-FLAVOURS (restaurant POS sub-brand):
+  Colors:
+    Primary:    Dark Navy #0B1B3A
+    Secondary:  Electric Blue #5B9FFF
+    Background: White or navy gradients
+  Logo: "فليفرز" in Electric Blue + "Flavours" in white + navy circle dot mark — top-right, small
+
+Q-BOOKKEEPING (مسك الدفاتر):
+  Colors:
+    Navy #021544 (primary) + Orange (accent/CTA)
+  Logo: "مسك الدفاتر BOOKKEEPING" + Q Brandmark — bottom-right, always paired with QOYOD logo
+
+━━ TYPOGRAPHY ━━
+Font: Lama Sans ONLY
+  Headline:    Black weight, large (60–80pt)
+  Subheadline: Bold (36–48pt)
+  Body:        Medium (24–32pt)
+  CTA:         Bold (28–36pt)
+Alignment: RTL — all Arabic text right-aligned
+Color hierarchy:
+  Headlines: Navy #021544 or Electric Blue #5B9FFF
+  Body: Navy or White (on dark backgrounds)
+  CTA: White text on Navy / Electric Blue / Orange button
+
+━━ VISUAL STYLE ━━
+
+PHOTOGRAPHY:
+- Realistic, human-centered: Saudi professionals (male/female) in business or restaurant settings
+- Hands interacting with devices (phones, tablets, POS systems)
+- Confident, calm expressions — no extreme emotions
+- Depth of field: sharp focus on subject + device, soft gaussian blur on background
+- NO recognizable faces in background
+- Lighting: warm ambient (restaurant/office) + cool blue glow from screens (tech accent)
+- Cinematic contrast, subtle vignette from edges
+
+ILLUSTRATIONS:
+- Style: Modern minimalist line art or isometric 3D
+- Subjects: devices, invoices, receipts, dashboards, abstract shapes (circles, curves, waves)
+- Colors: match brand palette (Navy, Cyan #00B4D8, Electric Blue #5B9FFF, White)
+
+UI MOCKUPS:
+- Show QOYOD / Q-Flavours dashboard or app interface, Arabic UI elements visible
+- Realistic perspective (slight 3D tilt), screen glow effect on surrounding surface
+
+━━ LAYOUT (RTL) ━━
+- Top-right: brand logo OR headline overflow
+- Right 60%: Arabic headline (large, bold, right-aligned)
+- Center-left / bottom-left: visual (photo, illustration, device mockup)
+- Bottom-right: QOYOD logo + qoyod.com
+- Bottom-center / mid-right: CTA button
+
+GRADIENT DIRECTION: 45° from top-right → bottom-left
+  Combinations:
+    Cyan #00B4D8 → Navy #021544
+    Electric Blue #5B9FFF → Dark Navy #0B1B3A
+    Light Blue → Purple
+    White → Light Cyan
+
+━━ CTA BUTTON ━━
+Shape: Rounded pill (border-radius: 24–32px)
+Colors:
+  QOYOD Main:       Navy #021544 background, White text
+  Q-Flavours:       Electric Blue #5B9FFF background, White text
+  Q-Bookkeeping:    Orange background, White text
+Text: Bold, 28–36pt, Arabic, include arrow ←
+Examples: "اشترك الآن ←" / "اطلب عرضك الحين ←" / "ابدأ تجربتك المجانية"
+
+━━ GRAPHIC ACCENTS ━━
+- Q-shape watermark: 50% opacity, soft-light blend, subtle
+- Concentric circles: thin stroke, cyan or navy, corner placement (brand signature)
+- Curved lines connecting text to visual, thin stroke
+- Screen glow: blue/cyan radiance from device screens
+- Vignette: dark navy, 20–30% opacity from edges
+- Shadows: soft drop shadow on devices (y-offset 20–40px, blur 60px, opacity 25%)
+
+━━ PRODUCT-SPECIFIC GUIDELINES ━━
+
+QOYOD (Accounting):
+  Focus: desktop/tablet dashboard, reports, invoices
+  Key messages: "كل الحلول توديك لقيود" / "أصدر فاتورتك الإلكترونية بكل سهولة" / "باقاتنا مفصلة تفصيل"
+  Visuals: laptop with multi-package dashboard, tablet with package comparison, phone with e-invoice
+
+Q-FLAVOURS (Restaurant POS):
+  Focus: real-time POS usage, restaurant environment, offline functionality
+  Key messages: "وقت الذروة ما يرحم" / "نظامك يلازم يكون جاهز دايماً"
+  Badge: "⚡ يشتغل بدون إنترنت"
+  Visuals: busy restaurant (blurred background), Saudi manager/cashier on POS tablet, blue glow from screen
+
+Q-BOOKKEEPING:
+  Focus: professional service, compliance, ease
+  Branding: ALWAYS co-branded (Q-Bookkeeping + QOYOD logos)
+
+━━ MANDATORY ELEMENTS (every design) ━━
+1. Main headline — Arabic, large, right-aligned, Navy or Electric Blue
+2. Subheadline — Arabic, medium, right-aligned
+3. Visual — photo, illustration, or UI mockup (left/center-left)
+4. CTA button — pill-shaped, brand color, white text, Arabic with arrow
+5. Logo — QOYOD bottom-right / Q-Flavours top-right / Q-Bookkeeping bottom-right
+6. Website — "qoyod.com" or "للمزيد قم بزيارة qoyod.com" — bottom-left, small, Navy or White
+
+━━ STYLE BY CAMPAIGN TYPE ━━
+
+FEATURE / BENEFIT:
+  Clean gradient or solid bg, UI mockup or illustration, clear headline hierarchy, calm professional tone
+
+HIGH-DRAMA / URGENCY (Q-Flavours):
+  Cinematic photography, strong contrast, vignette, emotional tension visual, bold urgent headline, badge callout
+
+PACKAGE / PRICING (QOYOD):
+  Detailed dashboard UI visible, emphasis on variety/customization, multiple package names shown
+
+━━ FINAL CHECKLIST ━━
+✓ Canvas 1080×1080px  ✓ RTL layout applied  ✓ Lama Sans (correct weights)
+✓ Headline large, bold, right-aligned  ✓ CTA pill-shaped, brand color, white text
+✓ Correct logo(s) placed  ✓ qoyod.com bottom-left  ✓ Gradient 45° top-right→bottom-left
+✓ Visual clear & on-brand  ✓ No recognizable background faces  ✓ Screen glow on devices
+✓ Soft shadows on floating elements  ✓ All text legible at thumbnail size
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`;
+
+/**
  * Qoyod Bookkeeping sub-brand — مسك الدفاتر
  * Designer notes: apply to ALL bookkeeping product designs.
  * Based on production-approved designs reviewed by the team.

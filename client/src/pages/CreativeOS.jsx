@@ -812,10 +812,14 @@ export default function CreativeOS(){
     let chanSpec="";
     let outFmt="";
     if(chan==="Google Ads"){
-      chanSpec="Google Search RSA. All headlines and descriptions in English. STRICT: each headline ≤30 chars (count carefully). Each description ≤90 chars. Write exactly 15 headlines and 4 descriptions.";
-      outFmt=`{"ad_copy":{"hook":"...","body":"...","cta":"..."},"google_headlines":["h1","h2","h3","h4","h5","h6","h7","h8","h9","h10","h11","h12","h13","h14","h15"],"google_descriptions":["d1 ≤90 chars","d2 ≤90 chars","d3 ≤90 chars","d4 ≤90 chars"]}`;
+      if(lang==="ar"){
+        chanSpec="Google Search RSA (Arabic). All headlines and descriptions in Saudi Arabic dialect. STRICT: each headline ≤30 Arabic chars (count carefully). Each description ≤90 Arabic chars. Write exactly 15 headlines and 4 descriptions.";
+      }else{
+        chanSpec="Google Search RSA (English). All headlines and descriptions in English. STRICT: each headline ≤30 chars (count carefully). Each description ≤90 chars. Write exactly 15 headlines and 4 descriptions.";
+      }
+      outFmt=`{"ad_copy":{"hook":"...","body":"...","cta":"..."},"google_headlines":["h1","h2","h3","h4","h5","h6","h7","h8","h9","h10","h11","h12","h13","h14","h15"],"google_descriptions":["d1","d2","d3","d4"]}`;
     }else if(chan==="LinkedIn"){
-      chanSpec="LinkedIn professional post. No hashtags. 150-250 words. B2B tone. English or Arabic per language setting.";
+      chanSpec=`LinkedIn professional post. No hashtags. 150-250 words. B2B tone. Write in ${lang==="ar"?"Saudi Arabic dialect":"English"}.`;
       outFmt=`{"ad_copy":{"hook":"...","body":"...","cta":"..."},"caption":"LinkedIn post 150-250 words, professional tone, no hashtags"}`;
     }else if(chan==="Twitter/X"){
       chanSpec="Twitter/X post. Max 280 chars. Punchy, direct. 2-3 relevant hashtags.";
@@ -831,7 +835,7 @@ export default function CreativeOS(){
       outFmt=`{"ad_copy":{"hook":"...","body":"...","cta":"..."},"caption":"Facebook post 80-160 words with 3-4 hashtags"}`;
     }else{
       // Instagram default
-      chanSpec="Instagram post caption. Engaging, 80-150 words. 4-5 targeted Arabic + English hashtags. Ready to post.";
+      chanSpec=`Instagram post caption. Engaging, 80-150 words. 4-5 targeted ${lang==="ar"?"Arabic + English":"relevant"} hashtags. Ready to post.`;
       outFmt=`{"ad_copy":{"hook":"...","body":"...","cta":"..."},"caption":"Instagram caption 80-150 words with 4-5 hashtags"}`;
     }
     const sys=`Senior performance copywriter for Qoyod — Saudi cloud accounting SaaS, ZATCA-accredited.\n${ol}\n${QOYOD_VOICE}\nProduct: ${prodDesc}\n${fctx?"Feature: "+fctx:""}\nChannel: ${chan}. ${chanSpec}\nRule: ONE clear message per output. No emojis. Generate ONLY for ${chan} — do not include other channels.\nReturn ONLY valid JSON (no markdown):\n${outFmt}`;
@@ -891,9 +895,12 @@ export default function CreativeOS(){
      Bookkeeping product gets its own dark navy + orange scheme automatically (server-side),
      but we also respect it here so the variant rotation feels brand-correct. */
   const isBookkeepingProd = /bookkeeping|مسك|دفاتر/i.test(bProd||"");
+  const isFlavoursProd   = /flavour|qflavour|q-flavour|مطعم|فليفرز/i.test(bProd||"");
   const VARIANT_SCHEMES = isBookkeepingProd
     ? ["bookkeeping","bookkeeping","bookkeeping","bookkeeping","bookkeeping","bookkeeping"]
-    : ["navy","light_cyan","midnight","light_purple","ocean","slate"];
+    : isFlavoursProd
+    ? ["flavours","flavours","flavours","navy","midnight","flavours"]
+    : ["navy","light_cyan","midnight","light_purple","ocean","light_blue"];
 
   const genDesign=useCallback(async(variantNum,briefOverride)=>{
     const brief=briefOverride||bRes;
@@ -1107,8 +1114,8 @@ CONTENT:
 - Page title (browser tab): ${lp?.page_title||lpProd}
 - Hero headline: ${lp?.hero?.headline}
 - Hero subline: ${lp?.hero?.subline}
-- Primary CTA button: ${lp?.hero?.cta_primary||"ابدأ تجربتك المجانية"}
-- Secondary CTA button: ${lp?.hero?.cta_secondary||"اطلب عرضاً"}
+- Primary CTA button: ${lp?.hero?.cta_primary||(isAr?"ابدأ تجربتك المجانية":"Start Your Free Trial")}
+- Secondary CTA button: ${lp?.hero?.cta_secondary||(isAr?"اطلب عرضاً":"Request a Demo")}
 - Product description: ${isAr?prodObj.desc_ar:prodObj.desc_en}
 - Sections to include: ${JSON.stringify(lp?.sections||[])}
 - Strategic direction: ${lp?.overall_direction}
@@ -1133,10 +1140,10 @@ DESIGN SYSTEM — follow EXACTLY:
 - Gradient: linear-gradient(225deg, #021544, #01355A)
 
 REQUIRED PAGE STRUCTURE (match the reference HTML design exactly, in this order):
-1. Sticky nav — white bg, blur backdrop, Qoyod wordmark "قيود" (navy bold), nav links (المزايا / كيف يعمل / الأسعار / الأسئلة الشائعة), primary CTA btn (navy, border-radius 12px)
+1. Sticky nav — white bg, blur backdrop, Qoyod wordmark "${isAr?"قيود":"Qoyod"}" (navy bold), nav links (${isAr?"المزايا / كيف يعمل / الأسعار / الأسئلة الشائعة":"Features / How it works / Pricing / FAQ"}), primary CTA btn (navy, border-radius 12px)
 2. Hero — white bg, radial gradient accents; SPLIT grid (1.05fr / 0.95fr), content ${isAr?"right":"left"}, form ${isAr?"left":"right"}:
-   - Content: .eyebrow pill (teal-50 bg + turq border), h1 with accent gradient text on key words, lead paragraph, two CTAs (.btn-primary + outlined), trust list 3 items with ✓ SVG checkmarks: ZATCA-معتمد / لا يُشترط كارت بنكي / ابدأ في دقيقتين
-   - Form card: white, border-radius 24px, shadow-pop, 34px padding, ::before pseudo-glow (grad-primary, blur 24px, opacity .18); fields: الاسم الأول* + الاسم الأخير* (2-col grid), رقم الجوال (phone-wrap: 110px country-code select + phone input) + البريد الإلكتروني* (2-col), المدينة*, اسم الشركة*, نوع النشاط (checkbox-group grid 2×3 with custom CSS checkboxes), full-width submit btn; TOS footnote
+   - Content: .eyebrow pill (teal-50 bg + turq border), h1 with accent gradient text on key words, lead paragraph, two CTAs (.btn-primary + outlined), trust list 3 items with ✓ SVG checkmarks: ${isAr?"ZATCA-معتمد / لا يُشترط كارت بنكي / ابدأ في دقيقتين":"ZATCA-certified / No credit card required / Get started in 2 minutes"}
+   - Form card: white, border-radius 24px, shadow-pop, 34px padding, ::before pseudo-glow (grad-primary, blur 24px, opacity .18); fields: ${isAr?"الاسم الأول* + الاسم الأخير* (2-col grid), رقم الجوال (phone-wrap: 110px country-code select + phone input) + البريد الإلكتروني* (2-col), المدينة*, اسم الشركة*, نوع النشاط (checkbox-group grid 2×3 with custom CSS checkboxes)":"First Name* + Last Name* (2-col grid), Phone (phone-wrap: 110px country-code select + input) + Email* (2-col), City*, Company Name*, Business Type (checkbox-group grid 2×3 with custom CSS checkboxes)"}, full-width submit btn; TOS footnote
 3. Features — .features-bg (bg-soft), 4-col grid; each card: .f-card (border-radius 24px, white bg, 1px line border), .f-icon (52×52 turq-50 bg teal-colored SVG), h3 navy, paragraph ink-soft; hover: translateY(-6px) + shadow-pop + turq-soft border
 4. How it works — 3-col grid; .how-card (white, border, radius 24px); .how-num badge (absolute top-right -20px, 48px square, nav gradient, white text); step title + description
 5. Pricing — 3-column .price-grid; each .price-card (white, 1.5px line border, radius 24px, flex-col); featured card has turq border + turq-50 gradient bg + .price-badge pill top-right; price amount in 44px font; feature list with ✓ SVG icons; CTA button at bottom
@@ -1171,7 +1178,7 @@ CSS RULES:
     const isAr=lang==="ar";
     const dir=isAr?"rtl":"ltr";
     const sys=`You are a senior front-end engineer at a top-tier B2B SaaS company. Your output is ONLY raw HTML — no markdown, no triple backticks, no explanations. The file must be self-contained (all CSS inline in <style>, no JS frameworks, Google Fonts allowed). It must look like a premium, professionally designed landing page — not a template. Standard is: agency-quality, conversion-focused, mobile-responsive.\n\n${QOYOD_VOICE}\n\n${QOYOD_HTML}\n\n${QOYOD_DESIGN}`;
-    const usr=`Build a complete landing page for: ${lpProd} — a product by Qoyod (Saudi cloud accounting SaaS, ZATCA-certified).\n\nCONTENT:\n- Page title (browser tab): ${lp?.page_title||lpProd}\n- Hero headline: ${lp?.hero?.headline}\n- Hero subline: ${lp?.hero?.subline}\n- Primary CTA button: ${lp?.hero?.cta_primary||"ابدأ تجربتك المجانية"}\n- Secondary CTA button: ${lp?.hero?.cta_secondary||"اطلب عرضاً"}\n- Product description: ${isAr?prodObj.desc_ar:prodObj.desc_en}\n- Sections to include: ${JSON.stringify(lp?.sections||[])}\n- Strategic direction: ${lp?.overall_direction}\n\nDIRECTION: ${dir} | LANGUAGE: ${isAr?"Arabic — Saudi dialect ONLY":"English — professional, direct."} | FONT: ${isAr?'"IBM Plex Sans Arabic"':'"Inter"'}\n\n${QOYOD_DESIGN}`;
+    const usr=`Build a complete landing page for: ${lpProd} — a product by Qoyod (Saudi cloud accounting SaaS, ZATCA-certified).\n\nCONTENT:\n- Page title (browser tab): ${lp?.page_title||lpProd}\n- Hero headline: ${lp?.hero?.headline}\n- Hero subline: ${lp?.hero?.subline}\n- Primary CTA button: ${lp?.hero?.cta_primary||(isAr?"ابدأ تجربتك المجانية":"Start Your Free Trial")}\n- Secondary CTA button: ${lp?.hero?.cta_secondary||(isAr?"اطلب عرضاً":"Request a Demo")}\n- Product description: ${isAr?prodObj.desc_ar:prodObj.desc_en}\n- Sections to include: ${JSON.stringify(lp?.sections||[])}\n- Strategic direction: ${lp?.overall_direction}\n\nDIRECTION: ${dir} | LANGUAGE: ${isAr?"Arabic — Saudi dialect ONLY":"English — professional, direct."} | FONT: ${isAr?'"IBM Plex Sans Arabic"':'"Inter"'}\n\n${QOYOD_DESIGN}`;
     const raw=await callAI(sys,usr,4000,true);
     const html=typeof raw==="string"?raw:JSON.stringify(raw,null,2);
     return html.replace(/^```html\n?|\n?```$/g,"").trim();
@@ -1238,8 +1245,8 @@ CONTENT:
 - Page title (browser tab): ${lp?.page_title||lpProd} — Variant B
 - Hero headline: rewrite with trust/compliance focus (e.g. "معتمد من هيئة الزكاة والضريبة والجمارك — إدارة مالية لا تقبل الأخطاء")
 - Hero subline: emphasize compliance, security, and certified expertise
-- Primary CTA button: ${lp?.hero?.cta_primary||"ابدأ تجربتك المجانية"}
-- Secondary CTA button: ${lp?.hero?.cta_secondary||"اطلب عرضاً"}
+- Primary CTA button: ${lp?.hero?.cta_primary||(isAr?"ابدأ تجربتك المجانية":"Start Your Free Trial")}
+- Secondary CTA button: ${lp?.hero?.cta_secondary||(isAr?"اطلب عرضاً":"Request a Demo")}
 - Product description: ${isAr?prodObj.desc_ar:prodObj.desc_en}
 - Sections to include: ${JSON.stringify(lp?.sections||[])}
 

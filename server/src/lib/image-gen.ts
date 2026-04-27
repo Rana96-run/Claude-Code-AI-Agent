@@ -2,14 +2,15 @@
  * Image & Video generation helpers for the design pipeline.
  *
  * Providers:
+ *   freepik        — Freepik Mystic (Seedance AI 2.0) — highest quality, async
  *   gpt-image      — OpenAI gpt-image-1 (→ dall-e-3 fallback)
- *   nanobanana     — Gemini 2.0 Flash Preview image generation  (fastest)
- *   nanobanana-25  — Gemini 2.5 Flash Preview image generation  (higher quality)
- *   imagen3        — Google Imagen 3  (photorealistic, product shots)
- *   imagen4        — Google Imagen 4 preview  (highest quality Google image)
+ *   nanobanana     — Gemini 2.5 Flash image generation  (fastest)
+ *   nanobanana-25  — Gemini Nano Banana Pro image generation  (higher quality)
+ *   imagen3        — Google Imagen 4 Fast  (photorealistic, product shots)
+ *   imagen4        — Google Imagen 4 Standard  (highest quality Google image)
  *   veo2           — Google Veo 2  (video scene, no text overlay)
  *   veo3           — Google Veo 3  (video + audio scene, no text overlay)
- *   auto           — prefers gpt-image → nanobanana
+ *   auto           — prefers freepik → imagen3 → nanobanana
  */
 
 import { logger } from "./logger.js";
@@ -18,6 +19,7 @@ const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 const GEMINI_OPS  = "https://generativelanguage.googleapis.com/v1beta/operations";
 
 export type ImageProvider =
+  | "freepik"
   | "nanobanana"
   | "nanobanana-25"
   | "imagen3"
@@ -42,6 +44,13 @@ export interface VideoResult {
 }
 
 /* ── Helpers ─────────────────────────────────────────────────────── */
+
+function freepikSize(ratio: string): string {
+  if (ratio === "9:16") return "portrait_9_16";
+  if (ratio === "4:5")  return "portrait_4_5";
+  if (ratio === "16:9") return "landscape_16_9";
+  return "square_1_1";
+}
 
 function gptImageSize(ratio: string): "1024x1024" | "1024x1536" | "1536x1024" {
   if (ratio === "9:16" || ratio === "4:5") return "1024x1536";
@@ -73,6 +82,71 @@ function withAspectHint(prompt: string, ratio: string): string {
     "16:9": "Landscape 16:9 aspect ratio (YouTube / LinkedIn banner).",
   };
   return `${prompt.trim()}\n\nFinal aspect ratio: ${aspectMap[ratio] ?? aspectMap["1:1"]}`;
+}
+
+/* ── Freepik Mystic (Seedance AI 2.0) ───────────────────────────── */
+
+async function generateWithFreepikMystic(
+  prompt: string,
+  ratio: string,
+): Promise<ImageResult> {
+  const apiKey = process.env.FREEPIK_API_KEY;
+  if (!apiKey) throw new Error("FREEPIK_API_KEY not configured");
+
+  /* Step 1 — kick off async generation */
+  const startR = await fetch("https://api.freepik.com/v1/ai/mystic", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-freepik-api-key": apiKey,
+    },
+    body: JSON.stringify({
+      prompt,
+      image: { size: freepikSize(ratio) },
+      realism: true,
+      creative_detailing: 70,
+    }),
+  });
+  if (!startR.ok) {
+    const err = await startR.text();
+    throw new Error(`Freepik Mystic start HTTP ${startR.status}: ${err.slice(0, 300)}`);
+  }
+  const startData = (await startR.json()) as { data?: { task_id?: string } };
+  const taskId = startData.data?.task_id;
+  if (!taskId) throw new Error("Freepik Mystic: no task_id returned");
+
+  /* Step 2 — poll until COMPLETED (max 120 s) */
+  const deadline = Date.now() + 120_000;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 4_000));
+    const pollR = await fetch(`https://api.freepik.com/v1/ai/mystic/${taskId}`, {
+      headers: { "x-freepik-api-key": apiKey },
+    });
+    if (!pollR.ok) continue;
+    const op = (await pollR.json()) as {
+      data?: { status?: string; generated?: string[] };
+    };
+    const status = op.data?.status;
+    if (status === "FAILED") throw new Error("Freepik Mystic: generation failed");
+    if (status !== "COMPLETED") continue;
+
+    const urls = op.data?.generated;
+    if (!urls || urls.length === 0) throw new Error("Freepik Mystic: no images in result");
+
+    /* Step 3 — download the URL and convert to base64 */
+    const imgR = await fetch(urls[0]);
+    if (!imgR.ok) throw new Error(`Freepik Mystic: image download failed ${imgR.status}`);
+    const buf = await imgR.arrayBuffer();
+    const b64 = Buffer.from(buf).toString("base64");
+    const mimeType = imgR.headers.get("content-type") ?? "image/jpeg";
+    return {
+      mimeType,
+      base64: b64,
+      dataUrl: `data:${mimeType};base64,${b64}`,
+      provider: "freepik",
+    };
+  }
+  throw new Error("Freepik Mystic: timed out after 120s");
 }
 
 /* ── Gemini image generation (Nano Banana variants) ──────────────── */
@@ -319,33 +393,41 @@ export async function generateHeroImage(
   /* Veo is video — handled separately by generateHeroVideo */
   if (provider === "veo2" || provider === "veo3") return null;
 
-  type ImageProv = "gpt-image" | "nanobanana" | "nanobanana-25" | "imagen3" | "imagen4";
+  const hasFreepik = !!process.env.FREEPIK_API_KEY;
+
+  type ImageProv = "freepik" | "gpt-image" | "nanobanana" | "nanobanana-25" | "imagen3" | "imagen4";
 
   const order: ImageProv[] =
-    provider === "gpt-image"      ? ["gpt-image"]
-    : provider === "nanobanana"   ? ["nanobanana"]
-    : provider === "nanobanana-25"? ["nanobanana-25"]
+    provider === "freepik"        ? ["freepik", "imagen3"]             // Mystic first, Imagen 4 Fast fallback
+    : provider === "gpt-image"    ? ["gpt-image", "imagen3"]           // fallback to Imagen if billing limit hit
+    : provider === "nanobanana"   ? ["nanobanana", "imagen3"]          // fallback to Imagen if Gemini model issue
+    : provider === "nanobanana-25"? ["nanobanana-25", "imagen3"]
     : provider === "imagen3"      ? ["imagen3"]
-    : provider === "imagen4"      ? ["imagen4"]
-    /* auto: GPT-Image first, then Nano Banana */
-    : hasGPT && hasGemini         ? ["gpt-image", "nanobanana"]
+    : provider === "imagen4"      ? ["imagen4", "imagen3"]
+    /* auto: Freepik Mystic first (best quality), then Imagen 4 Fast, then Nano Banana */
+    : hasFreepik                  ? ["freepik", "imagen3", "nanobanana"]
+    : hasGemini                   ? ["imagen3", "nanobanana"]
     : hasGPT                      ? ["gpt-image"]
-    : hasGemini                   ? ["nanobanana"]
     : [];
 
   for (const p of order) {
     try {
+      if (p === "freepik")
+        return await generateWithFreepikMystic(prompt, ratio);
       if (p === "gpt-image")
         return await generateWithGptImage(prompt, ratio);
       if (p === "nanobanana")
-        /* gemini-2.0-flash-preview-image-generation was retired — use gemini-2.0-flash-exp */
-        return await generateWithGeminiImage(prompt, ratio, "gemini-2.0-flash-exp", "nanobanana");
+        /* gemini-2.5-flash-image — current stable Gemini inline image gen model */
+        return await generateWithGeminiImage(prompt, ratio, "gemini-2.5-flash-image", "nanobanana");
       if (p === "nanobanana-25")
-        return await generateWithGeminiImage(prompt, ratio, "gemini-2.5-flash-preview-05-20", "nanobanana-25");
+        /* nano-banana-pro-preview — premium Gemini image gen (Nano Banana Pro) */
+        return await generateWithGeminiImage(prompt, ratio, "nano-banana-pro-preview", "nanobanana-25");
       if (p === "imagen3")
-        return await generateWithImagen(prompt, ratio, "imagen-3.0-generate-002", "imagen3");
+        /* imagen-4.0-fast-generate-001 — Imagen 4 Fast (replaces deprecated Imagen 3) */
+        return await generateWithImagen(prompt, ratio, "imagen-4.0-fast-generate-001", "imagen3");
       if (p === "imagen4")
-        return await generateWithImagen(prompt, ratio, "imagen-4.0-generate-preview-05-20", "imagen4");
+        /* imagen-4.0-generate-001 — Imagen 4 Standard */
+        return await generateWithImagen(prompt, ratio, "imagen-4.0-generate-001", "imagen4");
     } catch (e) {
       logger.warn({ provider: p, err: String(e) }, "image-gen: provider failed, trying next");
     }
@@ -359,7 +441,7 @@ export async function generateHeroVideo(
   ratio = "1:1",
 ): Promise<VideoResult | null> {
   try {
-    const model = provider === "veo3" ? "veo-3.0-generate-preview" : "veo-2.0-generate-001";
+    const model = provider === "veo3" ? "veo-3.0-generate-001" : "veo-2.0-generate-001";
     return await generateWithVeo(prompt, ratio, model, provider);
   } catch (e) {
     logger.warn({ provider, err: String(e) }, "image-gen: veo failed");

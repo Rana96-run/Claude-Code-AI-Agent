@@ -2,6 +2,7 @@ import { Router } from "express";
 import crypto from "crypto";
 import { canvaUploadSvgAndCreateDesign } from "./canva.js";
 import { driveUploadText } from "./drive.js";
+import { sheetsAppendBrief } from "../lib/sheets-client.js";
 import { logger, taskLogger } from "../lib/logger.js";
 import { loadTasks, saveTasks, type PersistedTask } from "../lib/agent-store.js";
 import { cacheLookup, cacheStore, cacheStats, cacheClear } from "../lib/agent-cache.js";
@@ -1302,7 +1303,7 @@ JSON: {"ar":{"headline":"...","lede":"...","body":"...","quote":"...","boilerpla
 
       try {
         const r = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${geminiKey}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -1793,6 +1794,21 @@ router.post("/webhook", async (req, res) => {
       body:    bodyParts,
       context: { zap_type: zap, persona: personaMap[zap] ?? undefined, raw: p },
     };
+    // Log content briefs to Google Sheets for persistence
+    if (zap === "sheets_brief" || zap === "typeform_brief") {
+      sheetsAppendBrief({
+        brief_id: `brief_${Date.now()}`,
+        created_at: new Date().toISOString(),
+        submitted_by: p.email ?? p.submitted_by ?? undefined,
+        campaign_name: p.campaign_name ?? p.title ?? undefined,
+        target_channel: p.channel ?? p.target_channel ?? undefined,
+        tone: p.tone ?? undefined,
+        topic: p.topic ?? p.brief ?? undefined,
+        keywords: p.keywords ?? undefined,
+        notes: p.notes ?? p.message ?? undefined,
+        status: "received",
+      }).catch((e: unknown) => req.log.warn({ err: String(e) }, "sheets brief log failed"));
+    }
   } else if (Array.isArray(p) && p[0]?.subscriptionType) {
     /* HubSpot workflow webhook — array of events */
     const e = p[0];

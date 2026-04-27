@@ -25,19 +25,15 @@ let FONTS: FontEntry[] | null = null;
 let fontLoadPromise: Promise<FontEntry[]> | null = null;
 
 /**
- * Try Lama Sans first (Qoyod's brand font, via fontsource on jsdelivr),
- * fall back to IBM Plex Sans Arabic. Satori only accepts TTF/OTF/WOFF.
+ * IBM Plex Sans Arabic via fontsource CDN (versioned — stable).
+ * Lama Sans is Qoyod's brand font but isn't published to npm/fontsource,
+ * so we use IBM Plex Sans Arabic which closely matches the brand weight/style.
+ * Satori accepts WOFF (not WOFF2) — using the fontsource WOFF files.
  */
-const LAMA_SANS_URLS: Record<400 | 600 | 700, string> = {
-  400: "https://cdn.jsdelivr.net/npm/@fontsource/lama-sans@5/files/lama-sans-arabic-400-normal.woff",
-  600: "https://cdn.jsdelivr.net/npm/@fontsource/lama-sans@5/files/lama-sans-arabic-600-normal.woff",
-  700: "https://cdn.jsdelivr.net/npm/@fontsource/lama-sans@5/files/lama-sans-arabic-700-normal.woff",
-};
-
 const IBM_PLEX_URLS: Record<400 | 600 | 700, string> = {
-  400: "https://cdn.jsdelivr.net/gh/IBM/plex@master/packages/plex-sans-arabic/fonts/complete/ttf/IBMPlexSansArabic-Regular.ttf",
-  600: "https://cdn.jsdelivr.net/gh/IBM/plex@master/packages/plex-sans-arabic/fonts/complete/ttf/IBMPlexSansArabic-SemiBold.ttf",
-  700: "https://cdn.jsdelivr.net/gh/IBM/plex@master/packages/plex-sans-arabic/fonts/complete/ttf/IBMPlexSansArabic-Bold.ttf",
+  400: "https://cdn.jsdelivr.net/npm/@fontsource/ibm-plex-sans-arabic@5/files/ibm-plex-sans-arabic-arabic-400-normal.woff",
+  600: "https://cdn.jsdelivr.net/npm/@fontsource/ibm-plex-sans-arabic@5/files/ibm-plex-sans-arabic-arabic-600-normal.woff",
+  700: "https://cdn.jsdelivr.net/npm/@fontsource/ibm-plex-sans-arabic@5/files/ibm-plex-sans-arabic-arabic-700-normal.woff",
 };
 
 async function fetchTtf(url: string): Promise<ArrayBuffer> {
@@ -76,20 +72,14 @@ async function loadFonts(): Promise<FontEntry[]> {
   if (fontLoadPromise) return fontLoadPromise;
 
   fontLoadPromise = (async () => {
-    logger.info("design-renderer: loading fonts (Lama Sans → IBM Plex)");
-    /* Try Qoyod's brand font first, fall back to IBM Plex Sans Arabic */
-    let entries = await tryLoadFamily("Lama Sans", LAMA_SANS_URLS);
-    let family = "Lama Sans";
+    logger.info("design-renderer: loading fonts (IBM Plex Sans Arabic via fontsource CDN)");
+    const entries = await tryLoadFamily("IBM Plex Sans Arabic", IBM_PLEX_URLS);
     if (!entries) {
-      entries = await tryLoadFamily("IBM Plex Sans Arabic", IBM_PLEX_URLS);
-      family = "IBM Plex Sans Arabic";
-    }
-    if (!entries) {
-      throw new Error("Could not load any Arabic font (Lama Sans or IBM Plex)");
+      throw new Error("Could not load IBM Plex Sans Arabic font");
     }
     FONTS = entries;
     logger.info(
-      { family, count: entries.length, total_kb: Math.round(entries.reduce((s, e) => s + e.data.byteLength, 0) / 1024) },
+      { family: "IBM Plex Sans Arabic", count: entries.length, total_kb: Math.round(entries.reduce((s, e) => s + e.data.byteLength, 0) / 1024) },
       "design-renderer: fonts loaded",
     );
     return entries;
@@ -120,37 +110,47 @@ export interface ColorScheme {
 
 export const SCHEMES: Record<string, ColorScheme> = {
   /* ── Dark backgrounds ─────────────────────────────────────────── */
+  /* QOYOD Main — Navy + Cyan headlines + Navy CTA (white text) per unified design system */
   navy: {
     name: "navy",
-    bg: "#021544", bg2: "#17A3A4",
-    accent: "#1FCACB",
-    cta_fill: "#1FCACB", cta_text: "#021544",
+    bg: "#021544", bg2: "#00B4D8",
+    accent: "#00B4D8",            // Cyan #00B4D8 for headlines (unified spec)
+    cta_fill: "#021544", cta_text: "#FFFFFF",  // Navy bg + white text (unified spec)
     headline: "#FFFFFF", body: "#9FE5E6",
-    trust_fill: "#17A3A4", trust_text: "#FFFFFF",
+    trust_fill: "#00B4D8", trust_text: "#FFFFFF",
   },
   ocean: {
     name: "ocean",
-    bg: "#01355A", bg2: "#17A3A4",
-    accent: "#1FCACB",
-    cta_fill: "#1FCACB", cta_text: "#01355A",
+    bg: "#01355A", bg2: "#00B4D8",
+    accent: "#00B4D8",
+    cta_fill: "#021544", cta_text: "#FFFFFF",
     headline: "#FFFFFF", body: "#A8E6E6",
-    trust_fill: "#17A3A4", trust_text: "#FFFFFF",
+    trust_fill: "#00B4D8", trust_text: "#FFFFFF",
   },
   midnight: {
     name: "midnight",
-    bg: "#050E24", bg2: "#22D4D5",
-    accent: "#22D4D5",
-    cta_fill: "#22D4D5", cta_text: "#050E24",
+    bg: "#050E24", bg2: "#5B9FFF",
+    accent: "#5B9FFF",            // Electric Blue variant
+    cta_fill: "#021544", cta_text: "#FFFFFF",
     headline: "#FFFFFF", body: "#9FE5E6",
-    trust_fill: "#17A3A4", trust_text: "#FFFFFF",
+    trust_fill: "#5B9FFF", trust_text: "#FFFFFF",
   },
   slate: {
     name: "slate",
-    bg: "#1A2B4A", bg2: "#1FCACB",
-    accent: "#1FCACB",
-    cta_fill: "#1FCACB", cta_text: "#1A2B4A",
+    bg: "#1A2B4A", bg2: "#5B9FFF",
+    accent: "#5B9FFF",
+    cta_fill: "#021544", cta_text: "#FFFFFF",
     headline: "#FFFFFF", body: "#9FE5E6",
-    trust_fill: "#17A3A4", trust_text: "#FFFFFF",
+    trust_fill: "#5B9FFF", trust_text: "#FFFFFF",
+  },
+  /* Q-Flavours — Dark Navy #0B1B3A + Electric Blue #5B9FFF (restaurant POS) */
+  flavours: {
+    name: "flavours",
+    bg: "#0B1B3A", bg2: "#1A2E5A",
+    accent: "#5B9FFF",            // Electric Blue — Q-Flavours signature
+    cta_fill: "#5B9FFF", cta_text: "#FFFFFF",  // Electric Blue CTA + white text
+    headline: "#FFFFFF", body: "#B8D0FF",
+    trust_fill: "#5B9FFF", trust_text: "#FFFFFF",
   },
 
   /* ── Light backgrounds (match production graphic-design style) ── */
@@ -158,55 +158,64 @@ export const SCHEMES: Record<string, ColorScheme> = {
   light_cyan: {
     name: "light_cyan",
     bg: "#D6F4F9", bg2: "#FFFFFF",
-    accent: "#021544",           // dark navy headline — matches refs
-    cta_fill: "#021544", cta_text: "#FFFFFF",
-    headline: "#021544", body: "#17A3A4",
-    trust_fill: "#17A3A4", trust_text: "#FFFFFF",
+    accent: "#021544",
+    cta_fill: "#021544", cta_text: "#FFFFFF",  // Navy CTA + white text
+    headline: "#021544", body: "#00B4D8",
+    trust_fill: "#00B4D8", trust_text: "#FFFFFF",
   },
-  /* Purple-to-white gradient, dark navy text — design ref style 4 & 5 */
+  /* Purple / Electric Blue gradient, dark navy text */
   light_purple: {
     name: "light_purple",
     bg: "#C8C6F7", bg2: "#FFFFFF",
     accent: "#021544",
     cta_fill: "#021544", cta_text: "#FFFFFF",
     headline: "#021544", body: "#3D3B8E",
-    trust_fill: "#3D3B8E", trust_text: "#FFFFFF",
+    trust_fill: "#5B9FFF", trust_text: "#FFFFFF",
+  },
+  /* Electric Blue gradient — light blue → white */
+  light_blue: {
+    name: "light_blue",
+    bg: "#DBE9FF", bg2: "#FFFFFF",
+    accent: "#021544",
+    cta_fill: "#021544", cta_text: "#FFFFFF",
+    headline: "#021544", body: "#5B9FFF",
+    trust_fill: "#5B9FFF", trust_text: "#FFFFFF",
   },
   /* Legacy light — keep for compat */
   light: {
     name: "light",
-    bg: "#F4FBFB", bg2: "#17A3A4",
+    bg: "#F4FBFB", bg2: "#00B4D8",
     accent: "#021544",
     cta_fill: "#021544", cta_text: "#FFFFFF",
-    headline: "#021544", body: "#17A3A4",
-    trust_fill: "#17A3A4", trust_text: "#FFFFFF",
+    headline: "#021544", body: "#00B4D8",
+    trust_fill: "#00B4D8", trust_text: "#FFFFFF",
   },
   teal: {
     name: "teal",
-    bg: "#17A3A4", bg2: "#021544",
+    bg: "#00B4D8", bg2: "#021544",
     accent: "#FFFFFF",
     cta_fill: "#021544", cta_text: "#FFFFFF",
     headline: "#FFFFFF", body: "#02265B",
     trust_fill: "#021544", trust_text: "#FFFFFF",
   },
 
-  /* ── Sub-brand ────────────────────────────────────────────────── */
-  /* مسك الدفاتر — dark navy + orange accent */
+  /* ── Sub-brands ───────────────────────────────────────────────── */
+  /* مسك الدفاتر — dark navy + orange accent (unified spec: orange CTA + white text) */
   bookkeeping: {
     name: "bookkeeping",
     bg: "#021544", bg2: "#0A2266",
     accent: "#FF6B2B",
     cta_fill: "#FF6B2B", cta_text: "#FFFFFF",
     headline: "#FFFFFF", body: "#C8D5F0",
-    trust_fill: "#17A3A4", trust_text: "#FFFFFF",
+    trust_fill: "#FF6B2B", trust_text: "#FFFFFF",
   },
 };
 
-const SCHEME_ORDER = ["navy", "light_cyan", "midnight", "light_purple", "ocean", "slate"] as const;
+const SCHEME_ORDER = ["navy", "light_cyan", "midnight", "light_purple", "ocean", "light_blue"] as const;
 
 /** True for light-background schemes — no dark gradient overlay needed */
 function isLightScheme(s: ColorScheme): boolean {
-  return ["light_cyan", "light_purple", "light"].includes(s.name);
+  return ["light_cyan", "light_purple", "light_blue", "light"].includes(s.name);
 }
 
 export function resolveScheme(color_scheme?: string): ColorScheme {

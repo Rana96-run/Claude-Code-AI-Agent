@@ -11,6 +11,7 @@
 import fs from "fs";
 import path from "path";
 import { logger } from "./logger.js";
+import { sheetsUpsertEntry, sheetsAppendCompetitorPosts } from "./sheets-client.js";
 
 const DATA_DIR   = path.resolve(process.cwd(), "data");
 const STORE_PATH = path.join(DATA_DIR, "content-library.json");
@@ -112,6 +113,10 @@ export function upsertEntry(entry: ContentEntry): ContentEntry {
     if (lib.entries.length > 500) lib.entries = lib.entries.slice(0, 500);
   }
   save(lib);
+  // Mirror to Google Sheets (non-blocking — failure is logged, not thrown)
+  sheetsUpsertEntry(entry).catch((e) =>
+    logger.warn({ err: String(e) }, "content-library: sheets sync failed")
+  );
   return entry;
 }
 
@@ -141,15 +146,25 @@ export function listCompetitorPosts(competitor?: string, limit = 20): Competitor
 /** Save competitor posts (deduped by post_url). */
 export function saveCompetitorPosts(posts: CompetitorPost[]) {
   const lib = load();
+  const newPosts: CompetitorPost[] = [];
   for (const post of posts) {
     const exists = lib.competitor_posts.some(
       (p) => post.post_url && p.post_url === post.post_url
     );
-    if (!exists) lib.competitor_posts.unshift(post);
+    if (!exists) {
+      lib.competitor_posts.unshift(post);
+      newPosts.push(post);
+    }
   }
   // Keep last 200 competitor posts
   lib.competitor_posts = lib.competitor_posts.slice(0, 200);
   save(lib);
+  // Mirror new posts to Google Sheets (non-blocking)
+  if (newPosts.length > 0) {
+    sheetsAppendCompetitorPosts(newPosts).catch((e) =>
+      logger.warn({ err: String(e) }, "content-library: competitor sheets sync failed")
+    );
+  }
 }
 
 /** Update quality/optimization fields on an existing entry. */

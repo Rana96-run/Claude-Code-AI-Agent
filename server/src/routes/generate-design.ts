@@ -34,6 +34,7 @@ import {
   QOYOD_CLASSIC_STYLE,
   QOYOD_BOOKKEEPING_CONTEXT,
   QOYOD_MAIN_VISUAL_STYLES,
+  QOYOD_UNIFIED_DESIGN_SYSTEM,
 } from "../lib/brand-context.js";
 import { logger } from "../lib/logger.js";
 
@@ -55,12 +56,24 @@ interface DesignBundle {
   image_prompt: string;
 }
 
-/* Provider-specific tuning — each model has different strengths. */
-function tuneForProvider(scenePrompt: string, provider: ImageProvider): string {
+/* Provider-specific tuning — each model has different strengths.
+   spaceHint: where to leave empty space for text overlay.
+   - "right"  → square/landscape dark: text lives on right
+   - "top"    → square/portrait light: text lives at top
+   - "bottom" → portrait dark: text lives at bottom
+*/
+function tuneForProvider(
+  scenePrompt: string,
+  provider: ImageProvider,
+  spaceHint: "right" | "top" | "bottom" = "right",
+): string {
   const base = scenePrompt.trim();
+  const spaceStr =
+    spaceHint === "top"    ? "Leave the TOP portion of the frame completely empty / clean gradient — copy will be added in post-production above the device" :
+    spaceHint === "bottom" ? "Leave the BOTTOM portion of the frame empty — copy will be composited in post" :
+                             "Leave clear empty space on the RIGHT side — copy will be added in post-production";
+
   if (provider === "gpt-image") {
-    /* GPT-Image-1 likes editorial product photography, struggles with
-       very abstract scenes. Lean into product-shot realism. */
     return `${base}
 
 Style guidance for this rendering:
@@ -70,11 +83,9 @@ Style guidance for this rendering:
 - Saudi business context — modest professional dress if a person is shown
 - Photorealistic, NOT illustrated
 - No text, no logos, no watermarks anywhere in the frame
-- Leave clear empty space on the right side (or bottom for portrait orientations) — copy will be added in post-production`;
+- ${spaceStr}`;
   }
   if (provider === "nanobanana") {
-    /* Nano Banana (Gemini 2.5 Flash Image) handles cinematic scenes
-       and creative compositions well. Lean into cinematic look. */
     return `${base}
 
 Style guidance for this rendering:
@@ -83,7 +94,7 @@ Style guidance for this rendering:
 - Saudi business context — authentic, modest, professional
 - 8K, depth, atmosphere
 - Render with NO text, NO logos, NO watermarks anywhere in the image
-- Leave clear empty space on the right side (or bottom for portrait orientations) for typography that will be composited later`;
+- ${spaceStr}`;
   }
   return base;
 }
@@ -129,6 +140,8 @@ async function generateDesignBundle(
   const isBookkeeping = /bookkeeping|مسك|دفاتر/i.test(product);
 
   const sys = `You are the Qoyod AI Graphic Designer. You produce a 250-400 word English image prompt for an AI image model that paints the VISUAL SCENE for a Qoyod social media ad. The Arabic copy is added in post-production with proper typography — DO NOT instruct the model to render Arabic text in the image.
+
+${QOYOD_UNIFIED_DESIGN_SYSTEM}
 
 ${QOYOD_BRAND_PLAYBOOK}
 
@@ -302,9 +315,20 @@ router.post("/generate-design", async (req, res) => {
     const promptWithSchemeHint = lightScheme
       ? `${image_prompt}\n\nCRITICAL: This design uses a LIGHT background. The scene must have a clean, light gradient background (cyan-to-white or lavender-to-white). NO dark backgrounds. Leave the top portion of the frame completely empty/clear for text overlay.`
       : image_prompt;
+    /* Space hint — where the text overlay will live so the AI leaves that zone clean:
+       - Light 1:1 / light portrait / dark portrait → text at TOP
+       - Dark 16:9 / dark 1:1 → text on RIGHT
+    */
+    const isPortraitRatio = ratio === "9:16" || ratio === "4:5";
+    const spaceHint =
+      lightScheme && ratio !== "16:9" ? "top" :
+      isPortraitRatio ? "top" :
+      "right";
+
     const tunedPrompt = tuneForProvider(
       promptWithSchemeHint,
       (image_provider === "auto" ? "auto" : image_provider) as ImageProvider,
+      spaceHint,
     );
 
     /* Veo generates video — return raw video, no Satori text compositing */
