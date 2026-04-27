@@ -347,10 +347,9 @@ function buildVdom(
   };
 
   /**
-   * Arabic multi-word text — for headlines and hooks (long, multi-line capable).
-   * Each word is a separate RTL flex item so Yoga's flex engine handles
-   * right-to-left word ordering natively. Avoids gap shorthand (Yoga compat)
-   * and never passes undefined CSS values.
+   * Arabic text block — renders as a single RTL text node so Satori's BiDi
+   * algorithm handles word-order, ligatures, and wrapping correctly.
+   * Replaces the old word-by-word flex approach which caused scattered layout.
    */
   function arabicWords(
     text: string,
@@ -363,39 +362,37 @@ function buildVdom(
     },
     containerStyle: Record<string, unknown> = {},
   ): object {
-    const words = (text || "").trim().split(/\s+/).filter(Boolean);
-    if (!words.length) return { type: "div", props: { style: { display: "flex" }, children: "" } };
+    const trimmed = (text || "").trim();
+    if (!trimmed) return { type: "div", props: { style: { display: "flex" }, children: "" } };
 
-    const spacing = Math.round(Number(wordStyle.fontSize) * 0.13);
-    const wStyle: Record<string, unknown> = {
-      display: "flex",
+    const innerStyle: Record<string, unknown> = {
+      direction: "rtl",
       fontSize: wordStyle.fontSize,
       fontWeight: wordStyle.fontWeight,
       color: wordStyle.color,
-      lineHeight: wordStyle.lineHeight ?? 1.3,
+      lineHeight: wordStyle.lineHeight ?? 1.25,
+      width: "100%",
     };
-    if (wordStyle.textShadow) wStyle.textShadow = wordStyle.textShadow;
+    if (wordStyle.textShadow) innerStyle.textShadow = wordStyle.textShadow;
 
     return {
       type: "div",
       props: {
         style: {
           display: "flex",
-          flexDirection: "row",
-          flexWrap: "wrap",
           direction: "rtl",
-          justifyContent: "flex-start",   // flex-start = right in RTL
-          alignItems: "flex-start",
           width: "100%",
           ...containerStyle,
         },
-        children: words.map((word, i) => ({
-          type: "div",
-          props: {
-            style: { ...wStyle, marginLeft: i < words.length - 1 ? spacing : 0 },
-            children: word,
+        children: [
+          {
+            type: "div",
+            props: {
+              style: innerStyle,
+              children: trimmed,
+            },
           },
-        })),
+        ],
       },
     };
   }
@@ -552,18 +549,18 @@ function buildVdom(
           fontSize: headlineSize,
           fontWeight: 700,
           color: scheme.accent,
-          lineHeight: 1.2,
+          lineHeight: 1.15,
           textShadow: headlineShadow,
-        }, { marginBottom: 16, justifyContent: justifyWords }),
+        }, { marginBottom: 12 }),
 
         // ── Hook ─────────────────────────────────────────────────────────────
         arabicWords(copy.hook, {
           fontSize: hookSize,
           fontWeight: 400,
           color: scheme.headline,
-          lineHeight: 1.55,
+          lineHeight: 1.45,
           textShadow: hookShadow,
-        }, { marginBottom: 28, justifyContent: justifyWords }),
+        }, { marginBottom: 22 }),
 
         // ── Trust badge ───────────────────────────────────────────────────────
         // arabicInline (not arabicWords) — handles "ZATCA-معتمد" mixed script
@@ -575,9 +572,9 @@ function buildVdom(
               direction: "rtl",
               backgroundColor: scheme.trust_fill,
               borderRadius: 100,
-              marginBottom: 20,
-              paddingTop: 11, paddingBottom: 11,
-              paddingLeft: 30, paddingRight: 30,
+              marginBottom: 16,
+              paddingTop: 10, paddingBottom: 10,
+              paddingLeft: 28, paddingRight: 28,
             },
             children: [
               arabicInline(copy.trust, {
@@ -614,9 +611,9 @@ function buildVdom(
     },
   };
 
-  const logoW = ratio === "9:16" ? 170 : ratio === "16:9" ? 140 : 150;
-  const logoH = ratio === "9:16" ? 52  : ratio === "16:9" ? 44  : 46;
-  const footerBottom = 30;
+  const logoW = ratio === "9:16" ? 200 : ratio === "16:9" ? 180 : 175;
+  const logoH = ratio === "9:16" ? 62  : ratio === "16:9" ? 56  : 54;
+  const footerBottom = 32;
 
   /* Footer text color — dark on light bg, white on dark bg */
   const footerColor = lightBg ? "#021544" : "#FFFFFF";
@@ -635,19 +632,20 @@ function buildVdom(
         flexDirection: "column",
         position: "absolute",
         bottom: footerBottom,
-        left: 36,
-        fontSize: ratio === "9:16" ? 18 : 15,
+        left: 40,
+        fontSize: ratio === "9:16" ? 22 : 18,
+        fontWeight: 600,
         color: footerColor,
         opacity: footerOpacity,
-        letterSpacing: 0.3,
-        direction: "rtl",
+        letterSpacing: 0.5,
+        direction: "ltr",
       },
       children: lightBg
         ? [
-            { type: "div", props: { style: { display: "flex", fontSize: ratio === "9:16" ? 16 : 13 }, children: "للمزيد قم بزيارة" } },
-            { type: "div", props: { style: { display: "flex", fontWeight: 600 }, children: "qoyod.com" } },
+            { type: "div", props: { style: { display: "flex", fontSize: ratio === "9:16" ? 15 : 13, fontWeight: 400, direction: "rtl" }, children: "للمزيد قم بزيارة" } },
+            { type: "div", props: { style: { display: "flex", fontWeight: 700 }, children: "qoyod.com" } },
           ]
-        : "qoyod.com",
+        : { type: "div", props: { style: { display: "flex", fontWeight: 700, fontSize: ratio === "9:16" ? 22 : 18 }, children: "qoyod.com" } },
     },
   };
 
