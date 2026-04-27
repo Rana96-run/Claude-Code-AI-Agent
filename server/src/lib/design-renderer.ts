@@ -288,10 +288,56 @@ function buildVdom(
     },
   };
 
-  /* Satori 0.10+ supports direction:'rtl' natively — no manual token reversal.
-     We just pass the Arabic string as-is; the engine handles BiDi and
-     multi-line wrapping correctly when direction is set on the element. */
+  /* Identity helper for short single-word strings where wrapping never occurs. */
   const ar = (s: string): string => s || "";
+
+  /**
+   * Arabic text as RTL flex words — the only reliable multi-line Arabic approach
+   * in Satori. Each word is a separate flex item; the RTL flex container orders
+   * them right-to-left and wraps naturally. No BiDi engine involved.
+   */
+  function arabicWords(
+    text: string,
+    wordStyle: {
+      fontSize: number;
+      fontWeight: number | string;
+      color: string;
+      lineHeight?: number;
+      textShadow?: string;
+    },
+    containerStyle: Record<string, unknown> = {},
+  ): object {
+    const words = (text || "").trim().split(/\s+/).filter(Boolean);
+    const gap = Math.round(Number(wordStyle.fontSize) * 0.28);
+    return {
+      type: "div",
+      props: {
+        style: {
+          display: "flex",
+          flexDirection: "row",
+          flexWrap: "wrap",
+          direction: "rtl",
+          justifyContent: "flex-start",   // flex-start = right in RTL
+          gap,
+          width: "100%",
+          ...containerStyle,
+        },
+        children: words.map((word) => ({
+          type: "div",
+          props: {
+            style: {
+              fontSize: wordStyle.fontSize,
+              fontWeight: wordStyle.fontWeight,
+              color: wordStyle.color,
+              lineHeight: wordStyle.lineHeight ?? 1.25,
+              textShadow: wordStyle.textShadow,
+            },
+            children: word,
+          },
+        })),
+      },
+    };
+  }
 
   /* Adaptive font sizes — shrink the headline if it's too long so we never
      wrap into 5+ lines. Each Arabic word averages ~5 chars. */
@@ -436,64 +482,45 @@ function buildVdom(
         direction: "rtl",
         textAlign: "right",
         ...textContainerStyle,
-        alignItems: "flex-end", // physical right edge — RTL doesn't flip this in column flex
       },
       children: [
         // Brand mark — official PNG when loaded, typographic fallback otherwise
         logoBlock,
         // Headline
-        {
-          type: "div",
-          props: {
-            style: {
-              display: "flex",
-              direction: "rtl",
-              fontSize: headlineSize,
-              fontWeight: 700,
-              color: scheme.headline,
-              lineHeight: 1.2,
-              marginBottom: 16,
-              textAlign: "right",
-              textShadow: `0 2px 24px ${scheme.bg}AA`,
-              width: "100%",
-            },
-            children: ar(copy.headline),
-          },
-        },
+        arabicWords(copy.headline, {
+          fontSize: headlineSize,
+          fontWeight: 700,
+          color: scheme.headline,
+          lineHeight: 1.2,
+          textShadow: `0 2px 24px ${scheme.bg}AA`,
+        }, { marginBottom: 16 }),
         // Hook
-        {
-          type: "div",
-          props: {
-            style: {
-              display: "flex",
-              direction: "rtl",
-              fontSize: hookSize,
-              fontWeight: 400,
-              color: scheme.body,
-              lineHeight: 1.5,
-              marginBottom: 26,
-              textAlign: "right",
-              width: "100%",
-            },
-            children: ar(copy.hook),
-          },
-        },
+        arabicWords(copy.hook, {
+          fontSize: hookSize,
+          fontWeight: 400,
+          color: scheme.body,
+          lineHeight: 1.5,
+        }, { marginBottom: 26 }),
         // Trust badge (single — per ads guideline)
         {
           type: "div",
           props: {
             style: {
               display: "flex",
+              flexDirection: "row",
               direction: "rtl",
               backgroundColor: scheme.trust_fill,
-              color: scheme.trust_text,
-              padding: "12px 28px",
               borderRadius: 100,
-              fontSize: trustSize,
-              fontWeight: 600,
               marginBottom: 22,
+              overflow: "hidden",
             },
-            children: ar(copy.trust),
+            children: [
+              arabicWords(copy.trust, {
+                fontSize: trustSize,
+                fontWeight: 600,
+                color: scheme.trust_text,
+              }, { padding: "12px 28px" }),
+            ],
           },
         },
         // CTA (single — per ads guideline)
@@ -502,15 +529,19 @@ function buildVdom(
           props: {
             style: {
               display: "flex",
+              flexDirection: "row",
               direction: "rtl",
               backgroundColor: scheme.cta_fill,
-              color: scheme.cta_text,
-              padding: "18px 50px",
               borderRadius: 100,
-              fontSize: ctaSize,
-              fontWeight: 700,
+              overflow: "hidden",
             },
-            children: ar(copy.cta),
+            children: [
+              arabicWords(copy.cta, {
+                fontSize: ctaSize,
+                fontWeight: 700,
+                color: scheme.cta_text,
+              }, { padding: "18px 50px" }),
+            ],
           },
         },
       ],

@@ -1852,10 +1852,22 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
                 </Fld>
                 <Fld label={T("نموذج توليد الصورة","Image Generation Model")}>
                   <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-                    {[["auto",T("تلقائي (يختار الأنسب)","Auto (best fit)")],["gpt-image","GPT Image (editorial / product)"],["nanobanana","Nano Banana (cinematic)"]].map(([v,l])=>(
+                    {[
+                      ["auto",          T("تلقائي","Auto")],
+                      ["gpt-image",     "GPT Image 1"],
+                      ["nanobanana",    "Nano Banana (Flash 2.0)"],
+                      ["nanobanana-25", "Nano Banana (Flash 2.5)"],
+                      ["imagen3",       "Imagen 3"],
+                      ["imagen4",       "Imagen 4"],
+                      ["veo2",          "Veo 2 🎬"],
+                      ["veo3",          "Veo 3 🎬"],
+                    ].map(([v,l])=>(
                       <Seg key={v} ch={l} on={imageProvider===v} onClick={()=>setImageProvider(v)}/>
                     ))}
                   </div>
+                  {(imageProvider==="veo2"||imageProvider==="veo3")&&(
+                    <div style={{fontSize:10,color:"#f59e0b",marginTop:4}}>⚠ {T("Veo يولد فيديو — بدون تركيب نص عربي","Veo generates video — no Arabic text overlay")}</div>
+                  )}
                 </Fld>
                 <Fld label={T("عدد النسخ","Variants")}><div style={{display:"flex",flexWrap:"wrap",gap:4}}>{[1,2,3,4,5].map(n=><Seg key={n} ch={n} on={numVariants===n} onClick={()=>setNumVariants(n)}/>)}</div></Fld>
                 <Btn ch={T(`✦ أنشئ ${numVariants} تصميم الآن`,`✦ Generate ${numVariants} Design${numVariants>1?"s":""} Now`)} onClick={genDirectDesigns} dis={bLd} full/>
@@ -1869,7 +1881,7 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,padding:"8px 12px",borderRadius:8,border:"1px solid rgba(1,53,90,.45)",background:"rgba(7,22,48,.5)",flexWrap:"wrap"}}>
                   <span style={{fontSize:10.5,fontWeight:600,color:"#17a3a3",flex:"1 1 200px"}}>✦ {T("نموذج توليد الصورة","Image generation model")}</span>
                   <div style={{display:"flex",background:"#0a1f3d",border:"1px solid rgba(1,53,90,.45)",borderRadius:5,overflow:"hidden",height:26}}>
-                    {[["auto",T("تلقائي","Auto")],["nanobanana","Nano Banana"],["gpt-image","GPT Image"]].map(([v,l])=>(
+                    {[["auto","Auto"],["gpt-image","GPT Image"],["nanobanana","NB Flash 2"],["nanobanana-25","NB Flash 2.5"],["imagen3","Imagen 3"],["imagen4","Imagen 4"],["veo2","Veo 2🎬"],["veo3","Veo 3🎬"]].map(([v,l])=>(
                       <button key={v} onClick={()=>setImageProvider(v)} style={{padding:"0 10px",height:"100%",background:imageProvider===v?"rgba(23,163,164,.15)":"none",border:"none",color:imageProvider===v?"#17a3a3":"#6a96aa",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{l}</button>
                     ))}
                   </div>

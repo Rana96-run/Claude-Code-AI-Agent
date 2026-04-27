@@ -17,7 +17,7 @@
  */
 
 import { Router } from "express";
-import { generateHeroImage, type ImageProvider } from "../lib/image-gen.js";
+import { generateHeroImage, generateHeroVideo, type ImageProvider } from "../lib/image-gen.js";
 import {
   renderDesign,
   resolveScheme,
@@ -268,10 +268,26 @@ router.post("/generate-design", async (req, res) => {
     );
 
     /* 2. AI → render the scene (per-provider tuning) */
+    const isVeo = image_provider === "veo2" || image_provider === "veo3";
     const tunedPrompt = tuneForProvider(
       image_prompt,
       (image_provider === "auto" ? "auto" : image_provider) as ImageProvider,
     );
+
+    /* Veo generates video — return raw video, no Satori text compositing */
+    if (isVeo) {
+      const vid = await generateHeroVideo(tunedPrompt, image_provider as "veo2" | "veo3", ratio);
+      res.status(200).json({
+        video: vid?.dataUrl ?? null,
+        content: copy,
+        image_prompt,
+        provider: vid?.provider ?? null,
+        scheme: scheme.name,
+        rendered_via: vid ? "veo-video-only" : "veo-failed",
+      });
+      return;
+    }
+
     const ai = await generateHeroImage(tunedPrompt, image_provider as ImageProvider, ratio);
 
     /* 3. Satori → composite Arabic text + brand + qoyod.com over the scene */
