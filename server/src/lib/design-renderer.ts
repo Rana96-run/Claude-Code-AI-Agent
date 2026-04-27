@@ -119,6 +119,7 @@ export interface ColorScheme {
 }
 
 export const SCHEMES: Record<string, ColorScheme> = {
+  /* ── Dark backgrounds ─────────────────────────────────────────── */
   navy: {
     name: "navy",
     bg: "#021544", bg2: "#17A3A4",
@@ -127,28 +128,12 @@ export const SCHEMES: Record<string, ColorScheme> = {
     headline: "#FFFFFF", body: "#9FE5E6",
     trust_fill: "#17A3A4", trust_text: "#FFFFFF",
   },
-  teal: {
-    name: "teal",
-    bg: "#17A3A4", bg2: "#021544",
-    accent: "#FFFFFF",
-    cta_fill: "#021544", cta_text: "#FFFFFF",
-    headline: "#FFFFFF", body: "#02265B",
-    trust_fill: "#021544", trust_text: "#FFFFFF",
-  },
   ocean: {
     name: "ocean",
     bg: "#01355A", bg2: "#17A3A4",
     accent: "#1FCACB",
     cta_fill: "#1FCACB", cta_text: "#01355A",
     headline: "#FFFFFF", body: "#A8E6E6",
-    trust_fill: "#17A3A4", trust_text: "#FFFFFF",
-  },
-  light: {
-    name: "light",
-    bg: "#F4FBFB", bg2: "#17A3A4",
-    accent: "#01355A",
-    cta_fill: "#17A3A4", cta_text: "#FFFFFF",
-    headline: "#021544", body: "#01355A",
     trust_fill: "#17A3A4", trust_text: "#FFFFFF",
   },
   midnight: {
@@ -167,18 +152,62 @@ export const SCHEMES: Record<string, ColorScheme> = {
     headline: "#FFFFFF", body: "#9FE5E6",
     trust_fill: "#17A3A4", trust_text: "#FFFFFF",
   },
-  /* مسك الدفاتر sub-brand — orange accent, dark navy on white */
+
+  /* ── Light backgrounds (match production graphic-design style) ── */
+  /* Cyan-to-white gradient, dark navy text — design ref style 1 & 3 */
+  light_cyan: {
+    name: "light_cyan",
+    bg: "#D6F4F9", bg2: "#FFFFFF",
+    accent: "#021544",           // dark navy headline — matches refs
+    cta_fill: "#021544", cta_text: "#FFFFFF",
+    headline: "#021544", body: "#17A3A4",
+    trust_fill: "#17A3A4", trust_text: "#FFFFFF",
+  },
+  /* Purple-to-white gradient, dark navy text — design ref style 4 & 5 */
+  light_purple: {
+    name: "light_purple",
+    bg: "#C8C6F7", bg2: "#FFFFFF",
+    accent: "#021544",
+    cta_fill: "#021544", cta_text: "#FFFFFF",
+    headline: "#021544", body: "#3D3B8E",
+    trust_fill: "#3D3B8E", trust_text: "#FFFFFF",
+  },
+  /* Legacy light — keep for compat */
+  light: {
+    name: "light",
+    bg: "#F4FBFB", bg2: "#17A3A4",
+    accent: "#021544",
+    cta_fill: "#021544", cta_text: "#FFFFFF",
+    headline: "#021544", body: "#17A3A4",
+    trust_fill: "#17A3A4", trust_text: "#FFFFFF",
+  },
+  teal: {
+    name: "teal",
+    bg: "#17A3A4", bg2: "#021544",
+    accent: "#FFFFFF",
+    cta_fill: "#021544", cta_text: "#FFFFFF",
+    headline: "#FFFFFF", body: "#02265B",
+    trust_fill: "#021544", trust_text: "#FFFFFF",
+  },
+
+  /* ── Sub-brand ────────────────────────────────────────────────── */
+  /* مسك الدفاتر — dark navy + orange accent */
   bookkeeping: {
     name: "bookkeeping",
     bg: "#021544", bg2: "#0A2266",
-    accent: "#FF6B2B",           // orange — bookkeeping brand
+    accent: "#FF6B2B",
     cta_fill: "#FF6B2B", cta_text: "#FFFFFF",
     headline: "#FFFFFF", body: "#C8D5F0",
     trust_fill: "#17A3A4", trust_text: "#FFFFFF",
   },
 };
 
-const SCHEME_ORDER = ["navy", "ocean", "midnight", "teal", "slate", "light", "bookkeeping"] as const;
+const SCHEME_ORDER = ["navy", "light_cyan", "midnight", "light_purple", "ocean", "slate"] as const;
+
+/** True for light-background schemes — no dark gradient overlay needed */
+function isLightScheme(s: ColorScheme): boolean {
+  return ["light_cyan", "light_purple", "light"].includes(s.name);
+}
 
 export function resolveScheme(color_scheme?: string): ColorScheme {
   if (color_scheme && SCHEMES[color_scheme]) return SCHEMES[color_scheme];
@@ -275,13 +304,17 @@ function buildVdom(
         },
       };
 
-  /* Smart gradient overlay for legibility — ratio-aware so text always
-     reads cleanly over any AI background.
-     Portrait: text lives at TOP → dark at top, fades to transparent at bottom.
-     Landscape/Square: text lives on the RIGHT → dark right, transparent left.
+  /* Smart gradient overlay for legibility.
+     Light schemes (light_cyan, light_purple): NO overlay — bg IS the design,
+     text is dark navy and readable without any scrim.
+     Dark schemes: ratio-aware overlay so text reads over any AI background.
+       Portrait  → dark top, transparent bottom (text lives at top)
+       Landscape → dark right, transparent left (text lives at right)
+       Square    → dark right, transparent left
   */
   const isPortrait = ratio === "9:16" || ratio === "4:5";
   const isWide = ratio === "16:9";
+  const lightBg = isLightScheme(scheme);
   const gradientOverlay = {
     type: "div",
     props: {
@@ -291,10 +324,12 @@ function buildVdom(
         top: 0, left: 0,
         width: "100%",
         height: "100%",
-        backgroundImage: isWide
+        // Light schemes: invisible overlay — the gradient bg handles everything
+        backgroundImage: lightBg
+          ? "none"
+          : isWide
           ? `linear-gradient(to left, ${scheme.bg}EE 0%, ${scheme.bg}AA 35%, transparent 65%)`
           : isPortrait
-          /* TOP = text zone: dark overlay; BOTTOM = visual scene: transparent */
           ? `linear-gradient(to bottom, ${scheme.bg}F0 0%, ${scheme.bg}CC 25%, ${scheme.bg}77 45%, transparent 70%)`
           : `linear-gradient(to left, ${scheme.bg}EE 0%, ${scheme.bg}AA 40%, transparent 70%)`,
       },
@@ -467,16 +502,16 @@ function buildVdom(
     ? getBookkeepingLogoDataUrlSync()
     : getBrandLogoDataUrlSync();
 
-  /* Portrait (9:16, 4:5) = text centered top, full-width.
-     Landscape (16:9) = text right column.
-     Square (1:1) = text top-right column.
-     isPortrait / isWide reused from gradient overlay declaration. */
-  const justifyWords = isPortrait ? "center" : "flex-start"; // flex-start = right in RTL
-  // Portrait: center all items; Landscape/Square: right-align (flex-end in RTL context)
-  const containerAlign = isPortrait ? "center" : "flex-end";
+  /* Text alignment logic:
+     Light schemes → always centered (matches production graphic-design refs)
+     Dark schemes  → portrait=center, landscape/square=right (RTL natural) */
+  const forceCenter = lightBg;
+  const justifyWords = (isPortrait || forceCenter) ? "center" : "flex-start";
+  const containerAlign = (isPortrait || forceCenter) ? "center" : "flex-end";
 
-  /* Headline text shadow for readability over any AI background */
-  const headlineShadow = `0 2px 12px rgba(0,0,0,0.55), 0 1px 4px rgba(0,0,0,0.4)`;
+  /* Text shadow only on dark/photo backgrounds — not needed on light bg */
+  const headlineShadow = lightBg ? undefined : `0 2px 12px rgba(0,0,0,0.55), 0 1px 4px rgba(0,0,0,0.4)`;
+  const hookShadow = lightBg ? undefined : `0 1px 6px rgba(0,0,0,0.45)`;
 
   const textOverlay = {
     type: "div",
@@ -498,13 +533,13 @@ function buildVdom(
           textShadow: headlineShadow,
         }, { marginBottom: 16, justifyContent: justifyWords }),
 
-        // ── Hook — white body text ────────────────────────────────────────────
+        // ── Hook ─────────────────────────────────────────────────────────────
         arabicWords(copy.hook, {
           fontSize: hookSize,
           fontWeight: 400,
           color: scheme.headline,
           lineHeight: 1.55,
-          textShadow: `0 1px 6px rgba(0,0,0,0.45)`,
+          textShadow: hookShadow,
         }, { marginBottom: 28, justifyContent: justifyWords }),
 
         // ── Trust badge ───────────────────────────────────────────────────────
@@ -556,25 +591,40 @@ function buildVdom(
     },
   };
 
-  const logoW = ratio === "9:16" ? 160 : ratio === "16:9" ? 130 : 140;
-  const logoH = ratio === "9:16" ? 50  : ratio === "16:9" ? 40  : 44;
-  const footerBottom = 28;
+  const logoW = ratio === "9:16" ? 170 : ratio === "16:9" ? 140 : 150;
+  const logoH = ratio === "9:16" ? 52  : ratio === "16:9" ? 44  : 46;
+  const footerBottom = 30;
 
-  /* Bottom-left: qoyod.com */
+  /* Footer text color — dark on light bg, white on dark bg */
+  const footerColor = lightBg ? "#021544" : "#FFFFFF";
+  const footerOpacity = lightBg ? 0.7 : 0.75;
+  /* Footer label — matches production refs ("للمزيد قم بزيارة qoyod.com") */
+  const footerLabel = lightBg
+    ? `للمزيد قم بزيارة\nqoyod.com`
+    : "qoyod.com";
+
+  /* Bottom-left: website link */
   const websiteFooter = {
     type: "div",
     props: {
       style: {
         display: "flex",
+        flexDirection: "column",
         position: "absolute",
         bottom: footerBottom,
         left: 36,
-        fontSize: ratio === "9:16" ? 20 : 17,
-        color: "#FFFFFF",
-        opacity: 0.75,
-        letterSpacing: 0.5,
+        fontSize: ratio === "9:16" ? 18 : 15,
+        color: footerColor,
+        opacity: footerOpacity,
+        letterSpacing: 0.3,
+        direction: "rtl",
       },
-      children: "qoyod.com",
+      children: lightBg
+        ? [
+            { type: "div", props: { style: { display: "flex", fontSize: ratio === "9:16" ? 16 : 13 }, children: "للمزيد قم بزيارة" } },
+            { type: "div", props: { style: { display: "flex", fontWeight: 600 }, children: "qoyod.com" } },
+          ]
+        : "qoyod.com",
     },
   };
 

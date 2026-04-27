@@ -893,7 +893,7 @@ export default function CreativeOS(){
   const isBookkeepingProd = /bookkeeping|مسك|دفاتر/i.test(bProd||"");
   const VARIANT_SCHEMES = isBookkeepingProd
     ? ["bookkeeping","bookkeeping","bookkeeping","bookkeeping","bookkeeping","bookkeeping"]
-    : ["navy","ocean","midnight","teal","slate","light"];
+    : ["navy","light_cyan","midnight","light_purple","ocean","slate"];
 
   const genDesign=useCallback(async(variantNum,briefOverride)=>{
     const brief=briefOverride||bRes;

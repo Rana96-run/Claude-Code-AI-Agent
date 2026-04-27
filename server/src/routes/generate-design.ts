@@ -276,13 +276,18 @@ router.post("/generate-design", async (req, res) => {
     /* If user picked an explicit visual style, fold it into art_direction
        so Claude leans the scene that way. */
     const VISUAL_STYLE_HINTS: Record<string, string> = {
-      device_dashboard: "device + Qoyod dashboard close-up, editorial product photography",
-      "2d_character": "minimal 2D flat illustration with one Saudi character, clean vector style",
+      device_dashboard: "laptop or tablet showing Qoyod dashboard UI, clean studio product shot on a light gradient background — NO people, device floating on clean surface, plenty of empty space for text overlay",
+      "2d_character": "minimal 2D flat illustration with one Saudi character, clean vector style, light gradient background",
       Before_After: "split-screen before/after — chaos vs calm, dramatic lighting contrast",
       Saudi_Person: "editorial portrait of a Saudi business owner, modest professional dress, soft natural light",
+      mockup_light: "MacBook laptop + iPhone side by side showing Qoyod dashboard, light cyan-to-white gradient background, clean studio product photography, no people, generous empty space for text",
+      mockup_dark: "MacBook laptop showing Qoyod dashboard on a deep navy #021544 background, cyan rim light, premium product photography",
     };
-    const styleHint = visual_style && VISUAL_STYLE_HINTS[visual_style]
-      ? `${VISUAL_STYLE_HINTS[visual_style]}. ${art_direction || ""}`.trim()
+    /* Light schemes should bias toward device mockup / clean bg style */
+    const isLightSch = ["light_cyan","light_purple","light"].includes(scheme.name);
+    const autoStyleHint = isLightSch && !visual_style ? "mockup_light" : visual_style;
+    const styleHint = autoStyleHint && VISUAL_STYLE_HINTS[autoStyleHint]
+      ? `${VISUAL_STYLE_HINTS[autoStyleHint]}. ${art_direction || ""}`.trim()
       : art_direction;
     const { copy, image_prompt } = await generateDesignBundle(
       product, message, hook, cta, trust, concept, styleHint,
