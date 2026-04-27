@@ -510,9 +510,8 @@ function buildVdom(
         alignItems: "flex-end", // always right-edge within the container
       },
       children: [
-        // Brand mark — official PNG when loaded, typographic fallback otherwise
-        logoBlock,
         // Headline — CYAN on dark backgrounds (production design standard)
+        // NOTE: Logo is NOT here — it lives at bottom-right corner (see brandCorner)
         arabicWords(copy.headline, {
           fontSize: headlineSize,
           fontWeight: 700,
@@ -573,37 +572,68 @@ function buildVdom(
     },
   };
 
-  /* Footer — bottom-left: "للمزيد قم بزيارة\nqoyod.com" (production standard) */
+  const logoW = ratio === "9:16" ? 160 : ratio === "16:9" ? 130 : 140;
+  const logoH = ratio === "9:16" ? 50  : ratio === "16:9" ? 40  : 44;
+  const footerBottom = 28;
+
+  /* Bottom-left: qoyod.com */
   const websiteFooter = {
     type: "div",
     props: {
       style: {
         display: "flex",
-        flexDirection: "column",
-        direction: "rtl",
         position: "absolute",
-        bottom: 24,
+        bottom: footerBottom,
         left: 36,
-        alignItems: "flex-start",
+        fontSize: ratio === "9:16" ? 20 : 17,
+        color: "#FFFFFF",
+        opacity: 0.75,
+        letterSpacing: 0.5,
       },
-      children: [
-        {
-          type: "div",
-          props: {
-            style: { fontSize: 14, color: scheme.body, opacity: 0.6 },
-            children: "للمزيد قم بزيارة",
-          },
-        },
-        {
-          type: "div",
-          props: {
-            style: { fontSize: 16, color: scheme.body, opacity: 0.85, letterSpacing: 0.5 },
-            children: "qoyod.com",
-          },
-        },
-      ],
+      children: "qoyod.com",
     },
   };
+
+  /* Bottom-right: QOYOD logo PNG or wordmark */
+  const brandCorner = logoDataUrl
+    ? {
+        type: "div",
+        props: {
+          style: {
+            display: "flex",
+            position: "absolute",
+            bottom: footerBottom,
+            right: 36,
+          },
+          children: [
+            {
+              type: "img",
+              props: {
+                src: logoDataUrl,
+                width: logoW,
+                height: logoH,
+                style: { width: logoW, height: logoH, objectFit: "contain" },
+              },
+            },
+          ],
+        },
+      }
+    : {
+        type: "div",
+        props: {
+          style: {
+            display: "flex",
+            position: "absolute",
+            bottom: footerBottom,
+            right: 36,
+            fontSize: ratio === "9:16" ? 44 : ratio === "16:9" ? 36 : 40,
+            fontWeight: 700,
+            color: "#FFFFFF",
+            letterSpacing: 1,
+          },
+          children: "QOYOD",
+        },
+      };
 
   return {
     type: "div",
@@ -616,7 +646,7 @@ function buildVdom(
         backgroundColor: scheme.bg,
         fontFamily: activeFontFamily(),
       },
-      children: [background, gradientOverlay, textOverlay, websiteFooter],
+      children: [background, gradientOverlay, textOverlay, websiteFooter, brandCorner],
     },
   };
 }
