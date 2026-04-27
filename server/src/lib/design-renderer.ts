@@ -292,9 +292,9 @@ function buildVdom(
   const ar = (s: string): string => s || "";
 
   /**
-   * Arabic text as RTL flex words — the only reliable multi-line Arabic approach
-   * in Satori. Each word is a separate flex item; the RTL flex container orders
-   * them right-to-left and wraps naturally. No BiDi engine involved.
+   * Arabic text as RTL flex words — reliable multi-line Arabic in Satori.
+   * Each word is a separate flex item; RTL flex container orders right-to-left.
+   * Avoids gap shorthand (Yoga compat) and never passes undefined style values.
    */
   function arabicWords(
     text: string,
@@ -308,7 +308,20 @@ function buildVdom(
     containerStyle: Record<string, unknown> = {},
   ): object {
     const words = (text || "").trim().split(/\s+/).filter(Boolean);
-    const gap = Math.round(Number(wordStyle.fontSize) * 0.28);
+    if (!words.length) {
+      return { type: "div", props: { style: { display: "flex" }, children: "" } };
+    }
+    const spacing = Math.round(Number(wordStyle.fontSize) * 0.28);
+    // Build safe word style — never include undefined values
+    const wStyle: Record<string, unknown> = {
+      display: "flex",
+      fontSize: wordStyle.fontSize,
+      fontWeight: wordStyle.fontWeight,
+      color: wordStyle.color,
+      lineHeight: wordStyle.lineHeight ?? 1.25,
+    };
+    if (wordStyle.textShadow) wStyle.textShadow = wordStyle.textShadow;
+
     return {
       type: "div",
       props: {
@@ -317,20 +330,17 @@ function buildVdom(
           flexDirection: "row",
           flexWrap: "wrap",
           direction: "rtl",
-          justifyContent: "flex-start",   // flex-start = right in RTL
-          gap,
+          justifyContent: "flex-start",  // flex-start = right edge in RTL
           width: "100%",
           ...containerStyle,
         },
-        children: words.map((word) => ({
+        children: words.map((word, i) => ({
           type: "div",
           props: {
             style: {
-              fontSize: wordStyle.fontSize,
-              fontWeight: wordStyle.fontWeight,
-              color: wordStyle.color,
-              lineHeight: wordStyle.lineHeight ?? 1.25,
-              textShadow: wordStyle.textShadow,
+              ...wStyle,
+              // word spacing via margin — no gap shorthand needed
+              marginLeft: i < words.length - 1 ? spacing : 0,
             },
             children: word,
           },
@@ -519,7 +529,7 @@ function buildVdom(
                 fontSize: trustSize,
                 fontWeight: 600,
                 color: scheme.trust_text,
-              }, { padding: "12px 28px" }),
+              }, { paddingTop: 12, paddingBottom: 12, paddingLeft: 28, paddingRight: 28 }),
             ],
           },
         },
@@ -540,7 +550,7 @@ function buildVdom(
                 fontSize: ctaSize,
                 fontWeight: 700,
                 color: scheme.cta_text,
-              }, { padding: "18px 50px" }),
+              }, { paddingTop: 18, paddingBottom: 18, paddingLeft: 50, paddingRight: 50 }),
             ],
           },
         },
