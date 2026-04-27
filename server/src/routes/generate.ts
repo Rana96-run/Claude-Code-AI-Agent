@@ -4,7 +4,7 @@ const router = Router();
 
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5";
 const MAX_PROMPT_CHARS = 20_000;
-const MAX_OUTPUT_TOKENS = 4096;
+const MAX_OUTPUT_TOKENS = 8192;
 
 router.post("/generate", async (req, res) => {
   const apiKey = process.env.ANTHROPIC_API_KEY;

@@ -851,17 +851,18 @@ export default function CreativeOS(){
     const sys=`Senior CRO copywriter for Qoyod (Saudi cloud accounting SaaS). ${ol}\n${QOYOD_VOICE}\nTwo genuinely different A/B variants — different angle, different hook, different trigger.\nReturn ONLY valid JSON:\n{"variant_a":{"label":"A — [angle name]","ad_copy":{"hook":"...","body":"...","cta":"..."},"google_headlines":["≤30 chars","≤30 chars","≤30 chars"],"captions":{"instagram":"...with hashtags","linkedin":"..."},"predicted_ctr":"high/med/low","why":"..."},"variant_b":{"label":"B — [angle name]","ad_copy":{"hook":"...","body":"...","cta":"..."},"google_headlines":["≤30 chars","≤30 chars","≤30 chars"],"captions":{"instagram":"...with hashtags","linkedin":"..."},"predicted_ctr":"high/med/low","why":"..."},"recommendation":"..."}`;
     const usr=`Products:${prodNames} Desc:${prodDesc} Channel:${chan} Audience:${funnel} Sector:${sector} Concept:"${abConceptCt}"`;
     setCl(true);setCe("");setCr(null);setAbRes(null);
-    try{setAbRes(await callAI(sys,usr,1800));}catch(e){setCe(e.message);}finally{setCl(false);}
+    try{setAbRes(await callAI(sys,usr,3000));}catch(e){setCe(e.message);}finally{setCl(false);}
   },[lang,prod,prodExtras,chan,funnel,sector,abConceptCt,buildProdCtx]);
 
   const genCampaign=useCallback(async()=>{
     if(!campTheme){setCampErr(T("اكتب موضوع الحملة","Enter a campaign theme"));return;}
     const ol=lang==="en"?"Copy in English.":"Arabic copy in Saudi dialect. Not Egyptian.";
     const budgetCtx=campBudget?`Total budget: ${campBudget} SAR`:"Budget: not specified";
-    const sys=`Senior creative director for Qoyod. ${ol}\n${QOYOD_VOICE}\nReturn ONLY valid JSON:\n{"campaign_name":"...","core_message":"...","target_stage":"TOF/MOF/BOF","timeline":{"weeks":${campDuration||4},"phases":[{"week":"Week 1-2","focus":"...","action":"..."},{"week":"Week 3-4","focus":"...","action":"..."}]},"hooks":[{"type":"...","text":"...","channel":"...","strength":85}],"ad_copies":[{"channel":"...","format":"...","hook":"...","body":"...","cta":"...","trust":"..."}],"budget_split":{${campChs.map(c=>`"${c}":"...%"`).join(",")}},"kpis":["...","...","..."]}`;
+    const adCopiesSchema=campChs.slice(0,3).map(c=>`{"channel":"${c}","format":"...","hook":"...","body":"...","cta":"...","trust":"..."}`).join(",");
+    const sys=`Senior creative director for Qoyod. ${ol}\n${QOYOD_VOICE}\nProduce one ad copy per channel listed in Channels field (ALL of them). Return ONLY valid JSON:\n{"campaign_name":"...","core_message":"...","target_stage":"TOF/MOF/BOF","timeline":{"weeks":${campDuration||4},"phases":[{"week":"Week 1-2","focus":"...","action":"..."},{"week":"Week 3-4","focus":"...","action":"..."}]},"hooks":[{"type":"...","text":"...","channel":"...","strength":85},{"type":"...","text":"...","channel":"...","strength":80}],"ad_copies":[${adCopiesSchema}],"budget_split":{${campChs.map(c=>`"${c}":"...%"`).join(",")}},"kpis":["...","...","..."]}`;
     const usr=`Type:${campType} Theme:"${campTheme}" Obj:${campObj} Channels:${campChs.join(",")} Duration:${campDuration} weeks Scope:${campScope} ${budgetCtx} Context:${campCtx||"standard"}`;
     setCampLd(true);setCampErr("");setCampRes(null);
-    try{setCampRes(await callAI(sys,usr,1800));}catch(e){setCampErr(e.message);}finally{setCampLd(false);}
+    try{setCampRes(await callAI(sys,usr,4000));}catch(e){setCampErr(e.message);}finally{setCampLd(false);}
   },[lang,campType,campTheme,campObj,campChs,campCtx,campBudget,campDuration,campScope]);
 
   const runScan=useCallback(async()=>{
@@ -1351,7 +1352,7 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
     const sys=`You are a social media content strategist for Qoyod (Saudi cloud accounting SaaS, ZATCA-certified). ${ol}\n${QOYOD_VOICE}\n${refCopy}\nReturn ONLY valid JSON:\n{"month":"...","goal":"...","total_posts":${calFreq==="daily"?30:calFreq==="5 posts/week"?20:calFreq==="3 posts/week"?12:8},"weeks":[{"week":1,"posts":[{"day":"...","platform":"...","format":"Static/Reel/Story/Carousel","topic":"...","design_text":"...","caption":"...","hashtags":"...","cta":"...","funnel_stage":"TOF/MOF/BOF"}]}],"themes":["..."],"hashtag_sets":{"main":"...","secondary":"..."}}`;
     const usr=`Product:${calProd} Desc:${lang==="en"?px.desc_en:px.desc_ar} Month:${calMonth} Platforms:${calPlatforms.join(",")} Frequency:${calFreq} Goal:${calGoal}`;
     setCalLd(true);setCalErr("");setCalRes(null);
-    try{setCalRes(await callAI(sys,usr,2000));}catch(e){setCalErr(e.message);}finally{setCalLd(false);}
+    try{setCalRes(await callAI(sys,usr,5000));}catch(e){setCalErr(e.message);}finally{setCalLd(false);}
   },[lang,calProd,calMonth,calPlatforms,calFreq,calGoal]);
 
   /* ── A/B Variants ── */
@@ -1362,7 +1363,7 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
     const sys=`Senior CRO copywriter for Qoyod (Saudi cloud accounting SaaS). ${ol}\n${QOYOD_VOICE}\nProduce two genuinely different A/B variants — different angle, different hook type, different emotional trigger. Both target the same audience and product.\nReturn ONLY valid JSON:\n{"concept_summary":"...","variant_a":{"label":"A — [angle name]","hook":"...","headline":"...","body":"...","cta":"...","trust":"...","hook_type":"...","emotional_trigger":"...","predicted_ctr":"high/med/low","why":"..."},"variant_b":{"label":"B — [angle name]","hook":"...","headline":"...","body":"...","cta":"...","trust":"...","hook_type":"...","emotional_trigger":"...","predicted_ctr":"high/med/low","why":"..."},"recommendation":"which to test first and why","testing_note":"what metric to optimise"}`;
     const usr=`Product:${abProd} Desc:${lang==="en"?px.desc_en:px.desc_ar} Channel:${abChan} Format:${abFmt} Audience:${abAud} Concept:"${abConcept}"`;
     setAbLd(true);setAbErr("");setAbRes(null);
-    try{setAbRes(await callAI(sys,usr,1800));}catch(e){setAbErr(e.message);}finally{setAbLd(false);}
+    try{setAbRes(await callAI(sys,usr,2500));}catch(e){setAbErr(e.message);}finally{setAbLd(false);}
   },[lang,abProd,abConcept,abChan,abFmt,abAud]);
 
   /* ── Email / WhatsApp Sequences ── */
@@ -1374,7 +1375,7 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
     const sys=`You are a B2B lifecycle marketing specialist for Qoyod (Saudi cloud accounting SaaS). ${ol}\n${QOYOD_VOICE}\n${channelNote}\nSequence type: ${typeLabel}\nReturn ONLY valid JSON:\n{"sequence_name":"...","channel":"${seqChannel}","type":"${seqType}","messages":[{"step":1,"send_timing":"immediately / Day N","subject":"...","preview_text":"...","body":"...","cta":"...","goal":"...","tone":"..."}]}`;
     const usr=`Product:${seqProd} Desc:${lang==="en"?px.desc_en:px.desc_ar} Steps:${seqSteps} Channel:${seqChannel} Type:${seqType}`;
     setSeqLd(true);setSeqErr("");setSeqRes(null);
-    try{setSeqRes(await callAI(sys,usr,2200));}catch(e){setSeqErr(e.message);}finally{setSeqLd(false);}
+    try{setSeqRes(await callAI(sys,usr,3500));}catch(e){setSeqErr(e.message);}finally{setSeqLd(false);}
   },[lang,seqProd,seqType,seqSteps,seqChannel]);
 
 
@@ -1385,7 +1386,7 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
     const sys=`You are a performance creative strategist for Qoyod (Saudi cloud accounting SaaS). ${ol}\n${QOYOD_DESIGN}\nGenerate a complete ad creative spec sheet for the selected platforms and product. The "creative_direction" and "dos/donts" must enforce the brand system above (palette, gradient angle, layout grid, sub-product color, mobile readability).\nReturn ONLY valid JSON:\n{"product":"...","goal":"...","platforms":[{"platform":"...","formats":[{"format":"...","dimensions":"...","aspect_ratio":"...","max_file_size":"...","duration":"...","text_limit":"...","headline_chars":"...","body_chars":"...","safe_zone":"...","creative_direction":"...","dos":["..."],"donts":["..."]}]}],"brand_quick_ref":{"primary_color":"#021544","accent_color":"#17A3A4","font":"IBM Plex Sans Arabic / Lama Sans","logo_placement":"...","tone":"..."},"global_dos":["..."],"global_donts":["..."]}`;
     const usr=`Product:${specProd} Desc:${lang==="en"?px.desc_en:px.desc_ar} Platforms:${specPlatforms.join(",")} Goal:${specGoal}`;
     setSpecLd(true);setSpecErr("");setSpecRes(null);
-    try{setSpecRes(await callAI(sys,usr,2000));}catch(e){setSpecErr(e.message);}finally{setSpecLd(false);}
+    try{setSpecRes(await callAI(sys,usr,3500));}catch(e){setSpecErr(e.message);}finally{setSpecLd(false);}
   },[lang,specProd,specPlatforms,specGoal]);
 
   const genSpecFromBrief=useCallback(async()=>{
@@ -1395,7 +1396,7 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
     const briefPlatforms=bPlaces.length?bPlaces.map(r=>r==="1:1"?"Meta":r==="4:5"?"Instagram":r==="9:16"?"Snapchat":r==="16:9"?"YouTube":r):["Meta","Instagram","Snapchat"];
     const usr=`Product:${bProd} Desc:${lang==="en"?px.desc_en:px.desc_ar} Platforms:${briefPlatforms.join(",")} Goal:Awareness`;
     setSpecLd(true);setSpecErr("");setSpecRes(null);
-    try{setSpecRes(await callAI(sys,usr,2000));}catch(e){setSpecErr(e.message);}finally{setSpecLd(false);}
+    try{setSpecRes(await callAI(sys,usr,3500));}catch(e){setSpecErr(e.message);}finally{setSpecLd(false);}
   },[lang,bProd,bPlaces]);
 
   const TABS=[
