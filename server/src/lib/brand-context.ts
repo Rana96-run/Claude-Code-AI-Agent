@@ -353,3 +353,79 @@ WHEN TO USE THIS vs a cinematic photo style:
 - Mix: gradient background + product UI floating in it = best of both
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `;
+
+/**
+ * Qoyod Bookkeeping sub-brand — مسك الدفاتر
+ * Designer notes: apply to ALL bookkeeping product designs.
+ * Based on production-approved designs reviewed by the team.
+ */
+export const QOYOD_BOOKKEEPING_CONTEXT = `
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SUB-BRAND: QOYOD BOOKKEEPING — مسك الدفاتر
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+WHAT IT IS:
+Qoyod's managed bookkeeping service — Saudi SME owners outsource their
+accounting to a dedicated SOCPA-certified accountant powered by the Qoyod platform.
+Positioning: "محاسب متخصص + منصة قيود — كل شيء جاهز لك"
+
+BRAND COLORS (different from Qoyod main — orange replaces teal):
+- Primary background: deep navy #021544
+- Secondary background: royal blue (deeper, richer than Qoyod main)
+- ACCENT: Orange (prominent — CTA, headlines, key words) — NOT teal
+- Text on dark: White #FFFFFF
+- Light bg text: Navy #021544
+- Gradient: 45° top-right → bottom-left (navy to royal blue)
+
+LOGO TREATMENT (mandatory on every design):
+- Bottom-right: QOYOD logo + "مسك الدفاتر BOOKKEEPING" wordmark + Q circle brandmark
+- Both logos together as a unit — never one without the other
+- Bottom-left: qoyod.com (white, small, always present)
+
+TYPOGRAPHY — Lama Sans ONLY:
+- Headlines: Lama Sans Black — large, bold, dominant
+- Sub-headlines / supporting text: Lama Sans Medium
+- CTA button text: Lama Sans Bold
+- Body / body bullets: Lama Sans Regular
+- ALL Arabic text right-aligned
+
+CTA BUTTON:
+- Color: Orange fill, white text
+- Label for bookkeeping: "احصل على عرض السعر الآن" (NOT "ابدأ تجربتك")
+- Pill-shaped, bottom area, prominent
+
+GRAPHIC ELEMENTS (include at least one per design):
+- Q shape watermark: 50% opacity, soft-light or outline mode — subtle brand marker
+- Concentric circles pattern: decorative rings, often behind the subject
+- Floating document elements (invoices, reports) — shows the "chaos we solve"
+- Saudi subject in professional setting (thobe, confident or stressed depending on angle)
+
+VISUAL ANGLES THAT WORK (from approved production designs):
+1. DEVICE + DASHBOARD: Tablet showing مسك الدفاتر interface — product proof
+2. CONFIDENT SUBJECT: Saudi man/woman standing confident, arms crossed — aspirational
+3. STRESS/OVERWHELM: Subject head in hands, papers flying everywhere — pain point
+4. CINEMATIC CORPORATE: Real location (office building, city), ambitious mood
+5. FLOATING DOCUMENTS: Subject surrounded by swirling invoices/reports — chaos narrative
+
+SCENE PROMPT RULES (for image generation):
+- Navy/royal blue background as base — NOT natural environments unless strong concept
+- Saudi male or female subject in professional dress (thobe for male)
+- Always leave top-third clear for Arabic headline typography in post
+- Soft concentric circle pattern or Q watermark in background (subtle)
+- Papers/documents/financial data elements = chaos that Qoyod bookkeeping solves
+- NO English text in the scene — Arabic context only
+- Orange accent lighting matches the brand accent color
+
+COPY PATTERNS (from approved campaigns):
+- Pain: "حساباتك خارجة عن السيطرة؟" / "ما عندك وقت للمحاسبة؟"
+- Solution: "خدمة مسك الدفاتر من قيود" / "قيود يوفّر لك محاسب مخصص"
+- Trust: "مع فريق مختص ومعتمد من SOCPA"
+- CTA: "احصل على عرض السعر الآن"
+
+DIFFERENTIATOR FROM QOYOD MAIN:
+- Qoyod Main = DIY software (you do your own accounting)
+- مسك الدفاتر = Done-for-you service (we do your accounting for you)
+- Different audience: owners who don't want to learn software, want a human accountant
+- Different trust signal: SOCPA-certified team (not just ZATCA software)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`;

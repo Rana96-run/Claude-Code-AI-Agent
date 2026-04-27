@@ -32,6 +32,7 @@ import {
   QOYOD_SECTOR_CONTEXT,
   IDEAL_DESIGN_REFERENCE,
   QOYOD_CLASSIC_STYLE,
+  QOYOD_BOOKKEEPING_CONTEXT,
 } from "../lib/brand-context.js";
 import { logger } from "../lib/logger.js";
 
@@ -123,6 +124,9 @@ async function generateDesignBundle(
 
   /* Claude is asked for a SCENE-ONLY prompt — no Arabic text in the image.
      Arabic text will be composited correctly by Satori in post-production. */
+  /* Detect bookkeeping product to inject sub-brand context */
+  const isBookkeeping = /bookkeeping|مسك|دفاتر/i.test(product);
+
   const sys = `You are the Qoyod AI Graphic Designer. You produce a 250-400 word English image prompt for an AI image model that paints the VISUAL SCENE for a Qoyod social media ad. The Arabic copy is added in post-production with proper typography — DO NOT instruct the model to render Arabic text in the image.
 
 ${QOYOD_BRAND_PLAYBOOK}
@@ -130,6 +134,8 @@ ${QOYOD_BRAND_PLAYBOOK}
 ${QOYOD_CREATIVE_RULES}
 
 ${QOYOD_HEADLINE_PATTERNS}
+
+${isBookkeeping ? `THIS IS A BOOKKEEPING SUB-BRAND DESIGN — apply these specific guidelines:\n${QOYOD_BOOKKEEPING_CONTEXT}` : ""}
 
 ${persona ? QOYOD_PERSONAS + `\n\nFOR THIS DESIGN — TARGET PERSONA: ${persona}` : ""}
 
