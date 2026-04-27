@@ -887,8 +887,13 @@ export default function CreativeOS(){
     try{setBRes(await callAI(sys,usr));}catch(e){setBErr(e.message);}finally{setBLd(false);}
   },[lang,bProd,bProdExtras,bMsg,bHook,bCta,bPlaces,bTrust,bStyle,numVariants,buildProdCtx]);
 
-  /* Rotate color scheme per variant so each variant has a clearly different look */
-  const VARIANT_SCHEMES=["navy","ocean","midnight","teal","slate","light"];
+  /* Rotate color scheme per variant so each variant has a clearly different look.
+     Bookkeeping product gets its own dark navy + orange scheme automatically (server-side),
+     but we also respect it here so the variant rotation feels brand-correct. */
+  const isBookkeepingProd = /bookkeeping|مسك|دفاتر/i.test(bProd||"");
+  const VARIANT_SCHEMES = isBookkeepingProd
+    ? ["bookkeeping","bookkeeping","bookkeeping","bookkeeping","bookkeeping","bookkeeping"]
+    : ["navy","ocean","midnight","teal","slate","light"];
 
   const genDesign=useCallback(async(variantNum,briefOverride)=>{
     const brief=briefOverride||bRes;

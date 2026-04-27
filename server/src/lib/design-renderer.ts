@@ -167,9 +167,18 @@ export const SCHEMES: Record<string, ColorScheme> = {
     headline: "#FFFFFF", body: "#9FE5E6",
     trust_fill: "#17A3A4", trust_text: "#FFFFFF",
   },
+  /* مسك الدفاتر sub-brand — orange accent, dark navy on white */
+  bookkeeping: {
+    name: "bookkeeping",
+    bg: "#021544", bg2: "#0A2266",
+    accent: "#FF6B2B",           // orange — bookkeeping brand
+    cta_fill: "#FF6B2B", cta_text: "#FFFFFF",
+    headline: "#FFFFFF", body: "#C8D5F0",
+    trust_fill: "#17A3A4", trust_text: "#FFFFFF",
+  },
 };
 
-const SCHEME_ORDER = ["navy", "ocean", "midnight", "teal", "slate", "light"] as const;
+const SCHEME_ORDER = ["navy", "ocean", "midnight", "teal", "slate", "light", "bookkeeping"] as const;
 
 export function resolveScheme(color_scheme?: string): ColorScheme {
   if (color_scheme && SCHEMES[color_scheme]) return SCHEMES[color_scheme];
@@ -266,7 +275,10 @@ function buildVdom(
       };
 
   /* Smart gradient overlay for legibility — ratio-aware so text always
-     reads cleanly over any AI background. */
+     reads cleanly over any AI background.
+     Portrait: text lives at TOP → dark at top, fades to transparent at bottom.
+     Landscape/Square: text lives on the RIGHT → dark right, transparent left.
+  */
   const isPortrait = ratio === "9:16" || ratio === "4:5";
   const isWide = ratio === "16:9";
   const gradientOverlay = {
@@ -281,8 +293,9 @@ function buildVdom(
         backgroundImage: isWide
           ? `linear-gradient(to left, ${scheme.bg}EE 0%, ${scheme.bg}AA 35%, transparent 65%)`
           : isPortrait
-          ? `linear-gradient(to top, ${scheme.bg}F2 0%, ${scheme.bg}CC 30%, ${scheme.bg}55 50%, transparent 80%)`
-          : `linear-gradient(135deg, transparent 30%, ${scheme.bg}77 55%, ${scheme.bg}EE 100%)`,
+          /* TOP = text zone: dark overlay; BOTTOM = visual scene: transparent */
+          ? `linear-gradient(to bottom, ${scheme.bg}F0 0%, ${scheme.bg}CC 25%, ${scheme.bg}77 45%, transparent 70%)`
+          : `linear-gradient(to left, ${scheme.bg}EE 0%, ${scheme.bg}AA 40%, transparent 70%)`,
       },
       children: [],
     },

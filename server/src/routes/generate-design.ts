@@ -266,7 +266,10 @@ router.post("/generate-design", async (req, res) => {
   } = req.body ?? {};
 
   const [w, h] = RATIO_DIMS[ratio] ?? [1080, 1080];
-  const scheme = resolveScheme(color_scheme);
+  /* Auto-apply bookkeeping scheme when no scheme explicitly chosen and product is bookkeeping */
+  const isBookkeepingProduct = /bookkeeping|مسك|دفاتر/i.test(String(product));
+  const effectiveScheme = color_scheme || (isBookkeepingProduct ? "bookkeeping" : undefined);
+  const scheme = resolveScheme(effectiveScheme);
 
   try {
     /* 1. Claude → copy + scene-only image prompt */
