@@ -347,9 +347,17 @@ function buildVdom(
   };
 
   /**
-   * Arabic text block — renders as a single RTL text node so Satori's BiDi
-   * algorithm handles word-order, ligatures, and wrapping correctly.
-   * Replaces the old word-by-word flex approach which caused scattered layout.
+   * Arabic text block — uses word-reversal to work around Satori's incomplete
+   * Unicode BiDi implementation.
+   *
+   * Why reversal works:
+   *   Satori renders text in LTR order regardless of `direction: "rtl"`.
+   *   Arabic text in Unicode logical order has word1 first (rightmost in RTL).
+   *   If we reverse the word array and render LTR, word1 ends up on the RIGHT
+   *   and wrapping pushes later words to the NEXT line — exactly correct RTL.
+   *   `textAlign: "right"` ensures each wrapped line aligns to the right edge.
+   *   Individual Arabic characters keep their correct shaping/ligatures because
+   *   we only reverse at the WORD level, not at the character level.
    */
   function arabicWords(
     text: string,
@@ -365,8 +373,13 @@ function buildVdom(
     const trimmed = (text || "").trim();
     if (!trimmed) return { type: "div", props: { style: { display: "flex" }, children: "" } };
 
+    // Reverse word order so Satori's LTR pass yields correct RTL visual order
+    const visualOrder = trimmed.split(/\s+/).filter(Boolean).reverse().join(" ");
+
     const innerStyle: Record<string, unknown> = {
-      direction: "rtl",
+      // LTR + textAlign:right — after word reversal this produces correct RTL wrapping
+      direction: "ltr",
+      textAlign: "right",
       fontSize: wordStyle.fontSize,
       fontWeight: wordStyle.fontWeight,
       color: wordStyle.color,
@@ -380,7 +393,8 @@ function buildVdom(
       props: {
         style: {
           display: "flex",
-          direction: "rtl",
+          flexDirection: "column",
+          alignItems: "flex-end",
           width: "100%",
           ...containerStyle,
         },
@@ -389,7 +403,7 @@ function buildVdom(
             type: "div",
             props: {
               style: innerStyle,
-              children: trimmed,
+              children: visualOrder,
             },
           },
         ],
