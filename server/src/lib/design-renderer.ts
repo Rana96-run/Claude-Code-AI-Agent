@@ -302,13 +302,11 @@ function buildVdom(
     },
   };
 
-  /* Identity helper for short single-word strings where wrapping never occurs. */
-  const ar = (s: string): string => s || "";
-
   /**
-   * Arabic text as RTL flex words — reliable multi-line Arabic in Satori.
-   * Each word is a separate flex item; RTL flex container orders right-to-left.
-   * Avoids gap shorthand (Yoga compat) and never passes undefined style values.
+   * Arabic multi-word text — for headlines and hooks (long, multi-line capable).
+   * Each word is a separate RTL flex item so Yoga's flex engine handles
+   * right-to-left word ordering natively. Avoids gap shorthand (Yoga compat)
+   * and never passes undefined CSS values.
    */
   function arabicWords(
     text: string,
@@ -322,17 +320,15 @@ function buildVdom(
     containerStyle: Record<string, unknown> = {},
   ): object {
     const words = (text || "").trim().split(/\s+/).filter(Boolean);
-    if (!words.length) {
-      return { type: "div", props: { style: { display: "flex" }, children: "" } };
-    }
+    if (!words.length) return { type: "div", props: { style: { display: "flex" }, children: "" } };
+
     const spacing = Math.round(Number(wordStyle.fontSize) * 0.28);
-    // Build safe word style — never include undefined values
     const wStyle: Record<string, unknown> = {
       display: "flex",
       fontSize: wordStyle.fontSize,
       fontWeight: wordStyle.fontWeight,
       color: wordStyle.color,
-      lineHeight: wordStyle.lineHeight ?? 1.25,
+      lineHeight: wordStyle.lineHeight ?? 1.3,
     };
     if (wordStyle.textShadow) wStyle.textShadow = wordStyle.textShadow;
 
@@ -344,21 +340,63 @@ function buildVdom(
           flexDirection: "row",
           flexWrap: "wrap",
           direction: "rtl",
-          justifyContent: "flex-start",  // flex-start = right edge in RTL
+          justifyContent: "flex-start",   // flex-start = right in RTL
+          alignItems: "flex-start",
           width: "100%",
           ...containerStyle,
         },
         children: words.map((word, i) => ({
           type: "div",
           props: {
-            style: {
-              ...wStyle,
-              // word spacing via margin — no gap shorthand needed
-              marginLeft: i < words.length - 1 ? spacing : 0,
-            },
+            style: { ...wStyle, marginLeft: i < words.length - 1 ? spacing : 0 },
             children: word,
           },
         })),
+      },
+    };
+  }
+
+  /**
+   * Short Arabic/mixed-script text — for CTA, trust badge, tagline.
+   * Renders as a single RTL text node so the browser BiDi algorithm correctly
+   * handles Arabic + Latin acronyms (ZATCA, SOCPA) in one pass.
+   * Does NOT split into words — avoids mixed-script garbling.
+   */
+  function arabicInline(
+    text: string,
+    style: {
+      fontSize: number;
+      fontWeight: number | string;
+      color: string;
+      lineHeight?: number;
+    },
+    containerStyle: Record<string, unknown> = {},
+  ): object {
+    return {
+      type: "div",
+      props: {
+        style: {
+          display: "flex",
+          direction: "rtl",
+          justifyContent: "center",
+          alignItems: "center",
+          ...containerStyle,
+        },
+        children: [
+          {
+            type: "div",
+            props: {
+              style: {
+                direction: "rtl",
+                fontSize: style.fontSize,
+                fontWeight: style.fontWeight,
+                color: style.color,
+                lineHeight: style.lineHeight ?? 1.25,
+              },
+              children: (text || "").trim(),
+            },
+          },
+        ],
       },
     };
   }
@@ -373,7 +411,6 @@ function buildVdom(
   const hookSize = ratio === "9:16" ? 34 : ratio === "16:9" ? 28 : 30;
   const ctaSize = ratio === "9:16" ? 36 : 32;
   const trustSize = ratio === "9:16" ? 24 : 20;
-  const brandSize = ratio === "9:16" ? 56 : ratio === "16:9" ? 44 : 48;
 
   /* Container positioning per ratio.
      RTL layout rules from production designs:
@@ -429,91 +466,17 @@ function buildVdom(
   const logoDataUrl = isBookkeeping
     ? getBookkeepingLogoDataUrlSync()
     : getBrandLogoDataUrlSync();
-  const logoBlock = logoDataUrl
-    ? {
-        type: "div",
-        props: {
-          style: {
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "flex-end",
-            marginBottom: 18,
-          },
-          children: [
-            {
-              type: "img",
-              props: {
-                src: logoDataUrl,
-                width: ratio === "9:16" ? 180 : ratio === "16:9" ? 150 : 160,
-                height: ratio === "9:16" ? 56 : ratio === "16:9" ? 46 : 50,
-                style: {
-                  width: ratio === "9:16" ? 180 : ratio === "16:9" ? 150 : 160,
-                  height: ratio === "9:16" ? 56 : ratio === "16:9" ? 46 : 50,
-                  objectFit: "contain",
-                },
-              },
-            },
-            {
-              type: "div",
-              props: {
-                style: {
-                  direction: "rtl",
-                  fontSize: 16,
-                  color: scheme.body,
-                  opacity: 0.7,
-                  marginTop: 8,
-                },
-                children: ar(copy.tagline || "محاسبة سحابية"),
-              },
-            },
-          ],
-        },
-      }
-    : {
-        type: "div",
-        props: {
-          style: {
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "flex-end",
-            marginBottom: 18,
-          },
-          children: [
-            {
-              type: "div",
-              props: {
-                style: {
-                  direction: "rtl",
-                  fontSize: brandSize,
-                  fontWeight: 700,
-                  color: scheme.accent,
-                  lineHeight: 1,
-                },
-                children: ar("قيود"),
-              },
-            },
-            {
-              type: "div",
-              props: {
-                style: {
-                  direction: "rtl",
-                  fontSize: 18,
-                  color: scheme.body,
-                  opacity: 0.85,
-                  marginTop: 6,
-                },
-                children: ar(copy.tagline || "محاسبة سحابية"),
-              },
-            },
-          ],
-        },
-      };
 
-  /* Portrait (9:16, 4:5) = text centered top.
-     Landscape / square = text right-aligned (RTL natural). */
-  // isPortrait / isWide already declared above for the gradient overlay — reuse them
-  const textAlign = isPortrait ? "center" : "right";
-  const justifyWords = isPortrait ? "center" : "flex-start"; // flex-start=right in RTL
+  /* Portrait (9:16, 4:5) = text centered top, full-width.
+     Landscape (16:9) = text right column.
+     Square (1:1) = text top-right column.
+     isPortrait / isWide reused from gradient overlay declaration. */
+  const justifyWords = isPortrait ? "center" : "flex-start"; // flex-start = right in RTL
+  // Portrait: center all items; Landscape/Square: right-align (flex-end in RTL context)
+  const containerAlign = isPortrait ? "center" : "flex-end";
+
+  /* Headline text shadow for readability over any AI background */
+  const headlineShadow = `0 2px 12px rgba(0,0,0,0.55), 0 1px 4px rgba(0,0,0,0.4)`;
 
   const textOverlay = {
     type: "div",
@@ -522,66 +485,70 @@ function buildVdom(
         display: "flex",
         flexDirection: "column",
         direction: "rtl",
-        textAlign,
         ...textContainerStyle,
-        alignItems: "flex-end", // always right-edge within the container
+        alignItems: containerAlign,
       },
       children: [
-        // Headline — CYAN on dark backgrounds (production design standard)
-        // NOTE: Logo is NOT here — it lives at bottom-right corner (see brandCorner)
+        // ── Headline — brand accent colour (cyan/orange) with shadow ──────────
         arabicWords(copy.headline, {
           fontSize: headlineSize,
           fontWeight: 700,
-          color: scheme.accent,  // cyan, not white — matches production designs
+          color: scheme.accent,
           lineHeight: 1.2,
-        }, { marginBottom: 14, justifyContent: justifyWords }),
-        // Hook — white supporting line
+          textShadow: headlineShadow,
+        }, { marginBottom: 16, justifyContent: justifyWords }),
+
+        // ── Hook — white body text ────────────────────────────────────────────
         arabicWords(copy.hook, {
           fontSize: hookSize,
           fontWeight: 400,
-          color: scheme.headline, // white
-          lineHeight: 1.5,
-        }, { marginBottom: 26, justifyContent: justifyWords }),
-        // Trust badge (single — per ads guideline)
+          color: scheme.headline,
+          lineHeight: 1.55,
+          textShadow: `0 1px 6px rgba(0,0,0,0.45)`,
+        }, { marginBottom: 28, justifyContent: justifyWords }),
+
+        // ── Trust badge ───────────────────────────────────────────────────────
+        // arabicInline (not arabicWords) — handles "ZATCA-معتمد" mixed script
         {
           type: "div",
           props: {
             style: {
               display: "flex",
-              flexDirection: "row",
               direction: "rtl",
               backgroundColor: scheme.trust_fill,
               borderRadius: 100,
-              marginBottom: 22,
-              overflow: "hidden",
+              marginBottom: 20,
+              paddingTop: 11, paddingBottom: 11,
+              paddingLeft: 30, paddingRight: 30,
             },
             children: [
-              arabicWords(copy.trust, {
+              arabicInline(copy.trust, {
                 fontSize: trustSize,
-                fontWeight: 600,
+                fontWeight: 700,
                 color: scheme.trust_text,
-              }, { paddingTop: 12, paddingBottom: 12, paddingLeft: 28, paddingRight: 28 }),
+              }),
             ],
           },
         },
-        // CTA (single — per ads guideline)
+
+        // ── CTA button ────────────────────────────────────────────────────────
         {
           type: "div",
           props: {
             style: {
               display: "flex",
-              flexDirection: "row",
               direction: "rtl",
               backgroundColor: scheme.cta_fill,
               borderRadius: 100,
-              overflow: "hidden",
+              paddingTop: 18, paddingBottom: 18,
+              paddingLeft: 54, paddingRight: 54,
             },
             children: [
-              arabicWords(copy.cta, {
+              arabicInline(copy.cta, {
                 fontSize: ctaSize,
                 fontWeight: 700,
                 color: scheme.cta_text,
-              }, { paddingTop: 18, paddingBottom: 18, paddingLeft: 50, paddingRight: 50 }),
+              }),
             ],
           },
         },

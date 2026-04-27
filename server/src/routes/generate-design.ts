@@ -171,7 +171,7 @@ Return ONE JSON object:
     "headline": "EXACTLY 4-6 Arabic words. HARD LIMIT. Single complete phrase. Calm, direct, confident. NO em-dashes, NO commas, NO ellipsis, NO joining hook+headline. Just the hero headline alone.",
     "hook": "EXACTLY 6-9 Arabic words supporting line. Separate from headline.",
     "cta": "EXACTLY 2-3 Arabic words, button label only (اشترك الآن / احجز ديمو / ابدأ تجربتك)",
-    "trust": "MAX 4 Arabic words, ONE trust element only (ZATCA-معتمد / SOCPA / +25,000 شركة)",
+    "trust": "SHORT trust label. Keep Latin acronyms as Latin — do NOT transliterate into Arabic letters. Good examples: ZATCA-معتمد | SOCPA-معتمد | +25,000 شركة | فاتورة إلكترونية معتمدة. MAX 5 tokens.",
     "tagline": "EXACTLY 2-3 Arabic words, under brand mark"
   },
   "image_prompt": "250-400 word English SCENE-ONLY prompt. Specify: shot type + lens, lighting, composition (always leave clean empty space on the right side for square/landscape, or bottom for portrait — typography will be added in post). Saudi business context. Brand colors as hex (#021544 navy, #17A3A4 teal, #1FCACB bright cyan, #FFFFFF white). NO text rendering anywhere. NO logos in the frame. NO watermarks. Mood and style descriptors (cinematic, photoreal, 8K) or (editorial flat illustration, no 3D)."
