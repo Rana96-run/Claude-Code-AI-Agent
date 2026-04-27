@@ -324,14 +324,14 @@ function buildVdom(
         top: 0, left: 0,
         width: "100%",
         height: "100%",
-        // Light schemes: invisible overlay — the gradient bg handles everything
-        backgroundImage: lightBg
-          ? "none"
-          : isWide
-          ? `linear-gradient(to left, ${scheme.bg}EE 0%, ${scheme.bg}AA 35%, transparent 65%)`
-          : isPortrait
-          ? `linear-gradient(to bottom, ${scheme.bg}F0 0%, ${scheme.bg}CC 25%, ${scheme.bg}77 45%, transparent 70%)`
-          : `linear-gradient(to left, ${scheme.bg}EE 0%, ${scheme.bg}AA 40%, transparent 70%)`,
+        // Light schemes: no overlay at all — bg gradient IS the design
+        ...(lightBg ? {} : {
+          backgroundImage: isWide
+            ? `linear-gradient(to left, ${scheme.bg}EE 0%, ${scheme.bg}AA 35%, transparent 65%)`
+            : isPortrait
+            ? `linear-gradient(to bottom, ${scheme.bg}F0 0%, ${scheme.bg}CC 25%, ${scheme.bg}77 45%, transparent 70%)`
+            : `linear-gradient(to left, ${scheme.bg}EE 0%, ${scheme.bg}AA 40%, transparent 70%)`,
+        }),
       },
       children: [],
     },
