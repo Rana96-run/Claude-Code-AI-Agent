@@ -361,41 +361,50 @@ function buildVdom(
   const trustSize = ratio === "9:16" ? 24 : 20;
   const brandSize = ratio === "9:16" ? 56 : ratio === "16:9" ? 44 : 48;
 
-  /* Container positioning per ratio — text sits in the gradient zone where
-     legibility is highest. */
+  /* Container positioning per ratio.
+     RTL layout rules from production designs:
+     - 16:9 landscape : text RIGHT half, visual LEFT half
+     - 9:16 / 4:5 portrait : text TOP full-width (not bottom column)
+     - 1:1 square : text TOP-RIGHT column */
   const textContainerStyle =
     ratio === "16:9"
       ? {
-          // wide — text on the right half
           position: "absolute",
-          top: 0,
-          right: 0,
-          width: "55%",
-          height: "100%",
-          padding: "60px 70px",
+          top: 0, right: 0,
+          width: "52%", height: "100%",
+          paddingTop: 60, paddingBottom: 60,
+          paddingLeft: 60, paddingRight: 70,
           alignItems: "flex-end",
           justifyContent: "center",
         }
-      : ratio === "9:16" || ratio === "4:5"
+      : ratio === "9:16"
       ? {
-          // portrait — text in the bottom 55%
+          // portrait: text spans full width at the TOP — visual fills bottom
           position: "absolute",
-          bottom: 0,
-          left: 0,
-          width: "100%",
-          height: "55%",
-          padding: ratio === "9:16" ? "60px 70px 80px" : "50px 60px 70px",
+          top: 0, left: 0,
+          width: "100%", height: "48%",
+          paddingTop: 70, paddingBottom: 40,
+          paddingLeft: 60, paddingRight: 60,
           alignItems: "flex-end",
-          justifyContent: "flex-end",
+          justifyContent: "flex-start",
+        }
+      : ratio === "4:5"
+      ? {
+          position: "absolute",
+          top: 0, left: 0,
+          width: "100%", height: "44%",
+          paddingTop: 60, paddingBottom: 30,
+          paddingLeft: 55, paddingRight: 55,
+          alignItems: "flex-end",
+          justifyContent: "flex-start",
         }
       : {
-          // square — text on the right half
+          // 1:1 square — text top-right column
           position: "absolute",
-          top: 0,
-          right: 0,
-          width: "55%",
-          height: "100%",
-          padding: "55px 60px",
+          top: 0, right: 0,
+          width: "55%", height: "100%",
+          paddingTop: 55, paddingBottom: 55,
+          paddingLeft: 50, paddingRight: 60,
           alignItems: "flex-end",
           justifyContent: "center",
         };
@@ -483,6 +492,12 @@ function buildVdom(
         },
       };
 
+  /* Portrait (9:16, 4:5) = text centered top.
+     Landscape / square = text right-aligned (RTL natural). */
+  const isPortrait = ratio === "9:16" || ratio === "4:5";
+  const textAlign = isPortrait ? "center" : "right";
+  const justifyWords = isPortrait ? "center" : "flex-start"; // flex-start=right in RTL
+
   const textOverlay = {
     type: "div",
     props: {
@@ -490,27 +505,27 @@ function buildVdom(
         display: "flex",
         flexDirection: "column",
         direction: "rtl",
-        textAlign: "right",
+        textAlign,
         ...textContainerStyle,
+        alignItems: "flex-end", // always right-edge within the container
       },
       children: [
         // Brand mark — official PNG when loaded, typographic fallback otherwise
         logoBlock,
-        // Headline
+        // Headline — CYAN on dark backgrounds (production design standard)
         arabicWords(copy.headline, {
           fontSize: headlineSize,
           fontWeight: 700,
-          color: scheme.headline,
+          color: scheme.accent,  // cyan, not white — matches production designs
           lineHeight: 1.2,
-          textShadow: `0 2px 24px ${scheme.bg}AA`,
-        }, { marginBottom: 16 }),
-        // Hook
+        }, { marginBottom: 14, justifyContent: justifyWords }),
+        // Hook — white supporting line
         arabicWords(copy.hook, {
           fontSize: hookSize,
           fontWeight: 400,
-          color: scheme.body,
+          color: scheme.headline, // white
           lineHeight: 1.5,
-        }, { marginBottom: 26 }),
+        }, { marginBottom: 26, justifyContent: justifyWords }),
         // Trust badge (single — per ads guideline)
         {
           type: "div",
@@ -558,22 +573,35 @@ function buildVdom(
     },
   };
 
-  /* Website link footer — qoyod.com always present in the bottom-left
-     corner, subtle so it doesn't compete with the CTA. */
+  /* Footer — bottom-left: "للمزيد قم بزيارة\nqoyod.com" (production standard) */
   const websiteFooter = {
     type: "div",
     props: {
       style: {
         display: "flex",
+        flexDirection: "column",
+        direction: "rtl",
         position: "absolute",
-        bottom: 28,
+        bottom: 24,
         left: 36,
-        fontSize: 18,
-        color: scheme.body,
-        opacity: 0.7,
-        letterSpacing: 1,
+        alignItems: "flex-start",
       },
-      children: "qoyod.com",
+      children: [
+        {
+          type: "div",
+          props: {
+            style: { fontSize: 14, color: scheme.body, opacity: 0.6 },
+            children: "للمزيد قم بزيارة",
+          },
+        },
+        {
+          type: "div",
+          props: {
+            style: { fontSize: 16, color: scheme.body, opacity: 0.85, letterSpacing: 0.5 },
+            children: "qoyod.com",
+          },
+        },
+      ],
     },
   };
 

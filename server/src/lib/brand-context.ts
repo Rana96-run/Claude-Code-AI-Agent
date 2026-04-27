@@ -355,6 +355,78 @@ WHEN TO USE THIS vs a cinematic photo style:
 `;
 
 /**
+ * Qoyod Main — visual style guide from production-approved designs.
+ * Multiple styles observed — all valid, all in use simultaneously.
+ */
+export const QOYOD_MAIN_VISUAL_STYLES = `
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+QOYOD MAIN — PRODUCTION DESIGN STYLE GUIDE
+(Observed from approved live campaigns — all styles are valid)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+HEADLINE COLOR RULE ★:
+- On navy/dark background → headline is CYAN #1FCACB (NOT white)
+- Secondary line / hook → WHITE #FFFFFF
+- On light/white background → headline is NAVY #021544
+- Never white headline on navy — that's generic. Cyan = Qoyod signature.
+
+FOOTER (every design):
+- Bottom-left: "للمزيد قم بزيارة" (small, light) + "qoyod.com" (slightly larger)
+- Bottom-right: QOYOD white logo
+
+BACKGROUND STYLES IN USE:
+1. DARK NAVY flat: #021544 solid — minimal, copy-led
+2. GRADIENT 45°: Navy #021544 top-right → bright teal #17A3A4 bottom-left
+3. LIGHT/WHITE: Very light cyan or white — used for device mockup product shots
+4. CYAN/TURQUOISE flat: Bright #1FCACB fill — used for ZATCA/regulatory news
+
+VISUAL STYLES IN USE (pick one per ad):
+A. 2D FLAT ILLUSTRATION
+   - Clean vector character (blue/teal fill, white outline)
+   - Person interacting with document, device, or another person
+   - Placed LEFT for landscape, CENTER-BOTTOM for portrait
+   - Background: solid navy or gradient only — no photo
+   - Headline placement: RIGHT side (landscape) or TOP (portrait)
+   - This is equally valid as photorealistic — DO NOT default to photo only
+
+B. DEVICE MOCKUP (product shot)
+   - iPhone or iPad showing Qoyod interface
+   - Hand holding device, or device on surface
+   - Light/white or subtle gradient background
+   - Concentric circles behind the device (always)
+   - "تم إصدار الفاتورة بنجاح" success notification as social proof
+
+C. PHOTOREALISTIC SAUDI SUBJECT
+   - Saudi male in thobe, confident pose, professional setting
+   - Navy or gradient background
+   - Subject on left for landscape, centered for portrait
+
+D. ZATCA PARTNERSHIP / NEWS
+   - ZATCA logo top-left (official partner mark)
+   - Cyan background (#1FCACB) for high-attention regulatory news
+   - Clean, no illustration — text + logos only
+   - Date or deadline badge (navy pill, white bold text)
+
+GRAPHIC ELEMENTS (mandatory in every design):
+- Concentric circles: subtle, same color as background but slightly lighter,
+  positioned behind the main visual. This is a QOYOD brand signature.
+- Clean empty zone for text — always leave text area clear of visual clutter
+
+TYPOGRAPHY RULES:
+- Line 1 (main headline): CYAN #1FCACB, Lama Sans Black, large
+- Line 2 (sub): WHITE #FFFFFF, Lama Sans Medium, smaller
+- All Arabic text: RIGHT-ALIGNED, RTL
+- CTA pill: CYAN #1FCACB fill, NAVY #021544 text, "اشترك الآن" / "ابدأ تجربتك"
+
+RTL TEXT PLACEMENT:
+- LANDSCAPE (16:9): Text block on the RIGHT half. Visual (illustration/device) on LEFT.
+- SQUARE (1:1): Text TOP-RIGHT or TOP-CENTER. Visual CENTER-BOTTOM.
+- PORTRAIT (9:16): Text TOP-CENTER (full width). Visual CENTER-BOTTOM.
+  (Portrait is NOT a right-column layout — text spans full width at top)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`;
+
+/**
  * Qoyod Bookkeeping sub-brand — مسك الدفاتر
  * Designer notes: apply to ALL bookkeeping product designs.
  * Based on production-approved designs reviewed by the team.

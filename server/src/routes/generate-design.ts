@@ -33,6 +33,7 @@ import {
   IDEAL_DESIGN_REFERENCE,
   QOYOD_CLASSIC_STYLE,
   QOYOD_BOOKKEEPING_CONTEXT,
+  QOYOD_MAIN_VISUAL_STYLES,
 } from "../lib/brand-context.js";
 import { logger } from "../lib/logger.js";
 
@@ -140,6 +141,9 @@ ${isBookkeeping ? `THIS IS A BOOKKEEPING SUB-BRAND DESIGN — apply these specif
 ${persona ? QOYOD_PERSONAS + `\n\nFOR THIS DESIGN — TARGET PERSONA: ${persona}` : ""}
 
 ${sector ? QOYOD_SECTOR_CONTEXT + `\n\nFOR THIS DESIGN — TARGET SECTOR: ${sector}` : ""}
+
+QOYOD VISUAL STYLE GUIDE — production-approved styles:
+${QOYOD_MAIN_VISUAL_STYLES}
 
 DESIGN REFERENCES — use these as inspiration, not rigid templates. Evolve, mix, and subvert as the concept demands:
 
