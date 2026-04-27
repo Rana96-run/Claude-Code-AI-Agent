@@ -255,3 +255,57 @@ KEY NOTES:
 - Empty composition zone for typography
 - Saudi business context (modest dress, professional)
 - "NO text" / "NO logos" repeated to prevent the model rendering its own text`;
+
+/**
+ * Gold-standard design brief — Q-Flavours POS (1080×1080).
+ * Added by the team as a reference for the IDEAL level of scene direction,
+ * cinematic framing, crowd-blur technique, and tech-glow lighting.
+ * Use this as the bar to aim for in every generated design.
+ */
+export const IDEAL_DESIGN_REFERENCE = `
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GOLD-STANDARD DESIGN BRIEF — Q-FLAVOURS POS (1080×1080)
+(Reference for scene quality, framing, lighting, crowd-blur, emotion)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BRAND COLORS: Dark navy #0B1B3A · Electric blue #5B9FFF · White
+
+LOGO PLACEMENT: Top-right, small — brand name #5B9FFF + English sub #FFFFFF + navy circle mark
+
+MAIN VISUAL:
+A packed Saudi restaurant during dinner rush hour — full tables, busy atmosphere.
+FOREGROUND: sharp, focused Saudi restaurant manager/cashier (male or female,
+professional uniform) confidently operating a POS tablet.
+Face is clear, confident, calm. Eye contact with camera or screen.
+
+CROWD RULE ★: ALL background customers and staff intentionally blurred —
+soft gaussian blur, no recognizable faces, only ambient motion and warm light.
+This is mandatory — the blur creates depth and keeps focus on the operator.
+
+OVERLAY EFFECT:
+- Subtle dark navy vignette from bottom and sides (draws eye to person + device)
+- Electric blue glow (#5B9FFF) emitting from tablet screen onto operator's face
+- Warm golden restaurant lights in background contrast the cool blue tech glow
+
+TABLET SCREEN: POS dashboard with Arabic KPI cards + green "order accepted"
+notification popup in Arabic. No readable text — abstract UI only.
+
+LIGHTING RECIPE: Warm golden ambient (restaurant) vs cool electric blue (tech glow).
+Cinematic contrast. High drama. Canon 85mm f/1.4 shallow depth of field.
+
+TEXT OVERLAY (added in post by compositor, NOT in the image):
+- Small pill badge: "⚡ يشتغل بدون إنترنت"
+- Bold headline: "وقت الذروة ما يرحم"
+- Sub-headline: "نظامك يلازم يكون جاهز دايماً"
+- CTA pill: "اطلب عرضك الحين ←"
+
+STYLE KEYWORDS: Cinematic · High-contrast drama · Saudi restaurant ambiance ·
+Emotional tension + confident resolution · RTL layout · 8K photorealistic
+
+WHY THIS WORKS:
+1. Gaussian crowd blur = professional depth, no privacy issues
+2. Dual lighting (warm/cool) = visual tension that sells "reliability under pressure"
+3. Confident foreground subject = the user sees themselves in the ad
+4. Clean screen glow = tech credibility without showing actual text
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`;

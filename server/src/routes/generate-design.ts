@@ -30,6 +30,7 @@ import {
   QOYOD_HEADLINE_PATTERNS,
   QOYOD_PERSONAS,
   QOYOD_SECTOR_CONTEXT,
+  IDEAL_DESIGN_REFERENCE,
 } from "../lib/brand-context.js";
 import { logger } from "../lib/logger.js";
 
@@ -132,6 +133,9 @@ ${QOYOD_HEADLINE_PATTERNS}
 ${persona ? QOYOD_PERSONAS + `\n\nFOR THIS DESIGN — TARGET PERSONA: ${persona}` : ""}
 
 ${sector ? QOYOD_SECTOR_CONTEXT + `\n\nFOR THIS DESIGN — TARGET SECTOR: ${sector}` : ""}
+
+GOLD-STANDARD DESIGN REFERENCE — always aim for THIS level of quality:
+${IDEAL_DESIGN_REFERENCE}
 
 EXAMPLES OF GOOD SCENE PROMPTS
 
