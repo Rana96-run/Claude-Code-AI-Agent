@@ -319,6 +319,7 @@ router.post("/generate-design", async (req, res) => {
       scheme,
       ratio,
       heroImageDataUrl: ai?.dataUrl ?? null,
+      product,
     });
 
     res.status(200).json({

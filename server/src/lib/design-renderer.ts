@@ -10,7 +10,7 @@
 import satori from "satori";
 import { Resvg } from "@resvg/resvg-js";
 import { logger } from "./logger.js";
-import { getBrandLogoDataUrlSync } from "./brand-assets.js";
+import { getBrandLogoDataUrlSync, getBookkeepingLogoDataUrlSync } from "./brand-assets.js";
 
 /* ── Font loader (cached at module level) ──────────────────────── */
 
@@ -229,6 +229,7 @@ function buildVdom(
   ratio: string,
   width: number,
   height: number,
+  isBookkeeping = false,
 ) {
   /* Full-bleed background — AI image OR a brand-color gradient if image gen
      failed. Either way, fills the entire canvas. */
@@ -422,9 +423,12 @@ function buildVdom(
           justifyContent: "center",
         };
 
-  /* If the official logo PNG is loaded, use it as a real image — otherwise
-     fall back to the typographic mark "قيود". */
-  const logoDataUrl = getBrandLogoDataUrlSync();
+  /* Pick the correct logo:
+     - Bookkeeping product → dual logo (مسك الدفاتر + QOYOD)
+     - All other products  → regular QOYOD logo only */
+  const logoDataUrl = isBookkeeping
+    ? getBookkeepingLogoDataUrlSync()
+    : getBrandLogoDataUrlSync();
   const logoBlock = logoDataUrl
     ? {
         type: "div",
@@ -671,6 +675,7 @@ export interface RenderInput {
   scheme: ColorScheme;
   ratio: string;
   heroImageDataUrl: string | null;
+  product?: string;  // used to select logo: bookkeeping vs main
 }
 
 export interface RenderOutput {
@@ -682,7 +687,8 @@ export interface RenderOutput {
 export async function renderDesign(input: RenderInput): Promise<RenderOutput> {
   const [w, h] = RATIO_DIMS[input.ratio] ?? [1080, 1080];
   const fonts = await loadFonts();
-  const vdom = buildVdom(input.copy, input.scheme, input.heroImageDataUrl, input.ratio, w, h);
+  const isBookkeeping = /bookkeeping|مسك|دفاتر/i.test(input.product ?? "");
+  const vdom = buildVdom(input.copy, input.scheme, input.heroImageDataUrl, input.ratio, w, h, isBookkeeping);
 
   // Satori expects React-flavoured VDOM — we hand it a plain object that matches
   const svg = await satori(vdom as unknown as Parameters<typeof satori>[0], {

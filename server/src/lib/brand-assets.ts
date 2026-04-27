@@ -29,15 +29,28 @@ interface BrandLogo {
 let LOGO: BrandLogo | null = null;
 let logoLoadPromise: Promise<BrandLogo | null> | null = null;
 
-/* Default: transparent logo-01.png in the team's Drive — owners have given
-   our service account read access to the parent "Qoyod Banding Materials"
-   folder. Override via QOYOD_LOGO_FILE_ID env var. */
+let LOGO_BOOKKEEPING: BrandLogo | null = null;
+let logoBookkeepingPromise: Promise<BrandLogo | null> | null = null;
+
+/* Default: transparent QOYOD main logo in the team's Drive.
+   Override via QOYOD_LOGO_FILE_ID env var. */
 const DEFAULT_LOGO_FILE_ID = "167HvB9Qk_46j3hQQI-QBb8x43cnOJhj1";
+
+/* Bookkeeping dual-logo (مسك الدفاتر + QOYOD).
+   Override via QOYOD_BOOKKEEPING_LOGO_FILE_ID env var.
+   Falls back to main logo if not set. */
+const DEFAULT_BOOKKEEPING_LOGO_FILE_ID = process.env.QOYOD_BOOKKEEPING_LOGO_FILE_ID || "";
 
 const LOCAL_LOGO_PATHS = [
   path.resolve(process.cwd(), "server", "assets", "qoyod-logo.png"),
   path.resolve(process.cwd(), "assets", "qoyod-logo.png"),
   path.resolve(__dirname, "../../assets/qoyod-logo.png"),
+];
+
+const LOCAL_BOOKKEEPING_LOGO_PATHS = [
+  path.resolve(process.cwd(), "server", "assets", "qoyod-bookkeeping-logo.png"),
+  path.resolve(process.cwd(), "assets", "qoyod-bookkeeping-logo.png"),
+  path.resolve(__dirname, "../../assets/qoyod-bookkeeping-logo.png"),
 ];
 
 function tryLoadLocalLogo(): BrandLogo | null {
@@ -125,17 +138,56 @@ export async function getBrandLogo(): Promise<BrandLogo | null> {
   return logoLoadPromise;
 }
 
+/** Load the bookkeeping dual-logo (مسك الدفاتر + QOYOD).
+ *  Falls back to the main Qoyod logo if no bookkeeping logo is configured. */
+export async function getBookkeepingLogo(): Promise<BrandLogo | null> {
+  if (LOGO_BOOKKEEPING) return LOGO_BOOKKEEPING;
+  if (logoBookkeepingPromise) return logoBookkeepingPromise;
+  logoBookkeepingPromise = (async () => {
+    /* Try local file first */
+    for (const p of LOCAL_BOOKKEEPING_LOGO_PATHS) {
+      try {
+        if (fs.existsSync(p)) {
+          const buffer = fs.readFileSync(p);
+          const mimeType = "image/png";
+          const dataUrl = `data:${mimeType};base64,${buffer.toString("base64")}`;
+          logger.info({ path: p }, "brand-assets: loaded local bookkeeping logo");
+          LOGO_BOOKKEEPING = { buffer, mimeType, dataUrl };
+          return LOGO_BOOKKEEPING;
+        }
+      } catch { /* keep trying */ }
+    }
+    /* Try Drive if a specific file ID is configured */
+    const fileId = DEFAULT_BOOKKEEPING_LOGO_FILE_ID;
+    if (fileId) {
+      const drive = await downloadFromDrive(fileId);
+      if (drive) { LOGO_BOOKKEEPING = drive; return drive; }
+    }
+    /* Fall back to main logo */
+    logger.info("brand-assets: no bookkeeping logo configured — falling back to main logo");
+    return getBrandLogo();
+  })();
+  return logoBookkeepingPromise;
+}
+
 /** Pre-warm the logo cache at server boot. Safe to call multiple times. */
 export async function warmBrandAssets(): Promise<void> {
   try {
     await getBrandLogo();
+    /* Warm bookkeeping logo only if it has its own file ID */
+    if (DEFAULT_BOOKKEEPING_LOGO_FILE_ID) await getBookkeepingLogo();
   } catch (e) {
     logger.warn({ err: String(e) }, "brand-assets: warm-up failed");
   }
 }
 
-/** Synchronous accessor — returns the cached data URL or null if not loaded
- *  yet. Used by the renderer when it can't await. */
+/** Synchronous accessor — returns the cached main logo data URL or null. */
 export function getBrandLogoDataUrlSync(): string | null {
   return LOGO?.dataUrl ?? null;
+}
+
+/** Synchronous accessor — returns bookkeeping logo data URL, or main logo
+ *  as fallback, or null if nothing is loaded yet. */
+export function getBookkeepingLogoDataUrlSync(): string | null {
+  return LOGO_BOOKKEEPING?.dataUrl ?? LOGO?.dataUrl ?? null;
 }
