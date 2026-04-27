@@ -338,7 +338,8 @@ export async function generateHeroImage(
       if (p === "gpt-image")
         return await generateWithGptImage(prompt, ratio);
       if (p === "nanobanana")
-        return await generateWithGeminiImage(prompt, ratio, "gemini-2.0-flash-preview-image-generation", "nanobanana");
+        /* gemini-2.0-flash-preview-image-generation was retired — use gemini-2.0-flash-exp */
+        return await generateWithGeminiImage(prompt, ratio, "gemini-2.0-flash-exp", "nanobanana");
       if (p === "nanobanana-25")
         return await generateWithGeminiImage(prompt, ratio, "gemini-2.5-flash-preview-05-20", "nanobanana-25");
       if (p === "imagen3")
