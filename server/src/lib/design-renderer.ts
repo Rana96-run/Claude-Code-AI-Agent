@@ -322,7 +322,7 @@ function buildVdom(
     const words = (text || "").trim().split(/\s+/).filter(Boolean);
     if (!words.length) return { type: "div", props: { style: { display: "flex" }, children: "" } };
 
-    const spacing = Math.round(Number(wordStyle.fontSize) * 0.28);
+    const spacing = Math.round(Number(wordStyle.fontSize) * 0.18);
     const wStyle: Record<string, unknown> = {
       display: "flex",
       fontSize: wordStyle.fontSize,
