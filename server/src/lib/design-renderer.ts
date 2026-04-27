@@ -507,7 +507,7 @@ function buildVdom(
 
   /* Portrait (9:16, 4:5) = text centered top.
      Landscape / square = text right-aligned (RTL natural). */
-  const isPortrait = ratio === "9:16" || ratio === "4:5";
+  // isPortrait / isWide already declared above for the gradient overlay — reuse them
   const textAlign = isPortrait ? "center" : "right";
   const justifyWords = isPortrait ? "center" : "flex-start"; // flex-start=right in RTL
 
