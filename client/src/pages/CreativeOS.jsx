@@ -657,7 +657,7 @@ export default function CreativeOS(){
   const[designErrs,setDesignErrs]=useState({});
   const[designProviders,setDesignProviders]=useState({});
   const[designPrompts,setDesignPrompts]=useState({});
-  const[imageProvider,setImageProvider]=useState("auto");
+  const[imageProvider,setImageProvider]=useState("nano_banana_2");
 
   const[lpProd,setLpProd]=useState("QFlavours");
   const[lpCompUrl,setLpCompUrl]=useState("");
@@ -1865,6 +1865,7 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
                 <Fld label={T("نموذج توليد الصورة","Image Generation Model")}>
                   <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
                     {[
+                      ["nano_banana_2", "Nano Banana 2 ★"],
                       ["auto",          T("تلقائي","Auto")],
                       ["gpt-image",     "GPT Image 1"],
                       ["nanobanana",    "Nano Banana (Flash 2.0)"],
@@ -1893,7 +1894,7 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,padding:"8px 12px",borderRadius:8,border:"1px solid rgba(1,53,90,.45)",background:"rgba(7,22,48,.5)",flexWrap:"wrap"}}>
                   <span style={{fontSize:10.5,fontWeight:600,color:"#17a3a3",flex:"1 1 200px"}}>✦ {T("نموذج توليد الصورة","Image generation model")}</span>
                   <div style={{display:"flex",background:"#0a1f3d",border:"1px solid rgba(1,53,90,.45)",borderRadius:5,overflow:"hidden",height:26}}>
-                    {[["auto","Auto"],["gpt-image","GPT Image"],["nanobanana","NB Flash 2"],["nanobanana-25","NB Flash 2.5"],["imagen3","Imagen 3"],["imagen4","Imagen 4"],["veo2","Veo 2🎬"],["veo3","Veo 3🎬"]].map(([v,l])=>(
+                    {[["nano_banana_2","NB2 ★"],["auto","Auto"],["gpt-image","GPT Image"],["nanobanana","NB Flash 2"],["nanobanana-25","NB Flash 2.5"],["imagen3","Imagen 3"],["imagen4","Imagen 4"],["veo2","Veo 2🎬"],["veo3","Veo 3🎬"]].map(([v,l])=>(
                       <button key={v} onClick={()=>setImageProvider(v)} style={{padding:"0 10px",height:"100%",background:imageProvider===v?"rgba(23,163,164,.15)":"none",border:"none",color:imageProvider===v?"#17a3a3":"#6a96aa",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{l}</button>
                     ))}
                   </div>
@@ -1916,7 +1917,7 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
                         <div style={{...cHead,background:appV===num?"rgba(93,200,122,.06)":"rgba(23,163,164,.03)"}}>
                           <span style={{fontSize:11,fontWeight:600,color:appV===num?"#5dc87a":"#17a3a3"}}>{T(`نسخة ${num}`,`Variant ${num}`)}</span>
                           <div style={{display:"flex",gap:5,alignItems:"center"}}>
-                            {provider&&<Tag ch={provider==="nanobanana"?"Nano Banana":provider==="gpt-image"?"GPT Image":provider} t style={{fontSize:8.5}}/>}
+                            {provider&&<Tag ch={provider==="nano_banana_2"?"NB2 ★":provider==="nanobanana"?"Nano Banana":provider==="gpt-image"?"GPT Image":provider} t style={{fontSize:8.5}}/>}
                             {appV===num&&<Tag ch="✓" green style={{fontSize:9.5}}/>}
                           </div>
                         </div>

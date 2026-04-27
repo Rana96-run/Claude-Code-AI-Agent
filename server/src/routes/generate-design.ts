@@ -24,6 +24,7 @@ import {
   RATIO_DIMS,
   type AdCopy,
 } from "../lib/design-renderer.js";
+import { runDesignKitPipeline } from "../lib/design-kit.js";
 import {
   QOYOD_BRAND_PLAYBOOK,
   QOYOD_CREATIVE_RULES,
@@ -285,6 +286,48 @@ router.post("/generate-design", async (req, res) => {
   const scheme = resolveScheme(effectiveScheme);
 
   try {
+    /* ── Design-kit pipeline (Nano Banana 2) ──────────────────────── */
+    if (image_provider === "nano_banana_2") {
+      const geminiKey = process.env.GEMINI_API_KEY;
+      if (!geminiKey) {
+        res.status(500).json({ error: "GEMINI_API_KEY not set" });
+        return;
+      }
+
+      // Assemble a rich user brief from all incoming fields
+      const brief = [
+        product && `Product: ${product}`,
+        message && `Main message: "${message}"`,
+        hook && `Hook: "${hook}"`,
+        cta && `CTA: "${cta}"`,
+        trust && `Trust badge: "${trust}"`,
+        concept && `Concept: "${concept}"`,
+        art_direction && `Art direction: "${art_direction}"`,
+        `Aspect ratio: ${ratio}`,
+        sector && `Sector: ${sector}`,
+        persona && `Persona: ${persona}`,
+        visual_style && `Visual style: ${visual_style}`,
+      ]
+        .filter(Boolean)
+        .join(". ");
+
+      const result = await runDesignKitPipeline({
+        userBrief: brief,
+        anthropicKey: apiKey,
+        geminiKey,
+      });
+
+      res.status(200).json({
+        png: result.png,
+        content: result.plan,
+        image_prompt: result.imagePrompt,
+        provider: "nano_banana_2",
+        scheme: scheme.name,
+        rendered_via: "design-kit-native",
+      });
+      return;
+    }
+
     /* 1. Claude → copy + scene-only image prompt */
     /* If user picked an explicit visual style, fold it into art_direction
        so Claude leans the scene that way. */
