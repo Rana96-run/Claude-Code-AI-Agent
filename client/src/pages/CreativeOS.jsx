@@ -100,19 +100,6 @@ const HOOK_TYPES = [
   {v:"Auto",ar:"تلقائي — الذكاء الاصطناعي يختار",en:"Auto — AI decides"},
 ];
 
-/* ─── CHECKLIST ─── */
-const CHKLIST = [
-  "الرسالة واضحة خلال 3 ثوانٍ؟",
-  "رسالة واحدة فقط؟",
-  "النبرة هادئة واحترافية؟",
-  "عنصر ثقة واحد فقط؟",
-  "زر دعوة واحد فقط؟",
-  "الخط Lama Sans والألوان من لوحة الألوان المعتمدة؟",
-  "الشعار مستخدم بشكل صحيح؟",
-  "التخطيط: نص أعلى اليمين، صورة أسفل اليسار؟",
-  "الرسالة مناسبة لشريحة العميل المستهدف ومستوى القمع؟",
-  "النص العربي باللهجة السعودية؟",
-];
 
 /* ─── CREATIVE LIBRARY ─── */
 const CREATIVE_LIBRARY = [
@@ -720,14 +707,9 @@ export default function CreativeOS(){
   const[lpQuickErr,setLpQuickErr]=useState("");
   const[advContent,setAdvContent]=useState(false);
   const[advLP,setAdvLP]=useState(false);
-  const[checks,setChecks]=useState(Array(10).fill(false));
   const[customPersonas,setCustomPersonas]=useState([]);
   const[newPersona,setNewPersona]=useState({title:"",en:"",icon:"👤",tier:"A",pain_ar:"",hook_ar:"",funnel:"TOF",channels:[]});
   const[showAddPersona,setShowAddPersona]=useState(false);
-  const[revText,setRevText]=useState("");
-  const[revRes,setRevRes]=useState(null);
-  const[revLd,setRevLd]=useState(false);
-  const[revErr,setRevErr]=useState("");
 
   /* ── Content Calendar ── */
   const[calProd,setCalProd]=useState("Qoyod Main");
@@ -769,7 +751,6 @@ export default function CreativeOS(){
 
   const T=(ar,en)=>lang==="en"?en:ar;
   const dir=lang==="ar"?"rtl":"ltr";
-  const checkScore=checks.filter(Boolean).length;
   const pctx=PRODUCTS.find(p=>p.v===prod)||PRODUCTS[0];
 
   useEffect(()=>{
@@ -1344,12 +1325,6 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
     for(let i=1;i<=numVariants;i++){await genDesign(i);}
   },[numVariants,genDesign]);
 
-  const revCopy=useCallback(async()=>{
-    if(!revText){setRevErr(T("الصق نصاً أولاً","Paste text first"));return;}
-    const sys=`Qoyod brand reviewer. Saudi dialect: مو/وش/ليش=correct. مش/ايه/بتاعك=FAIL.\nReturn ONLY valid JSON:\n{"overall":"pass/warn/fail","score":85,"issues":[{"rule":"...","status":"pass/fail/warn","note":"..."}],"improved":"...","dialect_issues":["..."],"recommendation":"..."}`;
-    setRevLd(true);setRevRes(null);setRevErr("");
-    try{setRevRes(await callAI(sys,`Review:\n\n${revText}`));}catch(e){setRevErr(e.message);}finally{setRevLd(false);}
-  },[revText]);
 
   /* ── Content Calendar ── */
   const genCalendar=useCallback(async()=>{
@@ -1416,7 +1391,6 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
     ["landing", T("صفحات الوصول","Landing Pages")],
     ["library", T("مكتبة الإعلانات","Ad Library")],
     ["icp",     T("شرائح العملاء","ICP")],
-    ["review",  T("مراجعة","Review")],
   ];
 
   const SH=({title,sub})=><div style={{marginBottom:15,paddingBottom:11,borderBottom:"1px solid rgba(1,53,90,.45)"}}><h2 style={{fontSize:13.5,fontWeight:700,marginBottom:2}}>{title}</h2><p style={{fontSize:11,color:"#2e5468"}}>{sub}</p></div>;
@@ -2620,50 +2594,6 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
           </div>
         )}
 
-        {tab==="review"&&(
-          <div className="qa">
-            <SH title={T("مراجعة","Review")} sub={T("فحص الامتثال","Compliance check")}/>
-            <div style={card}>
-              <div style={cHead}><span style={{fontSize:11,fontWeight:600,color:"#6a96aa"}}>{T("قائمة المراجعة","Checklist")}</span><span style={{fontSize:11,color:"#2e5468"}}>{checkScore}/{CHKLIST.length}</span></div>
-              <div style={cBody}>
-                {CHKLIST.map((item,i)=>(
-                  <div key={i} onClick={()=>setChecks(p=>{const n=[...p];n[i]=!n[i];return n;})} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:"1px solid rgba(255,255,255,.04)",cursor:"pointer",direction:"rtl"}}>
-                    <input type="checkbox" checked={checks[i]} onChange={()=>{}} style={{cursor:"pointer",accentColor:"#17a3a3",flexShrink:0,width:14,height:14}}/>
-                    <span style={{fontSize:12.5,color:checks[i]?"#5dc87a":"#ddeef4",flex:1,textAlign:"right",lineHeight:1.5}}>{item}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div style={{...card,marginTop:10}}>
-              <div style={cHead}><span style={{fontSize:11,fontWeight:600,color:"#6a96aa"}}>{T("مراجعة الذكاء الاصطناعي","AI Review")}</span></div>
-              <div style={cBody}>
-                <ErrBox msg={revErr}/>
-                <Fld label={T("الصق النص","Paste copy")}><textarea value={revText} onChange={e=>setRevText(e.target.value)} rows={5} dir="rtl" style={{textAlign:"right"}}/></Fld>
-                <Btn ch={T("راجع","Review")} onClick={revCopy} dis={revLd} full/>
-              </div>
-            </div>
-            {revLd&&<Loader msg={T("يراجع...","Reviewing...")}/>}
-            {revRes&&!revLd&&(
-              <div style={{...card,marginTop:10}}>
-                <div style={cHead}><span style={{fontSize:12,fontWeight:700,color:revRes.overall==="pass"?"#5dc87a":revRes.overall==="warn"?"#f5a623":"#f07070"}}>{revRes.overall==="pass"?"✓":revRes.overall==="warn"?"⚠":"✗"} {T("النتيجة","Result")}</span><SBar v={revRes.score||75}/></div>
-                <div style={cBody}>
-                  {(revRes.issues||[]).map((iss,i)=>(
-                    <div key={i} style={{display:"flex",gap:10,padding:"8px 0",borderBottom:"1px solid rgba(255,255,255,.04)"}}>
-                      <span style={{fontSize:14,color:iss.status==="pass"?"#5dc87a":iss.status==="warn"?"#f5a623":"#f07070"}}>{iss.status==="pass"?"✓":iss.status==="warn"?"⚠":"✗"}</span>
-                      <div style={{flex:1,direction:"rtl",textAlign:"right"}}><p style={{fontSize:12,fontWeight:600}}>{iss.rule}</p><p style={{fontSize:11,color:"#6a96aa"}}>{iss.note}</p></div>
-                    </div>
-                  ))}
-                  {revRes.improved&&(
-                    <div style={{marginTop:12,padding:"10px 12px",background:"rgba(23,163,164,.05)",borderRadius:7,direction:"rtl"}}>
-                      <p style={{fontSize:9.5,color:"#17a3a3",marginBottom:6}}>{T("النسخة المحسّنة","Improved")}</p>
-                      <p style={{fontSize:13,fontWeight:600,color:"#f5a623"}}>{revRes.improved}</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
 
       </div>
     </div>
