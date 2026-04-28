@@ -1123,8 +1123,10 @@ export default function CreativeOS(){
     const extraProds=calExtras.map(v=>PRODUCTS.find(p=>p.v===v)).filter(Boolean);
     const extraCtx=extraProds.length?` | Also highlight: ${extraProds.map(p=>lang==="en"?p.v:p.ar).join(", ")}`:"";
     const usr=`Product:${calProd} Desc:${lang==="en"?px.desc_en:px.desc_ar}${extraCtx} Month:${calMonth} Platforms:${calPlatforms.join(",")} (${calPlatforms.length} platforms — rotate posts across them) Frequency:${calFreq} (${postsPerMonth} posts total) Goal:${calGoal}`;
-    // Token budget scales with post count. Each entry ~100 tokens in Arabic + structure overhead.
-    const budget=Math.min(Math.max(2000,postsPerMonth*180+1500),8000);
+    // Token budget scales with BOTH post count and platform count — only what you selected.
+    // Each rotated post entry ≈150 tokens in Arabic. Extra platforms add per-platform hashtag
+    // sets, format guidance, and rotation overhead. Capped at Anthropic's 8K hard limit.
+    const budget=Math.min(Math.max(2500,postsPerMonth*150+calPlatforms.length*250+1500),8000);
     setCalLd(true);setCalErr("");setCalRes(null);
     try{setCalRes(await callAI(sys,usr,budget));}catch(e){setCalErr(e.message);}finally{setCalLd(false);}
   },[lang,calProd,calExtras,calMonth,calPlatforms,calFreq,calGoal]);
