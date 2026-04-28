@@ -15,12 +15,6 @@ import { PERSONAS, type PersonaId } from "./agent-personas.js";
 
 /* Handle → persona map. Keep this tight — add new aliases as needed. */
 const HANDLE_MAP: Record<string, PersonaId> = {
-  // graphic
-  designer: "graphic_designer",
-  design: "graphic_designer",
-  graphic: "graphic_designer",
-  "مصمم": "graphic_designer",
-  "تصميم": "graphic_designer",
   // social
   social: "social_media",
   "سوشيال": "social_media",

@@ -88,7 +88,21 @@ fine and only shows up as black screens to the user.
 
 | File | Purpose |
 |------|---------|
-| `server/src/routes/generate.ts` | Anthropic proxy — json_mode prefill |
-| `server/src/routes/generate-design.ts` | Design kit + Gemini pipeline |
-| `server/src/lib/design-kit.ts` | DesignPlan → image prompt → Gemini |
-| `client/src/pages/CreativeOS.jsx` | Main UI (all tabs) |
+| `server/src/routes/generate.ts` | Anthropic proxy with multi-provider fallback (Anthropic→Gemini), retry, dedup |
+| `server/src/routes/competitor-ads.ts` | Apify-powered FB+IG capture, jina-powered Google ads, weekly monitor trigger |
+| `server/src/routes/fetch-url.ts` | Generic URL content fetcher (X/LinkedIn/web) via r.jina.ai |
+| `server/src/lib/competitor-monitor.ts` | Sunday 09:00 UTC scheduled monitor → Sheet + Slack |
+| `server/src/lib/competitor-weekly-report.ts` | Diff/AI-summary/Slack-blocks formatter |
+| `server/src/lib/agent-personas.ts` | 6 personas: social, content, cro (paid media), email, editor, orchestrator |
+| `client/src/pages/CreativeOS.jsx` | Main UI: 7 tabs (Content, Campaign, Calendar, Email/WA, Market Watch, Library, ICP) |
+
+## Focus areas (no graphic design)
+
+The system is intentionally focused on:
+1. **Social media analysis** — performance trends, what's working
+2. **Social media monitoring/listening** — competitor weekly auto-reports
+3. **Content creator/writer** — ad copy, captions, calendars, sequences
+4. **Paid media analyst** — ad library scraping, counter-creative strategy
+
+Graphic Designer tab + persona were removed (Apr 28, 2026). Image generation
+and Canva/Miro design integrations are NOT part of the active workflow.

@@ -81,13 +81,6 @@ const CAMPS = [
   {id:"TY10",ar:"كل أعمالك من جوالك — فواتير وتقارير بضغطة زر",en:"All your business from your phone",s:"قيود",st:"TOF"},
 ];
 
-/* ─── VISUAL STYLES ─── */
-const INSPOS = [
-  {v:"device_dashboard",ar:"جهاز + لوحة تحكم",sub:"Device with Qoyod UI",bg:"linear-gradient(135deg,#021544,#01355a)"},
-  {v:"2d_character",ar:"شخصية توضيحية بسيطة",sub:"Minimal illustration",bg:"linear-gradient(135deg,#0a1628,#162a52)"},
-  {v:"Before_After",ar:"قبل / بعد",sub:"Split Screen",bg:"linear-gradient(135deg,#0047ff,#0035cc)"},
-  {v:"Saudi_Person",ar:"شخص سعودي",sub:"9:16 Stories",bg:"linear-gradient(135deg,#1e3a8a,#1e40af)"},
-];
 
 /* ─── HOOK TYPES ─── */
 const HOOK_TYPES = [
@@ -689,10 +682,9 @@ export default function CreativeOS(){
 
   const PERSONAS_LIST=[
     {id:"",ar:"تلقائي",en:"Auto"},
-    {id:"graphic_designer",ar:"مصمم",en:"Designer"},
-    {id:"social_media",ar:"سوشيال",en:"Social"},
-    {id:"content_creator",ar:"محتوى",en:"Content"},
-    {id:"cro",ar:"CRO",en:"CRO"},
+    {id:"social_media",ar:"سوشيال — تحليل/مراقبة","en":"Social"},
+    {id:"content_creator",ar:"محتوى/كاتب",en:"Content"},
+    {id:"cro",ar:"إعلانات مدفوعة",en:"Paid Media"},
     {id:"email_lifecycle",ar:"بريد",en:"Email"},
     {id:"editor_qa",ar:"محرر",en:"Editor"},
   ];
@@ -729,27 +721,6 @@ export default function CreativeOS(){
     }catch(e){setTermErr(e.message);setTermLd(false);}
   },[termPrompt,termPersona,lang]);
 
-  const[bProd,setBProd]=useState("QFlavours");
-  const[bProdExtras,setBProdExtras]=useState([]);
-  const[bMsg,setBMsg]=useState("");
-  const[bHook,setBHook]=useState("");
-  const[bCta,setBCta]=useState("");
-  const[bPlaces,setBPlaces]=useState(["1:1","4:5","9:16"]);
-  const[bStyle,setBStyle]=useState("device_dashboard");
-  const[bTrust,setBTrust]=useState("ZATCA Logo");
-  const[bPersona,setBPersona]=useState("");
-  const[bSector,setBSector]=useState("");
-  const[bRes,setBRes]=useState(null);
-  const[bLd,setBLd]=useState(false);
-  const[bErr,setBErr]=useState("");
-  const[appV,setAppV]=useState(null);
-  const[numVariants,setNumVariants]=useState(1);
-  const[designPngs,setDesignPngs]=useState({});
-  const[designLds,setDesignLds]=useState({});
-  const[designErrs,setDesignErrs]=useState({});
-  const[designProviders,setDesignProviders]=useState({});
-  const[designPrompts,setDesignPrompts]=useState({});
-  const[imageProvider,setImageProvider]=useState("nano_banana_2");
 
   const[canvaConn,setCanvaConn]=useState(false);
   const[canvaLd,setCanvaLd]=useState(false);
@@ -1004,288 +975,6 @@ export default function CreativeOS(){
     }catch(e){setMErr(e.message);}finally{setMLd(false);}
   },[lang,mComp,mChan,mDesc]);
 
-  const genBrief=useCallback(async()=>{
-    if(!bMsg){setBErr(T("اكتب الرسالة الرئيسية أولاً","Enter the main message first"));return;}
-    const{names:bProdNames}=buildProdCtx(bProd,bProdExtras,lang);
-    const vList=Array.from({length:numVariants},(_,i)=>`"variant${i+1}":{"concept":"...","art_direction":"...","visual_element":"...","color_accent":"...","layout_note":"..."}`).join(",");
-    const sys=`Senior art director for Qoyod.\n${QOYOD_DESIGN}\n${QOYOD_VOICE}\nProduce EXACTLY ${numVariants} distinct design variants.\nReturn ONLY valid JSON:\n{"brief_title":"...",${vList},"shared":{"color_usage":"...","logo_placement":"...","dos":["..."],"donts":["..."]}}`;
-    const usr=`Product:${bProdNames} Message:"${bMsg}" Hook:"${bHook||"n/a"}" CTA:"${bCta||"ابدأ تجربتك"}" Placements:${bPlaces.join(",")} Trust:${bTrust} Style:${bStyle} Variants:${numVariants}`;
-    setBLd(true);setBErr("");setBRes(null);setAppV(null);setDesignPngs({});setDesignLds({});setDesignErrs({});setDesignProviders({});setDesignPrompts({});
-    try{setBRes(await callAI(sys,usr));}catch(e){setBErr(e.message);}finally{setBLd(false);}
-  },[lang,bProd,bProdExtras,bMsg,bHook,bCta,bPlaces,bTrust,bStyle,numVariants,buildProdCtx]);
-
-  /* Rotate color scheme per variant so each variant has a clearly different look.
-     Bookkeeping product gets its own dark navy + orange scheme automatically (server-side),
-     but we also respect it here so the variant rotation feels brand-correct. */
-  const isBookkeepingProd = /bookkeeping|مسك|دفاتر/i.test(bProd||"");
-  const isFlavoursProd   = /flavour|qflavour|q-flavour|مطعم|فليفرز/i.test(bProd||"");
-  const VARIANT_SCHEMES = isBookkeepingProd
-    ? ["bookkeeping","bookkeeping","bookkeeping","bookkeeping","bookkeeping","bookkeeping"]
-    : isFlavoursProd
-    ? ["flavours","flavours","flavours","navy","midnight","flavours"]
-    : ["navy","light_cyan","midnight","light_purple","ocean","light_blue"];
-
-  const genDesign=useCallback(async(variantNum,briefOverride)=>{
-    const brief=briefOverride||bRes;
-    if(!brief)return;
-    const data=brief[`variant${variantNum}`]||{};
-    const ratio=bPlaces[0]||"1:1";
-    const scheme=VARIANT_SCHEMES[(variantNum-1)%VARIANT_SCHEMES.length];
-    setDesignLds(p=>({...p,[variantNum]:true}));
-    setDesignErrs(p=>({...p,[variantNum]:""}));
-    setDesignPngs(p=>({...p,[variantNum]:null}));
-    setDesignProviders(p=>({...p,[variantNum]:null}));
-    setDesignPrompts(p=>({...p,[variantNum]:null}));
-    try{
-      const r=await fetchWithTimeout(`/api/generate-design`,{
-        method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({
-          product:bProd,
-          message:bMsg,
-          hook:bHook,
-          cta:bCta||"ابدأ الآن",
-          trust:bTrust,
-          ratio,
-          concept:data.concept||"",
-          art_direction:data.art_direction||bStyle,
-          color_scheme:scheme,
-          variant:variantNum,
-          image_provider:imageProvider,
-          persona:bPersona,
-          sector:bSector,
-          visual_style:bStyle,
-        }),
-      },240000);
-      const json=await r.json().catch(()=>({error:"Server returned malformed response"}));
-      if(!r.ok||json.error)throw new Error(json.error||"Generation failed");
-      setDesignPngs(p=>({...p,[variantNum]:json.png}));
-      setDesignProviders(p=>({...p,[variantNum]:json.provider}));
-      setDesignPrompts(p=>({...p,[variantNum]:json.image_prompt}));
-    }catch(e){
-      setDesignErrs(p=>({...p,[variantNum]:e.message}));
-    }finally{
-      setDesignLds(p=>({...p,[variantNum]:false}));
-    }
-  },[bRes,bProd,bMsg,bHook,bCta,bTrust,bPlaces,imageProvider,bPersona,bSector]);
-
-  const genDirectDesigns=useCallback(async()=>{
-    if(!bMsg){setBErr(T("اكتب الرسالة الرئيسية أولاً","Enter the main message first"));return;}
-    const{names:bProdNames}=buildProdCtx(bProd,bProdExtras,lang);
-    const vList=Array.from({length:numVariants},(_,i)=>`"variant${i+1}":{"concept":"...","art_direction":"...","visual_element":"...","color_accent":"...","layout_note":"..."}`).join(",");
-    const sys=`Senior art director for Qoyod.\n${QOYOD_DESIGN}\n${QOYOD_VOICE}\nProduce EXACTLY ${numVariants} distinct design variants.\nReturn ONLY valid JSON:\n{"brief_title":"...",${vList},"shared":{"color_usage":"...","logo_placement":"..."}}`;
-    const usr=`Product:${bProdNames} Message:"${bMsg}" Hook:"${bHook||"n/a"}" CTA:"${bCta||"ابدأ تجربتك"}" Placements:${bPlaces.join(",")} Trust:${bTrust} Style:${bStyle} Variants:${numVariants}`;
-    setBLd(true);setBErr("");setBRes(null);setAppV(null);setDesignPngs({});setDesignLds({});setDesignErrs({});setDesignProviders({});setDesignPrompts({});
-    try{
-      const brief=await callAI(sys,usr);
-      setBRes(brief);
-      Array.from({length:numVariants},(_,i)=>i+1).forEach(num=>genDesign(num,brief));
-    }catch(e){setBErr(e.message);}finally{setBLd(false);}
-  },[lang,bProd,bProdExtras,bMsg,bHook,bCta,bPlaces,bTrust,bStyle,numVariants,genDesign,buildProdCtx]);
-
-  /* Convert PNG data URL → Blob for download */
-  const dataUrlToBlob=(dataUrl)=>{
-    const [header,b64]=dataUrl.split(",");
-    const mime=(header.match(/data:([^;]+)/)||[,"image/png"])[1];
-    const bin=atob(b64);
-    const arr=new Uint8Array(bin.length);
-    for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
-    return new Blob([arr],{type:mime});
-  };
-
-  /* Re-encode PNG as JPG (for users who want flat backgrounds) */
-  const pngToJpgBlob=async(pngDataUrl)=>{
-    const img=new Image();
-    img.crossOrigin="anonymous";
-    await new Promise((res,rej)=>{img.onload=res;img.onerror=rej;img.src=pngDataUrl;});
-    const canvas=document.createElement("canvas");
-    canvas.width=img.naturalWidth;canvas.height=img.naturalHeight;
-    const ctx=canvas.getContext("2d");
-    ctx.fillStyle="#021544";
-    ctx.fillRect(0,0,canvas.width,canvas.height);
-    ctx.drawImage(img,0,0);
-    return new Promise(res=>canvas.toBlob(res,"image/jpeg",0.95));
-  };
-
-  const downloadRaster=async(pngDataUrl,variantNum,format)=>{
-    try{
-      const blob=format==="jpg"||format==="jpeg"
-        ?await pngToJpgBlob(pngDataUrl)
-        :dataUrlToBlob(pngDataUrl);
-      if(!blob)return;
-      const url=URL.createObjectURL(blob);
-      const a=document.createElement("a");
-      a.href=url;
-      a.download=`qoyod-ad-variant${variantNum}.${format==="jpg"||format==="jpeg"?"jpg":"png"}`;
-      document.body.appendChild(a);a.click();
-      setTimeout(()=>{URL.revokeObjectURL(url);document.body.removeChild(a);},500);
-    }catch(e){console.error("download failed",e);alert("Export failed: "+(e?.message||e));}
-  };
-
-  const CANVA_BASE=`/api/canva`;
-  const checkCanvaStatus=useCallback(async()=>{
-    /* Deep-link mode — always available, no OAuth */
-    setCanvaConn(true);
-  },[]);
-  useEffect(()=>{checkCanvaStatus();},[checkCanvaStatus]);
-
-  /* Open in Canva: stage PNG on server → download locally → open Canva in new tab.
-     User drops the file into Canva. No OAuth, no popups, no token state. */
-  const openInCanva=useCallback(async(pngDataUrl,variantNum)=>{
-    setCanvaLd(true);
-    setCanvaMsg(p=>({...p,[variantNum]:{info:T("جاري التحضير...","Preparing...")}}));
-    try{
-      // 1. Trigger local download so user has the file ready
-      const blob=dataUrlToBlob(pngDataUrl);
-      const url=URL.createObjectURL(blob);
-      const a=document.createElement("a");
-      a.href=url;a.download=`qoyod-ad-variant${variantNum}.png`;
-      document.body.appendChild(a);a.click();
-      setTimeout(()=>{URL.revokeObjectURL(url);document.body.removeChild(a);},500);
-      // 2. Open Canva editor in a new tab
-      window.open("https://www.canva.com/design?create&type=TAYIuREZAEU","_blank","noopener,noreferrer");
-      setCanvaMsg(p=>({...p,[variantNum]:{ok:T("تم تنزيل الصورة. اسحبها داخل Canva.","Image downloaded. Drop it into the Canva tab.")}}));
-    }catch(e){
-      setCanvaMsg(p=>({...p,[variantNum]:{err:e.message}}));
-    }finally{setCanvaLd(false);}
-  },[lang]);
-
-  const MIRO_BASE="/api/miro";
-
-  useEffect(()=>{
-    fetch(`${MIRO_BASE}/status`).then(r=>r.json()).then(d=>setMiroConn(!!d.connected)).catch(()=>{});
-  },[]);
-
-  const connectMiro=useCallback(async()=>{
-    try{
-      const r=await fetch(`${MIRO_BASE}/auth-url`);
-      const d=await r.json();
-      if(!d.auth_url)throw new Error("Failed to get Miro auth URL");
-      const popup=window.open(d.auth_url,"miro_auth","width=560,height=700,noopener");
-      const handler=(e)=>{
-        if(e.data?.miro_ok){window.removeEventListener("message",handler);popup?.close();setMiroConn(true);setMiroMsg(T("تم ربط Miro بنجاح ✓","Miro connected ✓"));}
-        else if(e.data?.miro_error){window.removeEventListener("message",handler);popup?.close();setMiroErr(e.data.miro_error||"Auth failed");}
-      };
-      window.addEventListener("message",handler);
-    }catch(e){setMiroErr(e.message);}
-  },[lang]);
-
-  const disconnectMiro=useCallback(async()=>{
-    await fetch(`${MIRO_BASE}/logout`,{method:"DELETE"});
-    setMiroConn(false);setMiroMsg("");setMiroErr("");setMiroBoardId("");
-  },[]);
-
-  const syncProjectToDrive=useCallback(async()=>{
-    setSyncLd(true);setSyncResult(null);setSyncErr("");
-    try{
-      const r=await fetch("/api/drive/sync-project",{method:"POST"});
-      const d=await r.json();
-      if(!r.ok||d.error)throw new Error(d.error||"Sync failed");
-      setSyncResult(d);
-    }catch(e){setSyncErr(e.message);}
-    finally{setSyncLd(false);}
-  },[]);
-
-  const uploadToDrive=useCallback(async(content,filename,mimeType,key)=>{
-    setDriveLd(p=>({...p,[key]:true}));
-    setDriveErrs(p=>({...p,[key]:""}));
-    setDriveLinks(p=>({...p,[key]:""}));
-    try{
-      const r=await fetch("/api/drive/upload",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({content,filename,mimeType})});
-      const d=await r.json();
-      if(!r.ok||d.error)throw new Error(d.error||"Upload failed");
-      setDriveLinks(p=>({...p,[key]:d.link}));
-    }catch(e){setDriveErrs(p=>({...p,[key]:e.message}));}
-    finally{setDriveLd(p=>({...p,[key]:false}));}
-  },[]);
-
-  const createMiroBoard=useCallback(async()=>{
-    if(!miroConn){setMiroErr(T("اتصل بـ Miro أولاً","Connect to Miro first"));return;}
-    setMiroLd(true);setMiroMsg("");setMiroErr("");
-    try{
-      const r=await fetch(`${MIRO_BASE}/create-board`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({board_name:"Qoyod Creative OS — Workflow"})});
-      const d=await r.json();
-      if(!r.ok||d.error)throw new Error(d.error||"Board creation failed");
-      setMiroBoardId(d.board_id);
-      setMiroMsg(T("✓ تم إنشاء اللوحة — افتح الرابط","✓ Board created — open link"));
-      window.open(d.view_link,"_blank");
-    }catch(e){setMiroErr(e.message);}
-    finally{setMiroLd(false);}
-  },[miroConn,lang]);
-
-  /* SVG refinement removed — designs are now AI-generated PNGs.
-     To refine, click Retry with a tweaked concept or use the prompt panel below. */
-
-
-  const genAllDesigns=useCallback(async()=>{
-    for(let i=1;i<=numVariants;i++){await genDesign(i);}
-  },[numVariants,genDesign]);
-
-
-  /* ── Content Calendar ── */
-  const genCalendar=useCallback(async()=>{
-    if(!calPlatforms.length){setCalErr(T("اختر منصة واحدة على الأقل","Select at least one platform"));return;}
-    const px=PRODUCTS.find(p=>p.v===calProd)||PRODUCTS[0];
-    const ol=lang==="en"?"All captions in English.":"All captions in Saudi Arabic dialect (مو/وش/ليش). NEVER Egyptian.";
-    const refCopy=`Reference captions from real Qoyod campaigns:\n- "سهل إدارة أعمالك بنظام فواتير ذكي وأصدر فواتيرك الإلكترونية من جوالك مع قيود"\n- "ركّز على نمو مشروعك واترك تعقيد الحسابات علينا — SOCPA certified"\n- "آلاف التجار دخلوا المرحلة الثانية للفوترة الإلكترونية مع قيود، أنت جاهز؟"\nUse these as tone/style benchmark.`;
-    // Map every supported frequency to actual post count
-    const postsPerMonth=({"daily":30,"5 posts/week":20,"4 posts/week":16,"3 posts/week":12,"2 posts/week":8,"1 post/week":4})[calFreq]||12;
-    // Distribution: each post goes to ONE primary platform (not duplicated across all platforms).
-    // Platforms rotate through the schedule. This keeps the response compact.
-    const sys=`You are a social media content strategist for Qoyod (Saudi cloud accounting SaaS, ZATCA-certified). ${ol}\n${QOYOD_VOICE}\n${refCopy}\nIMPORTANT: Each post is on ONE platform only. Distribute the ${postsPerMonth} posts across the selected platforms (rotate them — do NOT generate the same post on every platform). Captions ≤80 words each. Themes ≤5 words each.\nReturn ONLY valid JSON:\n{"month":"...","goal":"...","total_posts":${postsPerMonth},"weeks":[{"week":1,"posts":[{"day":"...","platform":"...","format":"Static/Reel/Story/Carousel","topic":"...","design_text":"...","caption":"...","hashtags":"...","cta":"...","funnel_stage":"TOF/MOF/BOF"}]}],"themes":["..."],"hashtag_sets":{"main":"...","secondary":"..."}}`;
-    const extraProds=calExtras.map(v=>PRODUCTS.find(p=>p.v===v)).filter(Boolean);
-    const extraCtx=extraProds.length?` | Also highlight: ${extraProds.map(p=>lang==="en"?p.v:p.ar).join(", ")}`:"";
-    const usr=`Product:${calProd} Desc:${lang==="en"?px.desc_en:px.desc_ar}${extraCtx} Month:${calMonth} Platforms:${calPlatforms.join(",")} (${calPlatforms.length} platforms — rotate posts across them) Frequency:${calFreq} (${postsPerMonth} posts total) Goal:${calGoal}`;
-    // Token budget scales with BOTH post count and platform count — only what you selected.
-    // Each rotated post entry ≈150 tokens in Arabic. Extra platforms add per-platform hashtag
-    // sets, format guidance, and rotation overhead. Capped at Anthropic's 8K hard limit.
-    const budget=Math.min(Math.max(2500,postsPerMonth*150+calPlatforms.length*250+1500),8000);
-    setCalLd(true);setCalErr("");setCalRes(null);
-    try{setCalRes(await callAI(sys,usr,budget));}catch(e){setCalErr(e.message);}finally{setCalLd(false);}
-  },[lang,calProd,calExtras,calMonth,calPlatforms,calFreq,calGoal]);
-
-  /* ── A/B Variants ── */
-  const genAB=useCallback(async()=>{
-    if(!abConcept){setAbErr(T("اكتب الفكرة أو الرسالة أولاً","Enter a concept or message first"));return;}
-    const px=PRODUCTS.find(p=>p.v===abProd)||PRODUCTS[0];
-    const ol=lang==="en"?"Write all copy in English.":"Write all Arabic copy in Saudi dialect (مو/وش/ليش). NEVER Egyptian.";
-    const sys=`Senior CRO copywriter for Qoyod (Saudi cloud accounting SaaS). ${ol}\n${QOYOD_VOICE}\nProduce two genuinely different A/B variants — different angle, different hook type, different emotional trigger. Both target the same audience and product.\nReturn ONLY valid JSON:\n{"concept_summary":"...","variant_a":{"label":"A — [angle name]","hook":"...","headline":"...","body":"...","cta":"...","trust":"...","hook_type":"...","emotional_trigger":"...","predicted_ctr":"high/med/low","why":"..."},"variant_b":{"label":"B — [angle name]","hook":"...","headline":"...","body":"...","cta":"...","trust":"...","hook_type":"...","emotional_trigger":"...","predicted_ctr":"high/med/low","why":"..."},"recommendation":"which to test first and why","testing_note":"what metric to optimise"}`;
-    const usr=`Product:${abProd} Desc:${lang==="en"?px.desc_en:px.desc_ar} Channel:${abChan} Format:${abFmt} Audience:${abAud} Concept:"${abConcept}"`;
-    setAbLd(true);setAbErr("");setAbRes(null);
-    try{setAbRes(await callAI(sys,usr,2500));}catch(e){setAbErr(e.message);}finally{setAbLd(false);}
-  },[lang,abProd,abConcept,abChan,abFmt,abAud]);
-
-  /* ── Email / WhatsApp Sequences ── */
-  const genSeq=useCallback(async()=>{
-    const px=PRODUCTS.find(p=>p.v===seqProd)||PRODUCTS[0];
-    const ol=lang==="en"?"Write all copy in English.":"Write all Arabic copy in Saudi dialect. NEVER Egyptian.";
-    const typeLabel={"welcome":"Welcome series (new trial/subscriber)","nurture":"Nurture series (warm leads, not converted)","winback":"Win-back series (churned/lapsed users)","demo":"Post-demo follow-up sequence","announcement":"Feature announcement / product update"}[seqType]||seqType;
-    const channelNote=seqChannel==="whatsapp"?"Messages must be short (max 3 lines each), conversational, no bullet lists, include one link placeholder [LINK].":seqChannel==="sms"?"SMS: max 160 chars per message, ultra-brief.":"Email: subject line + preview text + body (3-6 sentences) + CTA button label.";
-    const sys=`You are a B2B lifecycle marketing specialist for Qoyod (Saudi cloud accounting SaaS). ${ol}\n${QOYOD_VOICE}\n${channelNote}\nSequence type: ${typeLabel}\nReturn ONLY valid JSON:\n{"sequence_name":"...","channel":"${seqChannel}","type":"${seqType}","messages":[{"step":1,"send_timing":"immediately / Day N","subject":"...","preview_text":"...","body":"...","cta":"...","goal":"...","tone":"..."}]}`;
-    const usr=`Product:${seqProd} Desc:${lang==="en"?px.desc_en:px.desc_ar} Steps:${seqSteps} Channel:${seqChannel} Type:${seqType}`;
-    setSeqLd(true);setSeqErr("");setSeqRes(null);
-    try{setSeqRes(await callAI(sys,usr,3500));}catch(e){setSeqErr(e.message);}finally{setSeqLd(false);}
-  },[lang,seqProd,seqType,seqSteps,seqChannel]);
-
-
-  /* ── Ad Spec Sheet ── */
-  const genSpec=useCallback(async()=>{
-    const px=PRODUCTS.find(p=>p.v===specProd)||PRODUCTS[0];
-    const ol=lang==="en"?"Respond in English.":"Respond in Arabic with English tech terms where standard.";
-    const sys=`You are a performance creative strategist for Qoyod (Saudi cloud accounting SaaS). ${ol}\n${QOYOD_DESIGN}\nGenerate a complete ad creative spec sheet for the selected platforms and product. The "creative_direction" and "dos/donts" must enforce the brand system above (palette, gradient angle, layout grid, sub-product color, mobile readability).\nReturn ONLY valid JSON:\n{"product":"...","goal":"...","platforms":[{"platform":"...","formats":[{"format":"...","dimensions":"...","aspect_ratio":"...","max_file_size":"...","duration":"...","text_limit":"...","headline_chars":"...","body_chars":"...","safe_zone":"...","creative_direction":"...","dos":["..."],"donts":["..."]}]}],"brand_quick_ref":{"primary_color":"#021544","accent_color":"#17A3A4","font":"IBM Plex Sans Arabic / Lama Sans","logo_placement":"...","tone":"..."},"global_dos":["..."],"global_donts":["..."]}`;
-    const usr=`Product:${specProd} Desc:${lang==="en"?px.desc_en:px.desc_ar} Platforms:${specPlatforms.join(",")} Goal:${specGoal}`;
-    setSpecLd(true);setSpecErr("");setSpecRes(null);
-    try{setSpecRes(await callAI(sys,usr,3500));}catch(e){setSpecErr(e.message);}finally{setSpecLd(false);}
-  },[lang,specProd,specPlatforms,specGoal]);
-
-  const genSpecFromBrief=useCallback(async()=>{
-    const px=PRODUCTS.find(p=>p.v===bProd)||PRODUCTS[0];
-    const ol=lang==="en"?"Respond in English.":"Respond in Arabic with English tech terms where standard.";
-    const sys=`You are a performance creative strategist for Qoyod (Saudi cloud accounting SaaS). ${ol}\n${QOYOD_DESIGN}\nGenerate a complete ad creative spec sheet for the selected platforms and product. The "creative_direction" and "dos/donts" must enforce the brand system above (palette, gradient angle, layout grid, sub-product color, mobile readability).\nReturn ONLY valid JSON:\n{"product":"...","goal":"...","platforms":[{"platform":"...","formats":[{"format":"...","dimensions":"...","aspect_ratio":"...","max_file_size":"...","duration":"...","text_limit":"...","headline_chars":"...","body_chars":"...","safe_zone":"...","creative_direction":"...","dos":["..."],"donts":["..."]}]}],"brand_quick_ref":{"primary_color":"#021544","accent_color":"#17A3A4","font":"IBM Plex Sans Arabic / Lama Sans","logo_placement":"...","tone":"..."},"global_dos":["..."],"global_donts":["..."]}`;
-    const briefPlatforms=bPlaces.length?bPlaces.map(r=>r==="1:1"?"Meta":r==="4:5"?"Instagram":r==="9:16"?"Snapchat":r==="16:9"?"YouTube":r):["Meta","Instagram","Snapchat"];
-    const usr=`Product:${bProd} Desc:${lang==="en"?px.desc_en:px.desc_ar} Platforms:${briefPlatforms.join(",")} Goal:Awareness`;
-    setSpecLd(true);setSpecErr("");setSpecRes(null);
-    try{setSpecRes(await callAI(sys,usr,3500));}catch(e){setSpecErr(e.message);}finally{setSpecLd(false);}
-  },[lang,bProd,bPlaces]);
 
   const TABS=[
     ["content", T("إنشاء محتوى","Content")],
@@ -1293,7 +982,6 @@ export default function CreativeOS(){
     ["calendar",T("خطة المحتوى","Calendar")],
     ["email",   T("رسائل / بريد","Email & WA")],
     ["market",  T("مراقبة السوق","Market Watch")],
-    ["brief",   T("التصميم","Design")],
     ["library", T("مكتبة الإعلانات","Ad Library")],
     ["icp",     T("شرائح العملاء","ICP")],
   ];
@@ -1578,7 +1266,6 @@ export default function CreativeOS(){
                     )}
                   </div>
                 </div>
-                <Btn ch={T("✦ أنشئ التصميم في استوديو التصميم","✦ Open in Design Studio")} line full onClick={()=>{setBMsg(cr.ad_copy?.hook||"");setBHook(cr.ad_copy?.hook||"");setBCta(cr.ad_copy?.cta||"");setTab("brief");}} style={{marginTop:4}}/>
               </div>
             )}
           </div>
@@ -1779,239 +1466,6 @@ export default function CreativeOS(){
           </div>
         )}
 
-        {tab==="brief"&&(
-          <div className="qa">
-            <SH title={T("استوديو التصميم","Design Studio")} sub={T("حدّد عدد النسخ ثم أنشئ التصاميم مباشرةً","Choose variants count then generate designs directly")}/>
-            <ErrBox msg={bErr}/>
-            <div style={card}>
-              <div style={cHead}><span style={{fontSize:11,fontWeight:600,color:"#6a96aa"}}>{T("تفاصيل التصميم","Design Details")}</span></div>
-              <div style={cBody}>
-                <div style={row2}>
-                  <Fld label={T("المنتج / الخدمة / العرض","Product / Service / Offer")}><GroupedProductChips selected={bProd} onSelect={setBProd} lang={lang} extras={bProdExtras} onToggleExtra={v=>toggleExtra(v,setBProdExtras)}/></Fld>
-                  <Fld label={T("عنصر الثقة","Trust")}><div style={{display:"flex",flexWrap:"wrap",gap:4}}>{[["ZATCA Logo","ZATCA"],["Approved","معتمد"],["25K Companies","25K"],["SOCPA","SOCPA"]].map(([v,l])=><Seg key={v} ch={l} on={bTrust===v} onClick={()=>setBTrust(v)}/>)}</div></Fld>
-                </div>
-                <div style={row2}>
-                  <Fld label={T("الشريحة المستهدفة","Target Persona")}>
-                    <select value={bPersona} onChange={e=>setBPersona(e.target.value)}>
-                      <option value="">{T("— تلقائي —","— Auto —")}</option>
-                      <option value="P1">P1 · Ahmed — صاحب بقالة / محل صغير</option>
-                      <option value="P2">P2 · Fatima — مديرة مطعم / كوفي</option>
-                      <option value="P3">P3 · Khalid — مقاول / مشاريع</option>
-                      <option value="P4">P4 · Sarah — مؤسسة متجر إلكتروني</option>
-                      <option value="P5">P5 · Omar — طبيب / عيادة</option>
-                      <option value="P6">P6 · Ali — CFO / Finance Director</option>
-                    </select>
-                  </Fld>
-                  <Fld label={T("القطاع","Sector")}>
-                    <select value={bSector} onChange={e=>setBSector(e.target.value)}>
-                      <option value="">{T("— تلقائي —","— Auto —")}</option>
-                      <option value="retail">{T("التجزئة","Retail")}</option>
-                      <option value="f&b">{T("المطاعم والكافيهات","F&B")}</option>
-                      <option value="construction">{T("المقاولات","Construction")}</option>
-                      <option value="e-commerce">{T("التجارة الإلكترونية","E-commerce")}</option>
-                      <option value="healthcare">{T("الصحة","Healthcare")}</option>
-                      <option value="enterprise">{T("شركات كبيرة / مؤسسات","Enterprise / Finance")}</option>
-                      <option value="bookkeeping">{T("مسك الدفاتر","Bookkeeping Service")}</option>
-                    </select>
-                  </Fld>
-                </div>
-                <Fld label={T("الرسالة الرئيسية","Main Message")}><input value={bMsg} onChange={e=>setBMsg(e.target.value)} placeholder={T("مثال: فواتير إلكترونية معتمدة","e.g. certified invoices")}/></Fld>
-                <div style={row2}>
-                  <Fld label={T("الجملة الافتتاحية (اختياري)","Hook (optional)")}>
-                    <input value={bHook} onChange={e=>setBHook(e.target.value)} placeholder={T("مثال: هل تعاني من الفواتير اليدوية؟","e.g. Struggling with manual invoices?")}/>
-                    <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:5}}>
-                      {[
-                        T("هل تعاني من الفواتير اليدوية؟","Tired of manual invoices?"),
-                        T("تخيّل لو محاسبتك تشتغل وحدها","Imagine your accounting runs itself"),
-                        T("٩٠٪ من أصحاب الأعمال يخسرون بسبب الأخطاء","90% of businesses lose due to errors"),
-                        T("بدون تعقيد — كل أعمالك من مكان واحد","No complexity — run everything from one place"),
-                      ].map(s=>(
-                        <button key={s} onClick={()=>setBHook(s)} style={{padding:"3px 8px",borderRadius:20,border:"1px solid rgba(23,163,164,.3)",background:bHook===s?"rgba(23,163,164,.18)":"rgba(23,163,164,.06)",color:bHook===s?"#17a3a3":"#4a8fa0",fontSize:9.5,cursor:"pointer",fontFamily:"inherit",direction:"rtl",transition:"all .15s"}}>
-                          {s}
-                        </button>
-                      ))}
-                    </div>
-                  </Fld>
-                  <Fld label="CTA">
-                    <input value={bCta} onChange={e=>setBCta(e.target.value)} placeholder={T("مثال: ابدأ تجربتك المجانية","e.g. Start Free Trial")}/>
-                    <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:5}}>
-                      {[
-                        T("ابدأ تجربتك المجانية","Start Free Trial"),
-                        T("سجّل الآن","Register Now"),
-                        T("جرّب مجاناً","Try for Free"),
-                        T("احجز عرضاً","Book a Demo"),
-                        T("تواصل معنا","Contact Us"),
-                        T("اكتشف المزيد","Learn More"),
-                      ].map(s=>(
-                        <button key={s} onClick={()=>setBCta(s)} style={{padding:"3px 8px",borderRadius:20,border:"1px solid rgba(23,163,164,.3)",background:bCta===s?"rgba(23,163,164,.18)":"rgba(23,163,164,.06)",color:bCta===s?"#17a3a3":"#4a8fa0",fontSize:9.5,cursor:"pointer",fontFamily:"inherit",direction:"rtl",transition:"all .15s"}}>
-                          {s}
-                        </button>
-                      ))}
-                    </div>
-                  </Fld>
-                </div>
-                <Fld label={T("المقاسات","Placements")}><div style={{display:"flex",flexWrap:"wrap",gap:4}}>{["1:1","4:5","9:16","16:9"].map(v=><Seg key={v} ch={v} on={bPlaces.includes(v)} onClick={()=>setBPlaces(p=>p.includes(v)?p.filter(x=>x!==v):[...p,v])}/>)}</div></Fld>
-                <Fld label={T("الأسلوب البصري / المشهد","Visual Style / Mockup")}>
-                  <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-                    {INSPOS.map(s=><Seg key={s.v} ch={lang==="ar"?s.ar:s.v} on={bStyle===s.v} onClick={()=>setBStyle(s.v)}/>)}
-                  </div>
-                </Fld>
-                <Fld label={T("نموذج توليد الصورة","Image Generation Model")}>
-                  <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-                    {[
-                      ["nano_banana_2", "Nano Banana 2 ★"],
-                      ["auto",          T("تلقائي","Auto")],
-                      ["gpt-image",     "GPT Image 1"],
-                      ["nanobanana",    "Nano Banana (Flash 2.0)"],
-                      ["nanobanana-25", "Nano Banana (Flash 2.5)"],
-                      ["imagen3",       "Imagen 3"],
-                      ["imagen4",       "Imagen 4"],
-                      ["veo2",          "Veo 2 🎬"],
-                      ["veo3",          "Veo 3 🎬"],
-                    ].map(([v,l])=>(
-                      <Seg key={v} ch={l} on={imageProvider===v} onClick={()=>setImageProvider(v)}/>
-                    ))}
-                  </div>
-                  {(imageProvider==="veo2"||imageProvider==="veo3")&&(
-                    <div style={{fontSize:10,color:"#f59e0b",marginTop:4}}>⚠ {T("Veo يولد فيديو — بدون تركيب نص عربي","Veo generates video — no Arabic text overlay")}</div>
-                  )}
-                </Fld>
-                <Fld label={T("عدد النسخ","Variants")}><div style={{display:"flex",flexWrap:"wrap",gap:4}}>{[1,2,3,4,5].map(n=><Seg key={n} ch={n} on={numVariants===n} onClick={()=>setNumVariants(n)}/>)}</div></Fld>
-                <Btn ch={T(`✦ أنشئ ${numVariants} تصميم الآن`,`✦ Generate ${numVariants} Design${numVariants>1?"s":""} Now`)} onClick={genDirectDesigns} dis={bLd} full/>
-                <button onClick={genBrief} disabled={bLd} style={{marginTop:4,width:"100%",padding:"5px",borderRadius:6,border:"1px solid rgba(106,150,170,.3)",background:"transparent",color:"#6a96aa",fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>{T("توليد بريف فقط (بدون SVG)","Generate Brief Only (no SVG)")}</button>
-              </div>
-            </div>
-            {bLd&&<Loader msg={T("ينشئ...","Creating...")}/>}
-            {bRes&&!bLd&&(
-              <div className="qa">
-                {/* ── Canva connect bar ── */}
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,padding:"8px 12px",borderRadius:8,border:"1px solid rgba(1,53,90,.45)",background:"rgba(7,22,48,.5)",flexWrap:"wrap"}}>
-                  <span style={{fontSize:10.5,fontWeight:600,color:"#17a3a3",flex:"1 1 200px"}}>✦ {T("نموذج توليد الصورة","Image generation model")}</span>
-                  <div style={{display:"flex",background:"#0a1f3d",border:"1px solid rgba(1,53,90,.45)",borderRadius:5,overflow:"hidden",height:26}}>
-                    {[["nano_banana_2","NB2 ★"],["auto","Auto"],["gpt-image","GPT Image"],["nanobanana","NB Flash 2"],["nanobanana-25","NB Flash 2.5"],["imagen3","Imagen 3"],["imagen4","Imagen 4"],["veo2","Veo 2🎬"],["veo3","Veo 3🎬"]].map(([v,l])=>(
-                      <button key={v} onClick={()=>setImageProvider(v)} style={{padding:"0 10px",height:"100%",background:imageProvider===v?"rgba(23,163,164,.15)":"none",border:"none",color:imageProvider===v?"#17a3a3":"#6a96aa",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{l}</button>
-                    ))}
-                  </div>
-                </div>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8,marginBottom:12}}>
-                  <p style={{fontSize:12,fontWeight:600,color:"#17a3a3",margin:0}}>{bRes.brief_title}</p>
-                  <button onClick={genAllDesigns} style={{padding:"5px 14px",borderRadius:6,border:"1px solid rgba(23,163,164,.4)",background:"rgba(23,163,164,.08)",color:"#17a3a3",fontSize:10.5,cursor:"pointer",fontFamily:"inherit",fontWeight:600}}>
-                    ✦ {T(`أنشئ تصاميم الكل (${numVariants})`,`Generate All Visuals (${numVariants})`)}
-                  </button>
-                </div>
-                <div style={{display:"grid",gridTemplateColumns:numVariants===1?"1fr":numVariants===2?"repeat(2,1fr)":"repeat(auto-fill,minmax(360px,1fr))",gap:14,marginBottom:14}}>
-                  {Array.from({length:numVariants},(_,i)=>i+1).map(num=>{
-                    const data=bRes[`variant${num}`];
-                    const png=designPngs[num];
-                    const provider=designProviders[num];
-                    const ld=designLds[num];
-                    const err=designErrs[num];
-                    return(
-                      <div key={num} style={{...card,marginBottom:0,border:appV===num?"1.5px solid rgba(93,200,122,.5)":"1px solid rgba(1,53,90,.45)"}}>
-                        <div style={{...cHead,background:appV===num?"rgba(93,200,122,.06)":"rgba(23,163,164,.03)"}}>
-                          <span style={{fontSize:11,fontWeight:600,color:appV===num?"#5dc87a":"#17a3a3"}}>{T(`نسخة ${num}`,`Variant ${num}`)}</span>
-                          <div style={{display:"flex",gap:5,alignItems:"center"}}>
-                            {provider&&<Tag ch={provider==="nano_banana_2"?"NB2 ★":provider==="nanobanana"?"Nano Banana":provider==="gpt-image"?"GPT Image":provider} t style={{fontSize:8.5}}/>}
-                            {appV===num&&<Tag ch="✓" green style={{fontSize:9.5}}/>}
-                          </div>
-                        </div>
-                        <div style={{padding:12}}>
-                          {png?(
-                            <div style={{marginBottom:10}}>
-                              <div style={{borderRadius:8,overflow:"hidden",border:"1px solid rgba(23,163,164,.25)",marginBottom:8,background:"#021544",width:"100%"}}>
-                                <img
-                                  src={png}
-                                  alt={`Variant ${num} preview`}
-                                  style={{width:"100%",height:"auto",display:"block"}}
-                                />
-                              </div>
-                              <div style={{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap"}}>
-                                <button onClick={()=>downloadRaster(png,num,"png")} style={{flex:1,padding:"6px 0",borderRadius:6,border:"1px solid rgba(23,163,164,.4)",background:"rgba(23,163,164,.1)",color:"#17a3a3",fontSize:10.5,cursor:"pointer",fontFamily:"inherit",fontWeight:600}}>
-                                  {T("تحميل PNG","Download PNG")}
-                                </button>
-                                <button onClick={()=>downloadRaster(png,num,"jpg")} style={{flex:1,padding:"6px 0",borderRadius:6,border:"1px solid rgba(23,163,164,.4)",background:"rgba(23,163,164,.1)",color:"#17a3a3",fontSize:10.5,cursor:"pointer",fontFamily:"inherit",fontWeight:600}}>
-                                  {T("تحميل JPG","Download JPG")}
-                                </button>
-                                <button onClick={async()=>{const blob=dataUrlToBlob(png);const file=new File([blob],`qoyod-design-v${num}.png`,{type:"image/png"});const fd=new FormData();fd.append("file",file);fd.append("name",file.name);try{setDriveLd(p=>({...p,[`png-${num}`]:true}));const r=await fetch("/api/drive/upload",{method:"POST",body:fd});const d=await r.json();if(!r.ok||d.error)throw new Error(d.error||"Drive upload failed");setDriveLinks(p=>({...p,[`png-${num}`]:d.link}));}catch(e){setDriveErrs(p=>({...p,[`png-${num}`]:e.message}));}finally{setDriveLd(p=>({...p,[`png-${num}`]:false}));}}} disabled={driveLd[`png-${num}`]} style={{padding:"6px 10px",borderRadius:6,border:"1px solid rgba(66,133,244,.4)",background:"rgba(66,133,244,.1)",color:driveLinks[`png-${num}`]?"#5dc87a":"#4285f4",fontSize:10,cursor:"pointer",fontFamily:"inherit",fontWeight:600,opacity:driveLd[`png-${num}`]?.6:1}} title="Save to Google Drive">
-                                  {driveLd[`png-${num}`]?"…":driveLinks[`png-${num}`]?"Drive ✓":"Drive"}
-                                </button>
-                                <button onClick={()=>genDesign(num)} style={{padding:"6px 10px",borderRadius:6,border:"1px solid rgba(255,255,255,.1)",background:"none",color:"#6a96aa",fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>
-                                  {T("أعد الإنشاء","Retry")}
-                                </button>
-                              </div>
-                              {driveLinks[`png-${num}`]&&<p style={{fontSize:9,marginBottom:4,textAlign:"center"}}><a href={driveLinks[`png-${num}`]} target="_blank" rel="noreferrer" style={{color:"#4285f4",textDecoration:"underline"}}>↗ {T("افتح في Drive","Open in Drive")}</a></p>}
-                              {driveErrs[`png-${num}`]&&<p style={{fontSize:9,color:"#f07070",marginBottom:4,textAlign:"center"}}>{driveErrs[`png-${num}`]}</p>}
-                              {/* ── Open in Canva (deep-link, no OAuth) ── */}
-                              <button onClick={()=>openInCanva(png,num)} disabled={canvaLd} style={{width:"100%",padding:"7px 0",borderRadius:6,border:"1px solid rgba(125,42,232,.45)",background:"rgba(125,42,232,.12)",color:"#b87fff",fontSize:10.5,cursor:"pointer",fontFamily:"inherit",fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-                                <svg width="11" height="11" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="16" fill="#7D2AE8"/><path d="M8 21.6C9.92 24.12 12.72 25.6 16 25.6c5.3 0 9.6-4.3 9.6-9.6S21.3 6.4 16 6.4c-3.28 0-6.08 1.48-8 3.92V6.4H4V22.4l4-.8V21.6z" fill="#fff"/></svg>
-                                {T("افتح في Canva","Open in Canva")}
-                              </button>
-                              {canvaMsg[num]?.info&&<p style={{fontSize:9,color:"#6a96aa",marginTop:4,textAlign:"center"}}>{canvaMsg[num].info}</p>}
-                              {canvaMsg[num]?.ok&&<p style={{fontSize:9,color:"#5dc87a",marginTop:4,textAlign:"center"}}>{canvaMsg[num].ok}</p>}
-                              {canvaMsg[num]?.err&&<p style={{fontSize:9,color:"#f07070",marginTop:4,textAlign:"center"}}>{canvaMsg[num].err}</p>}
-                              {designPrompts[num]&&<details style={{marginTop:8,paddingTop:6,borderTop:"1px solid rgba(1,53,90,.4)"}}><summary style={{fontSize:9,color:"#6a96aa",cursor:"pointer"}}>{T("عرض موجه الصورة","Show image prompt")}</summary><p style={{fontSize:9,color:"#6a96aa",marginTop:5,lineHeight:1.5,fontStyle:"italic"}}>{designPrompts[num]}</p></details>}
-                            </div>
-                          ):ld?(
-                            <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8,padding:"20px 0",marginBottom:10}}>
-                              <div style={{width:28,height:28,border:"2px solid rgba(23,163,164,.2)",borderTopColor:"#17a3a3",borderRadius:"50%",animation:"spin 0.9s linear infinite"}}/>
-                              <span style={{fontSize:10,color:"#6a96aa"}}>{T("يولّد التصميم...","Generating visual...")}</span>
-                            </div>
-                          ):(
-                            <div style={{marginBottom:10}}>
-                              <div style={{display:"flex",justifyContent:"center",padding:10,background:"rgba(2,12,30,.6)",borderRadius:7,marginBottom:8}}><Mockup hl={bMsg.slice(0,32)} hk={bHook.slice(0,38)} ct={bCta||T("ابدأ الآن","Start Now")} ratio="1:1" prod={bProd} variant={num<=2?num:1}/></div>
-                              {err&&<p style={{fontSize:10,color:"#f07070",marginBottom:6,textAlign:"center"}}>{err}</p>}
-                              <button onClick={()=>genDesign(num)} style={{width:"100%",padding:"8px 0",borderRadius:7,border:"1.5px solid rgba(23,163,164,.5)",background:"rgba(23,163,164,.08)",color:"#17a3a3",fontSize:11,cursor:"pointer",fontFamily:"inherit",fontWeight:600,letterSpacing:.3}}>
-                                ✦ {T("أنشئ التصميم","Generate Visual")}
-                              </button>
-                            </div>
-                          )}
-                          <p style={{fontSize:10,fontWeight:600,color:"#ddeef4",marginBottom:4}}>{data?.concept}</p>
-                          <p style={{fontSize:10.5,color:"#6a96aa",lineHeight:1.6,marginBottom:8}}>{data?.art_direction}</p>
-                        </div>
-                        <div style={{padding:"10px 12px",borderTop:"1px solid rgba(1,53,90,.45)"}}>
-                          {appV===num?<div style={{fontSize:11,color:"#5dc87a",textAlign:"center"}}>✓ {T("معتمدة","Approved")}</div>:<Btn ch={T(`وافق`,`Approve`)} gold={num===1} full onClick={()=>setAppV(num)}/>}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div style={{marginTop:14,padding:"12px 0 0",borderTop:"1px solid rgba(1,53,90,.35)"}}>
-                  <ErrBox msg={specErr}/>
-                  {!specRes&&<Btn ch={specLd?T("يولّد المواصفات...","Generating specs..."):T("أنشئ مواصفات الإعلان لهذا البريف","Generate Ad Specs for This Brief")} line onClick={genSpecFromBrief} dis={specLd} full/>}
-                  {specLd&&<Loader msg={T("يجمع المواصفات التقنية...","Collecting technical specs...")}/>}
-                  {specRes&&!specLd&&(
-                    <div style={{marginTop:8}}>
-                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-                        <span style={{fontSize:11.5,fontWeight:600,color:"#17a3a3"}}>{T("مواصفات الإعلان","Ad Specs")}</span>
-                        <Btn ch={T("مسح","Clear")} xs onClick={()=>setSpecRes(null)}/>
-                      </div>
-                      {(specRes.platforms||[]).map((pl,pi)=>(
-                        <div key={pi} style={{marginBottom:12}}>
-                          <p style={{fontSize:11,fontWeight:700,color:"#f5a623",marginBottom:6,paddingBottom:4,borderBottom:"1px solid rgba(1,53,90,.35)"}}>{pl.platform}</p>
-                          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:7}}>
-                            {(pl.formats||[]).map((fm,fi)=>(
-                              <div key={fi} style={{padding:"9px 11px",borderRadius:7,border:"1px solid rgba(1,53,90,.45)",background:"rgba(7,22,48,.5)"}}>
-                                <p style={{fontSize:10.5,fontWeight:700,color:"#17a3a3",marginBottom:5}}>{fm.format} · {fm.aspect_ratio}</p>
-                                <div style={{display:"flex",flexDirection:"column",gap:2}}>
-                                  {[["Dimensions",fm.dimensions],["File Size",fm.max_file_size],["Headline",fm.headline_chars],["Body",fm.body_chars],["Safe Zone",fm.safe_zone]].filter(([,v])=>v).map(([l,v])=>(
-                                    <div key={l} style={{display:"flex",justifyContent:"space-between",fontSize:10}}>
-                                      <span style={{color:"#2e5468"}}>{l}</span>
-                                      <span style={{color:"#ddeef4",fontWeight:500}}>{v}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
 
         {/* ══════════════════════════════════════════════════
             EMAIL / WA SEQUENCES
@@ -2032,7 +1486,6 @@ export default function CreativeOS(){
                       <p style={{fontSize:13,fontWeight:700,direction:"rtl",textAlign:"right",lineHeight:1.5,marginBottom:6}}>{ad.headline}</p>
                       {ad.sub_top&&<p style={{fontSize:10.5,color:"#5dc87a",direction:"rtl",textAlign:"right",marginBottom:2}}>✓ {ad.sub_top}</p>}
                       {ad.sub_bot&&<p style={{fontSize:10.5,color:"#f07070",direction:"rtl",textAlign:"right",marginBottom:6}}>✗ {ad.sub_bot}</p>}
-                      <Btn ch={T("استخدم كمرجع","Use as Reference")} line full onClick={()=>{setBMsg(ad.headline);setBHook(ad.sub_top||"");setBCta(ad.cta||"");setTab("brief");}}/>
                     </div>
                   </div>
                 );
@@ -2061,9 +1514,7 @@ export default function CreativeOS(){
                       <p style={{fontSize:11.5,direction:"rtl",textAlign:"right",lineHeight:1.7,marginBottom:8}}>{p.pain_ar}</p>
                       <div style={{marginBottom:10,padding:"8px 10px",background:"rgba(245,166,35,.05)",borderRadius:6,borderRight:"2px solid #f5a623"}}><p style={{fontSize:12.5,fontWeight:600,color:"#f5a623",direction:"rtl"}}>{p.hook_ar}</p></div>
                       <div style={{display:"flex",gap:5}}>
-                        <button onClick={()=>{setExtraNote(`الجمهور: ${p.title} — ${p.pain_ar}`);setFunnel(p.funnel);setTab("content");}} style={{flex:1,padding:"7px 4px",borderRadius:6,border:"1px solid rgba(23,163,164,.35)",background:"rgba(23,163,164,.08)",color:"#17a3a3",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{T("نسخة إعلان","Ad Copy")}</button>
-                        <button onClick={()=>{setBMsg(p.hook_ar||"");setBHook(p.hook_ar||"");setBCta(p.cta_ar||"ابدأ الآن");setTab("brief");}} style={{flex:1,padding:"7px 4px",borderRadius:6,border:"1px solid rgba(245,166,35,.35)",background:"rgba(245,166,35,.08)",color:"#f5a623",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{T("استوديو تصميم","Design Studio")}</button>
-                        <button onClick={()=>{setExtraNote(`الجمهور: ${p.title} — ${p.pain_ar}`);setFunnel(p.funnel);setBMsg(p.hook_ar||"");setBHook(p.hook_ar||"");setBCta(p.cta_ar||"ابدأ الآن");setTab("content");}} style={{flex:1,padding:"7px 4px",borderRadius:6,border:"1px solid rgba(93,200,122,.35)",background:"rgba(93,200,122,.08)",color:"#5dc87a",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{T("الاثنين معاً","Both")}</button>
+                        <button onClick={()=>{setExtraNote(`الجمهور: ${p.title} — ${p.pain_ar}`);setFunnel(p.funnel);setTab("content");}} style={{flex:1,padding:"7px 4px",borderRadius:6,border:"1px solid rgba(23,163,164,.35)",background:"rgba(23,163,164,.08)",color:"#17a3a3",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{T("استخدم في إنشاء المحتوى","Use in Content")}</button>
                       </div>
                     </div>
                   </div>
