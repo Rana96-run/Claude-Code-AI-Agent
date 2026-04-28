@@ -1,7 +1,22 @@
 import { Router } from "express";
 import { diffSnapshots, buildAIPrompt, formatSlackBlocks, type CompetitorSnapshot } from "../lib/competitor-weekly-report.js";
+import { runMonitorOnce } from "../lib/competitor-monitor.js";
 
 const router = Router();
+
+/* ─── POST /api/competitor-ads/run-monitor-now ───────────────────────────
+   Manually trigger the weekly monitoring pipeline (scrape → diff → AI → Slack).
+   Use this to test before Sunday, or to re-run after editing the
+   tracked competitor list. */
+router.post("/competitor-ads/run-monitor-now", async (req, res) => {
+  const { competitors, postToSlack = false } = req.body ?? {};
+  try {
+    const result = await runMonitorOnce({ competitors, postToSlack: Boolean(postToSlack) });
+    res.status(200).json(result);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
 
 const APIFY_TIMEOUT_MS = 90_000;
 
