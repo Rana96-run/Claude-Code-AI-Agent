@@ -634,7 +634,10 @@ export default function CreativeOS(){
   const[prod,setProd]=useState("Qoyod Main");
   const[prodExtras,setProdExtras]=useState([]);
   const[funnel,setFunnel]=useState("TOF");
-  const[chan,setChan]=useState("Instagram");
+  const[chans,setChans]=useState(["Instagram"]);
+  const toggleChan=useCallback(v=>setChans(prev=>prev.includes(v)?(prev.length>1?prev.filter(c=>c!==v):prev):([...prev,v])),[]);
+  const chan=chans[0]; // backward-compat alias for single-channel paths
+  const[crMulti,setCrMulti]=useState({});
   const[fmt,setFmt]=useState("Static");
   const[sector,setSector]=useState("General");
   const[hookType,setHookType]=useState("Fear");
@@ -687,14 +690,14 @@ export default function CreativeOS(){
       const now=new Date();
       const week=Math.ceil((((now-new Date(now.getFullYear(),0,1))/86400000)+1)/7);
       const id=`Q-${now.getFullYear()}-W${String(week).padStart(2,"0")}-${String(Math.floor(Math.random()*999)).padStart(3,"0")}`;
-      const r=await fetchWithTimeout("/api/hypothesis/log",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,hypothesis:hypText.trim(),expected_lift:hypExpectedLift.trim()||undefined,channel:chan,sector,funnel_stage:funnel,verdict:"PENDING"})},15000);
+      const r=await fetchWithTimeout("/api/hypothesis/log",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,hypothesis:hypText.trim(),expected_lift:hypExpectedLift.trim()||undefined,channel:chans[0],sector,funnel_stage:funnel,verdict:"PENDING"})},15000);
       const j=await r.json();
       if(!r.ok||j.error)throw new Error(j.error||`Error ${r.status}`);
       setHypMsg(T(`✓ تم تسجيل الفرضية: ${id}`,`✓ Logged: ${id}`));
       setHypText("");setHypExpectedLift("");
       setTimeout(()=>{setHypModalOpen(false);setHypMsg("");},1800);
     }catch(e){setHypMsg(`⚠ ${e.message}`);}finally{setHypLd(false);}
-  },[hypText,hypExpectedLift,chan,sector,funnel,lang]);
+  },[hypText,hypExpectedLift,chans,sector,funnel,lang]);
 
 
 
@@ -787,6 +790,22 @@ export default function CreativeOS(){
     });
   },[]);
 
+  /* Build channel-specific prompt spec */
+  const chanSpec=(ch)=>{
+    if(ch==="Google Ads"){
+      const spec=lang==="ar"
+        ?"Google Search RSA (Arabic). Saudi dialect. NO emojis. STRICT: each headline ≤30 Arabic chars (count carefully). Each description ≤90 Arabic chars. Write exactly 10 headlines and 4 descriptions."
+        :"Google Search RSA (English). NO emojis. STRICT: each headline ≤30 chars (count carefully). Each description ≤90 chars. Write exactly 10 headlines and 4 descriptions.";
+      return{spec,fmt:`{"ad_copy":{"hook":"...","body":"...","cta":"..."},"google_headlines":["h1","h2","h3","h4","h5","h6","h7","h8","h9","h10"],"google_descriptions":["d1","d2","d3","d4"]}`};
+    }
+    if(ch==="LinkedIn")return{spec:`LinkedIn professional post. NO emojis. No hashtags. 150-250 words. B2B tone. ${lang==="ar"?"Saudi Arabic dialect.":"English."}`,fmt:`{"ad_copy":{"hook":"...","body":"...","cta":"..."},"caption":"LinkedIn post 150-250 words, no emojis"}`};
+    if(ch==="Twitter/X")return{spec:"Twitter/X post. NO emojis. Max 280 chars. Punchy, direct. 2-3 hashtags.",fmt:`{"ad_copy":{"hook":"...","body":"...","cta":"..."},"caption":"tweet ≤280 chars, no emojis"}`};
+    if(ch==="TikTok")return{spec:"TikTok video caption + script hook. NO emojis. Conversational, trending. 3-5 hashtags.",fmt:`{"ad_copy":{"hook":"...","body":"...","cta":"..."},"caption":"TikTok caption, no emojis"}`};
+    if(ch==="Snapchat")return{spec:"Snapchat ad. NO emojis. Ultra-short, punchy. Max 100 chars visible.",fmt:`{"ad_copy":{"hook":"...","body":"...","cta":"..."},"caption":"Snapchat caption ≤100 chars, no emojis"}`};
+    if(ch==="Facebook")return{spec:"Facebook post. NO emojis. Conversational, 80-160 words. 3-4 hashtags.",fmt:`{"ad_copy":{"hook":"...","body":"...","cta":"..."},"caption":"Facebook post 80-160 words, no emojis"}`};
+    return{spec:`Instagram caption. NO emojis. Engaging, 80-150 words. 4-5 ${lang==="ar"?"Arabic + English":"relevant"} hashtags.`,fmt:`{"ad_copy":{"hook":"...","body":"...","cta":"..."},"caption":"Instagram caption 80-150 words, no emojis"}`};
+  };
+
   const genContent=useCallback(async()=>{
     const ff=FEATURES.find(f=>f.v===featFocus);
     const fctx=ff?(lang==="en"?ff.desc_en:ff.desc_ar):"";
@@ -794,41 +813,19 @@ export default function CreativeOS(){
     const icpCtx=icpP?`Target ICP: ${icpP.title} — Pain: ${icpP.pain_ar} — Hook angle: ${icpP.hook_ar}`:"";
     const{names:prodNames,desc:prodDesc}=buildProdCtx(prod,prodExtras,lang);
     const ol=lang==="en"?"Write ALL copy in English. Professional, concise.":"Write ALL copy in Saudi dialect ONLY (مو/وش/ليش/يكلفك). NEVER Egyptian (مش/ايه/بتاعك).";
-    // Build channel-specific output spec
-    let chanSpec="";
-    let outFmt="";
-    if(chan==="Google Ads"){
-      if(lang==="ar"){
-        chanSpec="Google Search RSA (Arabic). All headlines and descriptions in Saudi Arabic dialect. STRICT: each headline ≤30 Arabic chars (count carefully). Each description ≤90 Arabic chars. Write exactly 15 headlines and 4 descriptions.";
-      }else{
-        chanSpec="Google Search RSA (English). All headlines and descriptions in English. STRICT: each headline ≤30 chars (count carefully). Each description ≤90 chars. Write exactly 15 headlines and 4 descriptions.";
-      }
-      outFmt=`{"ad_copy":{"hook":"...","body":"...","cta":"..."},"google_headlines":["h1","h2","h3","h4","h5","h6","h7","h8","h9","h10","h11","h12","h13","h14","h15"],"google_descriptions":["d1","d2","d3","d4"]}`;
-    }else if(chan==="LinkedIn"){
-      chanSpec=`LinkedIn professional post. No hashtags. 150-250 words. B2B tone. Write in ${lang==="ar"?"Saudi Arabic dialect":"English"}.`;
-      outFmt=`{"ad_copy":{"hook":"...","body":"...","cta":"..."},"caption":"LinkedIn post 150-250 words, professional tone, no hashtags"}`;
-    }else if(chan==="Twitter/X"){
-      chanSpec="Twitter/X post. Max 280 chars. Punchy, direct. 2-3 relevant hashtags.";
-      outFmt=`{"ad_copy":{"hook":"...","body":"...","cta":"..."},"caption":"tweet ≤280 chars with 2-3 hashtags"}`;
-    }else if(chan==="TikTok"){
-      chanSpec="TikTok video caption + script hook. Conversational, trending format. 3-5 hashtags.";
-      outFmt=`{"ad_copy":{"hook":"...","body":"...","cta":"..."},"caption":"TikTok caption with hook + 3-5 hashtags"}`;
-    }else if(chan==="Snapchat"){
-      chanSpec="Snapchat ad caption. Ultra-short, punchy, direct. Max 100 chars visible. Young professional audience.";
-      outFmt=`{"ad_copy":{"hook":"...","body":"...","cta":"..."},"caption":"Snapchat caption ≤100 chars"}`;
-    }else if(chan==="Facebook"){
-      chanSpec="Facebook post. Conversational, 80-160 words. 3-4 relevant hashtags. Suitable for Meta feed.";
-      outFmt=`{"ad_copy":{"hook":"...","body":"...","cta":"..."},"caption":"Facebook post 80-160 words with 3-4 hashtags"}`;
-    }else{
-      // Instagram default
-      chanSpec=`Instagram post caption. Engaging, 80-150 words. 4-5 targeted ${lang==="ar"?"Arabic + English":"relevant"} hashtags. Ready to post.`;
-      outFmt=`{"ad_copy":{"hook":"...","body":"...","cta":"..."},"caption":"Instagram caption 80-150 words with 4-5 hashtags"}`;
+    setCl(true);setCe("");setCr(null);setCrMulti({});
+    const results={};
+    for(const ch of chans){
+      const{spec,fmt}=chanSpec(ch);
+      const sys=`Senior performance copywriter for Qoyod — Saudi cloud accounting SaaS, ZATCA-accredited.\n${ol}\n${QOYOD_VOICE}\nProduct: ${prodDesc}\n${fctx?"Feature: "+fctx:""}\n${icpCtx?"ICP: "+icpCtx:""}\nChannel: ${ch}. ${spec}\nRules: ONE clear message per output. ZERO emojis anywhere in the output. Generate ONLY for ${ch}.\nReturn ONLY valid JSON (no markdown):\n${fmt}`;
+      const usr=`Products:${prodNames} Channel:${ch} Audience:${funnel} Sector:${sector} Feature:${ff?.ar||"general"} ICP:${icpP?.title||"general"} Note:${extraNote||"none"}`;
+      try{results[ch]=await callAI(sys,usr,ch==="Google Ads"?2500:2000);}
+      catch(e){results[ch]={error:e.message};}
     }
-    const sys=`Senior performance copywriter for Qoyod — Saudi cloud accounting SaaS, ZATCA-accredited.\n${ol}\n${QOYOD_VOICE}\nProduct: ${prodDesc}\n${fctx?"Feature: "+fctx:""}\n${icpCtx?"ICP: "+icpCtx:""}\nChannel: ${chan}. ${chanSpec}\nRule: ONE clear message per output. No emojis. Generate ONLY for ${chan} — do not include other channels.\nReturn ONLY valid JSON (no markdown):\n${outFmt}`;
-    const usr=`Products:${prodNames} Channel:${chan} Audience:${funnel} Sector:${sector} Feature:${ff?.ar||"general"} ICP:${icpP?.title||"general"} Note:${extraNote||"none"}`;
-    setCl(true);setCe("");setCr(null);
-    try{setCr(await callAI(sys,usr,chan==="Google Ads"?2500:2500));}catch(e){setCe(e.message);}finally{setCl(false);}
-  },[lang,prod,prodExtras,chan,funnel,sector,featFocus,contentICP,extraNote,buildProdCtx]);
+    setCrMulti(results);
+    if(chans.length===1)setCr(results[chans[0]]);
+    setCl(false);
+  },[lang,prod,prodExtras,chans,funnel,sector,featFocus,contentICP,extraNote,buildProdCtx]);
 
   const genContentAB=useCallback(async()=>{
     if(!abConceptCt.trim()){setCe(T("اكتب الفكرة أو الرسالة لتوليد النسخ","Enter a concept or message to generate variants"));return;}
@@ -840,12 +837,12 @@ export default function CreativeOS(){
     const labels=["A","B","C","D","E"];
     const variantSchema=Array.from({length:n},(_,i)=>`{"label":"${labels[i]} — [angle name]","ad_copy":{"hook":"...","body":"...","cta":"..."},"google_headlines":["≤30 chars","≤30 chars","≤30 chars"],"captions":{"instagram":"...with hashtags","linkedin":"..."},"predicted_ctr":"high/med/low","why":"..."}`).join(",");
     const sys=`Senior CRO copywriter for Qoyod (Saudi cloud accounting SaaS). ${ol}\n${QOYOD_VOICE}\n${icpCtx?"ICP: "+icpCtx:""}\nProduce EXACTLY ${n} genuinely different variants — each with a different angle, different hook, different trigger. Do not repeat or paraphrase across variants.\nReturn ONLY valid JSON:\n{"variants":[${variantSchema}],"recommendation":"..."}`;
-    const usr=`Products:${prodNames} Desc:${prodDesc} Channel:${chan} Audience:${funnel} Sector:${sector} ICP:${icpP?.title||"general"} Variants:${n} Concept:"${abConceptCt}"`;
+    const usr=`Products:${prodNames} Desc:${prodDesc} Channel:${chans[0]} Audience:${funnel} Sector:${sector} ICP:${icpP?.title||"general"} Variants:${n} Concept:"${abConceptCt}"`;
     // ~1500 tokens per variant (Arabic is verbose), capped at 8000
     const budget=Math.min(1500*n,8000);
     setCl(true);setCe("");setCr(null);setAbRes(null);
     try{setAbRes(await callAI(sys,usr,budget));}catch(e){setCe(e.message);}finally{setCl(false);}
-  },[lang,prod,prodExtras,chan,funnel,sector,contentICP,abConceptCt,variantCount,buildProdCtx]);
+  },[lang,prod,prodExtras,chans,funnel,sector,contentICP,abConceptCt,variantCount,buildProdCtx]);
 
   const genCampaign=useCallback(async()=>{
     if(!campTheme){setCampErr(T("اكتب موضوع الحملة","Enter a campaign theme"));return;}
@@ -1058,10 +1055,32 @@ export default function CreativeOS(){
                     <Seg ch="BOF" on={funnel==="BOF"} onClick={()=>setFunnel("BOF")}/>
                   </div>
                 </Fld>
-                <Fld label={T("القناة","Channel")}>
+                <Fld label={T("القناة — اختر واحدة أو أكثر","Channel — pick one or more")}>
                   <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-                    {["Instagram","Facebook","TikTok","Snapchat","LinkedIn","Twitter/X","Google Ads"].map(v=><Seg key={v} ch={v} on={chan===v} onClick={()=>setChan(v)}/>)}
+                    {["Instagram","Facebook","TikTok","Snapchat","LinkedIn","Twitter/X","Google Ads"].map(v=><Seg key={v} ch={v} on={chans.includes(v)} onClick={()=>toggleChan(v)}/>)}
                   </div>
+                  {chans.length>1&&<p style={{fontSize:9.5,color:"#f5a623",marginTop:4,direction:dir}}>{T(`سيتم توليد محتوى مستقل لكل قناة (${chans.length})`,`Will generate separate content for each channel (${chans.length})`)} </p>}
+                </Fld>
+                {/* Extra Note — always visible, with quick-pick presets */}
+                <Fld label={T("سياق إضافي","Context / Extra Note")}>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
+                    {[
+                      {ar:"ضغط ZATCA",en:"ZATCA deadline"},
+                      {ar:"مطاعم وكافيهات",en:"F&B"},
+                      {ar:"محاسبين ومكاتب",en:"Accountants"},
+                      {ar:"تجزئة",en:"Retail"},
+                      {ar:"مقاولات",en:"Construction"},
+                      {ar:"رمضان",en:"Ramadan"},
+                      {ar:"نهاية العام",en:"Year-end"},
+                    ].map(p=>(
+                      <button key={p.ar} onClick={()=>setExtraNote(lang==="ar"?p.ar:p.en)}
+                        style={{padding:"3px 8px",borderRadius:12,border:`1px solid ${extraNote===(lang==="ar"?p.ar:p.en)?"rgba(23,163,164,.6)":"rgba(1,53,90,.45)"}`,background:extraNote===(lang==="ar"?p.ar:p.en)?"rgba(23,163,164,.15)":"rgba(7,22,48,.5)",color:extraNote===(lang==="ar"?p.ar:p.en)?"#17a3a3":"#6a96aa",fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>
+                        {lang==="ar"?p.ar:p.en}
+                      </button>
+                    ))}
+                    {extraNote&&<button onClick={()=>setExtraNote("")} style={{padding:"3px 8px",borderRadius:12,border:"1px solid rgba(240,112,112,.3)",background:"none",color:"#f07070",fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>×</button>}
+                  </div>
+                  <input value={extraNote} onChange={e=>setExtraNote(e.target.value)} placeholder={T("أو اكتب سياق مخصص — مثال: الجمهور أصحاب مطاعم في جدة","or type custom context — e.g. audience: restaurant owners in Jeddah")}/>
                 </Fld>
                 <button onClick={()=>setAdvContent(v=>!v)} style={{display:"flex",alignItems:"center",gap:5,background:"none",border:"none",color:"#2e5468",fontSize:10.5,cursor:"pointer",padding:"4px 0",fontFamily:"inherit"}}>
                   <span style={{fontSize:10,transition:"transform .15s",display:"inline-block",transform:advContent?"rotate(90deg)":"none"}}>▶</span>
@@ -1089,7 +1108,6 @@ export default function CreativeOS(){
                       <Fld label={T("نوع الجملة الافتتاحية","Hook Type")}><select value={hookType} onChange={e=>setHookType(e.target.value)}>{HOOK_TYPES.map(h=><option key={h.v} value={h.v}>{lang==="ar"?h.ar:h.en}</option>)}</select></Fld>
                       <Fld label={T("مرجع الحملة","Campaign Ref")}><select value={campRef} onChange={e=>setCampRef(e.target.value)}><option value="">{T("— لا يوجد —","— None —")}</option><optgroup label="ZATCA"><option value="C05">C05</option><option value="C07">C07</option></optgroup><optgroup label="F&B"><option value="FL01">FL01</option><option value="FL02">FL02</option></optgroup><optgroup label="Bookkeeping"><option value="C01">C01</option><option value="BK01">BK01</option></optgroup></select></Fld>
                     </div>
-                    <Fld label={T("ملاحظة إضافية","Extra Note")}><input value={extraNote} onChange={e=>setExtraNote(e.target.value)} placeholder={T("مثال: الجمهور هو أصحاب المطاعم","e.g. audience is restaurant owners")}/></Fld>
                   </>
                 )}
                 <div style={{padding:"10px 0",borderTop:"1px solid rgba(1,53,90,.25)",marginTop:4}}>
@@ -1166,69 +1184,81 @@ export default function CreativeOS(){
               </div>
               );
             })()}
-            {cr&&!cl&&!abMode&&(
-              <div className="qa">
-                <div style={card}>
-                  <div style={cHead}>
-                    <span style={{fontSize:11.5,fontWeight:600,color:pctx.color}}>{lang==="ar"?pctx.ar:pctx.v} · {chan} · {funnel}</span>
-                    <div style={{display:"flex",gap:5,alignItems:"center"}}>
-                      <Btn ch={T("نسخ الكل","Copy All")} xs onClick={()=>{
-                        const base=`${cr.ad_copy?.hook}\n\n${cr.ad_copy?.body}\n\nCTA: ${cr.ad_copy?.cta}`;
-                        if(chan==="Google Ads")copyText(`${base}\n\nGoogle Headlines:\n${(cr.google_headlines||[]).map((h,i)=>`H${i+1}: ${h}`).join("\n")}\n\nDescriptions:\n${(cr.google_descriptions||[]).map((d,i)=>`D${i+1}: ${d}`).join("\n")}`);
-                        else copyText(`${base}\n\n${chan} Caption:\n${cr.caption||""}`);
-                      }}/>
-                      <Btn ch={T("سجّل كاختبار","Log as Test")} xs onClick={()=>{setHypText(cr.ad_copy?.hook||"");setHypModalOpen(true);}}/>
-                      <button onClick={()=>{
-                        const base=`${cr.ad_copy?.hook}\n\n${cr.ad_copy?.body}\n\nCTA: ${cr.ad_copy?.cta}`;
-                        const full=chan==="Google Ads"?`${base}\n\nGoogle Headlines:\n${(cr.google_headlines||[]).map((h,i)=>`H${i+1}: ${h}`).join("\n")}\n\nDescriptions:\n${(cr.google_descriptions||[]).map((d,i)=>`D${i+1}: ${d}`).join("\n")}`:`${base}\n\n${chan} Caption:\n${cr.caption||""}`;
-                        uploadToDrive(full,"qoyod-ad-copy.txt","text/plain","cr");
-                      }} disabled={driveLd["cr"]} style={{padding:"3px 8px",borderRadius:4,border:"1px solid rgba(66,133,244,.4)",background:"rgba(66,133,244,.1)",color:driveLinks["cr"]?"#5dc87a":"#4285f4",fontSize:9.5,cursor:"pointer",fontFamily:"inherit",fontWeight:600,opacity:driveLd["cr"]?.6:1}}>
-                        {driveLd["cr"]?"↑…":driveLinks["cr"]?<a href={driveLinks["cr"]} target="_blank" rel="noreferrer" style={{color:"#5dc87a",textDecoration:"none"}}>✓ Drive</a>:"☁ Drive"}
-                      </button>
-                    </div>
-                  </div>
-                  <div style={cBody}>
-                    {/* Ad Copy block — always shown */}
-                    <div style={{marginBottom:12}}>
-                      <p style={{fontSize:8.5,color:"#6a96aa",marginBottom:6,textTransform:"uppercase",letterSpacing:".04em"}}>{T("نسخة الإعلان","Ad Copy")}</p>
-                      <div style={{padding:"10px 12px",background:"rgba(23,163,164,.05)",borderRadius:8,direction:"rtl"}}>
-                        <p style={{fontSize:14,fontWeight:700,marginBottom:8,lineHeight:1.5}}>{cr.ad_copy?.hook}</p>
-                        <p style={{fontSize:12.5,lineHeight:1.8,color:"#bbd4e0",marginBottom:8}}>{cr.ad_copy?.body}</p>
-                        <Tag ch={cr.ad_copy?.cta} green style={{fontSize:11}}/>
+            {/* ── Content results — single or multi-channel ── */}
+            {!cl&&!abMode&&Object.keys(crMulti).length>0&&(()=>{
+              const channelList=Object.keys(crMulti);
+              return(
+                <div className="qa">
+                  {channelList.map(ch=>{
+                    const r=crMulti[ch];
+                    if(!r)return null;
+                    if(r.error)return(
+                      <div key={ch} style={{...card,marginBottom:8}}>
+                        <div style={cHead}><span style={{fontSize:11,color:"#f07070"}}>{ch}</span></div>
+                        <div style={cBody}><p style={{color:"#f07070",fontSize:11}}>{r.error}</p></div>
                       </div>
-                    </div>
-                    {/* Google Ads — only when Google Ads channel is selected */}
-                    {chan==="Google Ads"&&(
-                      <div style={{marginBottom:12}}>
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                          <p style={{fontSize:8.5,color:"#6a96aa",textTransform:"uppercase",letterSpacing:".04em"}}>Google RSA — Headlines ({cr.google_headlines?.length||0}/15)</p>
-                          <Btn ch={T("نسخ","Copy")} xs onClick={()=>copyText([...(cr.google_headlines||[]).map((h,i)=>`H${i+1}: ${h}`),...(cr.google_descriptions||[]).map((d,i)=>`D${i+1}: ${d}`)].join("\n"))}/>
+                    );
+                    return(
+                      <div key={ch} style={{...card,marginBottom:8}}>
+                        <div style={cHead}>
+                          <span style={{fontSize:11.5,fontWeight:600,color:pctx.color}}>{lang==="ar"?pctx.ar:pctx.v} · {ch} · {funnel}</span>
+                          <div style={{display:"flex",gap:5,alignItems:"center"}}>
+                            <Btn ch={T("نسخ الكل","Copy All")} xs onClick={()=>{
+                              const base=`${r.ad_copy?.hook}\n\n${r.ad_copy?.body}\n\nCTA: ${r.ad_copy?.cta}`;
+                              copyText(ch==="Google Ads"?`${base}\n\nHeadlines:\n${(r.google_headlines||[]).map((h,i)=>`H${i+1}: ${h}`).join("\n")}\n\nDescriptions:\n${(r.google_descriptions||[]).map((d,i)=>`D${i+1}: ${d}`).join("\n")}`:`${base}\n\n${ch} Caption:\n${r.caption||""}`);
+                            }}/>
+                            {channelList.length===1&&<Btn ch={T("سجّل كاختبار","Log as Test")} xs onClick={()=>{setHypText(r.ad_copy?.hook||"");setHypModalOpen(true);}}/>}
+                            <button onClick={()=>{
+                              const base=`${r.ad_copy?.hook}\n\n${r.ad_copy?.body}\n\nCTA: ${r.ad_copy?.cta}`;
+                              const full=ch==="Google Ads"?`${base}\n\nHeadlines:\n${(r.google_headlines||[]).map((h,i)=>`H${i+1}: ${h}`).join("\n")}\n\nDescriptions:\n${(r.google_descriptions||[]).map((d,i)=>`D${i+1}: ${d}`).join("\n")}`:`${base}\n\n${ch} Caption:\n${r.caption||""}`;
+                              uploadToDrive(full,`qoyod-${ch.replace("/","")}.txt`,"text/plain",`cr_${ch}`);
+                            }} disabled={driveLd[`cr_${ch}`]} style={{padding:"3px 8px",borderRadius:4,border:"1px solid rgba(66,133,244,.4)",background:"rgba(66,133,244,.1)",color:driveLinks[`cr_${ch}`]?"#5dc87a":"#4285f4",fontSize:9.5,cursor:"pointer",fontFamily:"inherit",fontWeight:600,opacity:driveLd[`cr_${ch}`]?.6:1}}>
+                              {driveLd[`cr_${ch}`]?"↑…":driveLinks[`cr_${ch}`]?<a href={driveLinks[`cr_${ch}`]} target="_blank" rel="noreferrer" style={{color:"#5dc87a",textDecoration:"none"}}>✓ Drive</a>:"☁ Drive"}
+                            </button>
+                          </div>
                         </div>
-                        <div style={{display:"flex",flexDirection:"column",gap:3,marginBottom:8}}>
-                          {(cr.google_headlines||[]).map((h,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:8.5,color:"#17a3a3",fontWeight:700,minWidth:22}}>H{i+1}</span><p style={{fontSize:11.5,color:"#ddeef4",direction:"ltr",textAlign:"left",flex:1}}>{h}</p><span style={{fontSize:8,color:h.length>30?"#f07070":"#2e5468"}}>{h.length}/30</span></div>)}
-                        </div>
-                        <p style={{fontSize:8.5,color:"#6a96aa",marginBottom:4,textTransform:"uppercase"}}>Descriptions ({cr.google_descriptions?.length||0}/4)</p>
-                        <div style={{display:"flex",flexDirection:"column",gap:3}}>
-                          {(cr.google_descriptions||[]).map((d,i)=><div key={i} style={{display:"flex",alignItems:"flex-start",gap:6}}><span style={{fontSize:8.5,color:"#6a96aa",fontWeight:700,minWidth:22,paddingTop:1}}>D{i+1}</span><p style={{fontSize:11,color:"#bbd4e0",direction:"ltr",textAlign:"left",flex:1,lineHeight:1.5}}>{d}</p><span style={{fontSize:8,color:d.length>90?"#f07070":"#2e5468"}}>{d.length}/90</span></div>)}
+                        <div style={cBody}>
+                          <div style={{marginBottom:12}}>
+                            <p style={{fontSize:8.5,color:"#6a96aa",marginBottom:6,textTransform:"uppercase",letterSpacing:".04em"}}>{T("نسخة الإعلان","Ad Copy")}</p>
+                            <div style={{padding:"10px 12px",background:"rgba(23,163,164,.05)",borderRadius:8,direction:"rtl"}}>
+                              <p style={{fontSize:14,fontWeight:700,marginBottom:8,lineHeight:1.5}}>{r.ad_copy?.hook}</p>
+                              <p style={{fontSize:12.5,lineHeight:1.8,color:"#bbd4e0",marginBottom:8}}>{r.ad_copy?.body}</p>
+                              <Tag ch={r.ad_copy?.cta} green style={{fontSize:11}}/>
+                            </div>
+                          </div>
+                          {ch==="Google Ads"&&(
+                            <div style={{marginBottom:12}}>
+                              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                                <p style={{fontSize:8.5,color:"#6a96aa",textTransform:"uppercase"}}>Google RSA — Headlines ({r.google_headlines?.length||0}/10)</p>
+                                <Btn ch={T("نسخ","Copy")} xs onClick={()=>copyText([...(r.google_headlines||[]).map((h,i)=>`H${i+1}: ${h}`),...(r.google_descriptions||[]).map((d,i)=>`D${i+1}: ${d}`)].join("\n"))}/>
+                              </div>
+                              <div style={{display:"flex",flexDirection:"column",gap:3,marginBottom:8}}>
+                                {(r.google_headlines||[]).map((h,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:8.5,color:"#17a3a3",fontWeight:700,minWidth:22}}>H{i+1}</span><p style={{fontSize:11.5,color:"#ddeef4",direction:"ltr",textAlign:"left",flex:1}}>{h}</p><span style={{fontSize:8,color:h.length>30?"#f07070":"#2e5468"}}>{h.length}/30</span></div>)}
+                              </div>
+                              <p style={{fontSize:8.5,color:"#6a96aa",marginBottom:4,textTransform:"uppercase"}}>Descriptions ({r.google_descriptions?.length||0}/4)</p>
+                              <div style={{display:"flex",flexDirection:"column",gap:3}}>
+                                {(r.google_descriptions||[]).map((d,i)=><div key={i} style={{display:"flex",alignItems:"flex-start",gap:6}}><span style={{fontSize:8.5,color:"#6a96aa",fontWeight:700,minWidth:22,paddingTop:1}}>D{i+1}</span><p style={{fontSize:11,color:"#bbd4e0",direction:"ltr",textAlign:"left",flex:1,lineHeight:1.5}}>{d}</p><span style={{fontSize:8,color:d.length>90?"#f07070":"#2e5468"}}>{d.length}/90</span></div>)}
+                              </div>
+                            </div>
+                          )}
+                          {ch!=="Google Ads"&&(r.caption||r.captions)&&(
+                            <div>
+                              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                                <p style={{fontSize:8.5,color:"#6a96aa",textTransform:"uppercase",letterSpacing:".04em"}}>{ch} {T("كابشن","Caption")}</p>
+                                <Btn ch={T("نسخ","Copy")} xs onClick={()=>copyText(r.caption||r.captions?.instagram||"")}/>
+                              </div>
+                              <div style={{padding:"10px 12px",background:"rgba(7,22,48,.7)",borderRadius:8,direction:"rtl"}}>
+                                <p style={{fontSize:11,lineHeight:1.8,color:"#ddeef4"}}>{r.caption||r.captions?.instagram}</p>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
-                    )}
-                    {/* Channel caption — for all social channels */}
-                    {chan!=="Google Ads"&&(cr.caption||cr.captions)&&(
-                      <div>
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                          <p style={{fontSize:8.5,color:"#6a96aa",textTransform:"uppercase",letterSpacing:".04em"}}>{chan} {T("كابشن","Caption")}</p>
-                          <Btn ch={T("نسخ","Copy")} xs onClick={()=>copyText(cr.caption||cr.captions?.instagram||"")}/>
-                        </div>
-                        <div style={{padding:"10px 12px",background:"rgba(7,22,48,.7)",borderRadius:8,direction:"rtl"}}>
-                          <p style={{fontSize:11,lineHeight:1.8,color:"#ddeef4"}}>{cr.caption||cr.captions?.instagram}</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                    );
+                  })}
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
         )}
 
