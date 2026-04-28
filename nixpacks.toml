@@ -3,10 +3,8 @@ cmds = [
   "npm ci",
 ]
 
-[phases.build]
-cmds = [
-  "npm --prefix client run build",
-]
+# client/dist is pre-built and committed to git — no build step needed.
+# Run `npm --prefix client run build` locally before git push to update.
 
 [start]
 cmd = "cd server && npm run start"
