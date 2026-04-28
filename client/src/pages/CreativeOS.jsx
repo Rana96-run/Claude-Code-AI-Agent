@@ -714,6 +714,7 @@ export default function CreativeOS(){
 
   /* ── Content Calendar ── */
   const[calProd,setCalProd]=useState("Qoyod Main");
+  const[calExtras,setCalExtras]=useState([]);
   const[calMonth,setCalMonth]=useState("مايو 2025");
   const[calPlatforms,setCalPlatforms]=useState(["Instagram","TikTok","Snapchat"]);
   const[calFreq,setCalFreq]=useState("3 posts/week");
@@ -831,7 +832,7 @@ export default function CreativeOS(){
     const sys=`Senior performance copywriter for Qoyod — Saudi cloud accounting SaaS, ZATCA-accredited.\n${ol}\n${QOYOD_VOICE}\nProduct: ${prodDesc}\n${fctx?"Feature: "+fctx:""}\n${icpCtx?"ICP: "+icpCtx:""}\nChannel: ${chan}. ${chanSpec}\nRule: ONE clear message per output. No emojis. Generate ONLY for ${chan} — do not include other channels.\nReturn ONLY valid JSON (no markdown):\n${outFmt}`;
     const usr=`Products:${prodNames} Channel:${chan} Audience:${funnel} Sector:${sector} Feature:${ff?.ar||"general"} ICP:${icpP?.title||"general"} Note:${extraNote||"none"}`;
     setCl(true);setCe("");setCr(null);
-    try{setCr(await callAI(sys,usr,chan==="Google Ads"?1800:1200));}catch(e){setCe(e.message);}finally{setCl(false);}
+    try{setCr(await callAI(sys,usr,chan==="Google Ads"?2500:2500));}catch(e){setCe(e.message);}finally{setCl(false);}
   },[lang,prod,prodExtras,chan,funnel,sector,featFocus,contentICP,extraNote,buildProdCtx]);
 
   const genContentAB=useCallback(async()=>{
@@ -1337,10 +1338,12 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
     const ol=lang==="en"?"All captions in English.":"All captions in Saudi Arabic dialect (مو/وش/ليش). NEVER Egyptian.";
     const refCopy=`Reference captions from real Qoyod campaigns:\n- "سهل إدارة أعمالك بنظام فواتير ذكي وأصدر فواتيرك الإلكترونية من جوالك مع قيود"\n- "ركّز على نمو مشروعك واترك تعقيد الحسابات علينا — SOCPA certified"\n- "آلاف التجار دخلوا المرحلة الثانية للفوترة الإلكترونية مع قيود، أنت جاهز؟"\n- "لاتدير مصاريفك يدويًا واستخدم قيود — كل التزاماتك الضريبية أسهل"\nUse these as tone/style benchmark.`;
     const sys=`You are a social media content strategist for Qoyod (Saudi cloud accounting SaaS, ZATCA-certified). ${ol}\n${QOYOD_VOICE}\n${refCopy}\nReturn ONLY valid JSON:\n{"month":"...","goal":"...","total_posts":${calFreq==="daily"?30:calFreq==="5 posts/week"?20:calFreq==="3 posts/week"?12:8},"weeks":[{"week":1,"posts":[{"day":"...","platform":"...","format":"Static/Reel/Story/Carousel","topic":"...","design_text":"...","caption":"...","hashtags":"...","cta":"...","funnel_stage":"TOF/MOF/BOF"}]}],"themes":["..."],"hashtag_sets":{"main":"...","secondary":"..."}}`;
-    const usr=`Product:${calProd} Desc:${lang==="en"?px.desc_en:px.desc_ar} Month:${calMonth} Platforms:${calPlatforms.join(",")} Frequency:${calFreq} Goal:${calGoal}`;
+    const extraProds=calExtras.map(v=>PRODUCTS.find(p=>p.v===v)).filter(Boolean);
+    const extraCtx=extraProds.length?` | Also highlight: ${extraProds.map(p=>lang==="en"?p.v:p.ar).join(", ")}`:"";
+    const usr=`Product:${calProd} Desc:${lang==="en"?px.desc_en:px.desc_ar}${extraCtx} Month:${calMonth} Platforms:${calPlatforms.join(",")} Frequency:${calFreq} Goal:${calGoal}`;
     setCalLd(true);setCalErr("");setCalRes(null);
     try{setCalRes(await callAI(sys,usr,5000));}catch(e){setCalErr(e.message);}finally{setCalLd(false);}
-  },[lang,calProd,calMonth,calPlatforms,calFreq,calGoal]);
+  },[lang,calProd,calExtras,calMonth,calPlatforms,calFreq,calGoal]);
 
   /* ── A/B Variants ── */
   const genAB=useCallback(async()=>{
@@ -2375,7 +2378,7 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
             <div style={card}>
               <div style={cHead}><span style={{fontSize:11,fontWeight:600,color:"#6a96aa"}}>{T("إعدادات الخطة","Plan Settings")}</span></div>
               <div style={cBody}>
-                <Fld label={T("المنتج","Product")}><GroupedProductPicker selected={calProd} onSelect={setCalProd} lang={lang}/></Fld>
+                <Fld label={T("المنتج","Product")}><GroupedProductPicker selected={calProd} onSelect={setCalProd} lang={lang} extras={calExtras} onToggleExtra={v=>setCalExtras(prev=>prev.includes(v)?prev.filter(x=>x!==v):[...prev,v])}/></Fld>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                   <Fld label={T("الشهر / الفترة","Month / Period")}><input value={calMonth} onChange={e=>setCalMonth(e.target.value)} placeholder="مايو 2025"/></Fld>
                   <Fld label={T("هدف الخطة","Goal")}><input value={calGoal} onChange={e=>setCalGoal(e.target.value)} placeholder="Awareness + Leads"/></Fld>
