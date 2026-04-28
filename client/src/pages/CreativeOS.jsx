@@ -870,21 +870,26 @@ export default function CreativeOS(){
     try{setCampRes(await callAI(sys,usr,tokenBudget));}catch(e){setCampErr(e.message);}finally{setCampLd(false);}
   },[lang,campType,campTheme,campObj,campChs,campCtx,campBudget,campDuration,campScope]);
 
-  const runScan=useCallback(async()=>{
-    const ol=lang==="en"?"Counter-creatives in English.":"Counter-creatives in Saudi Arabic dialect.";
-    const sys=`Competitor intelligence for Qoyod. ${ol}\n${QOYOD_VOICE}\nReturn ONLY valid JSON:\n{"cards":[{"competitor":"...","platform":"...","hook":"...","message":"...","why_works":"...","weakness":"...","counter":{"hook_ar":"...","body_ar":"...","trust":"...","cta_ar":"...","funnel":"TOF/MOF/BOF"}}]}`;
-    setMLd(true);setMErr("");setMRes(null);
-    try{setMRes(await callAI(sys,"4 cards: Daftra, Foodics, Rewaa, Wafeq. Each with Qoyod counter-creative."));}
-    catch(e){setMErr(e.message);}finally{setMLd(false);}
-  },[lang]);
-
   const genCounter=useCallback(async()=>{
-    if(!mDesc){setMErr(T("اصف الإعلان أولاً","Describe the ad first"));return;}
+    if(!mComp){setMErr(T("اختر المنافس أولاً","Select a competitor first"));return;}
+    if(!mDesc){setMErr(T("صف الإعلان أو الصق رابط البوست","Describe the ad or paste the post URL"));return;}
     const ol=lang==="en"?"English":"Saudi Arabic dialect";
-    const sys=`Qoyod creative strategist. Counter in ${ol}.\n${QOYOD_VOICE}\nReturn ONLY valid JSON:\n{"cards":[{"competitor":"${mComp||"competitor"}","platform":"${mChan}","hook":"...","message":"...","why_works":"...","weakness":"...","counter":{"hook_ar":"...","body_ar":"...","trust":"...","cta_ar":"...","funnel":"TOF/MOF/BOF"}}]}`;
-    setMLd(true);setMErr("");
-    try{const r=await callAI(sys,`Comp:${mComp} Ch:${mChan}\nAd:${mDesc}`);setMRes(r);if(r.cards?.[0])setIlog(p=>[{date:new Date().toLocaleDateString(),comp:mComp,ch:mChan,desc:mDesc.slice(0,48)},...p]);}
-    catch(e){setMErr(e.message);}finally{setMLd(false);}
+    // If input looks like a URL, prepend a hint so the AI knows it can't fetch it directly
+    const isUrl=/^https?:\/\//i.test(mDesc.trim());
+    const urlHint=isUrl?`The user provided a URL only (${mDesc.trim()}). You CANNOT fetch external pages. Use the URL to identify the platform/competitor only. If no description is given, infer the most likely angle based on what this competitor (${mComp}) typically posts on ${mChan}, and clearly mark "inferred" in why_works.`:"";
+    const sys=`Qoyod creative strategist. Analyze ONE specific competitor ad and produce ONE Qoyod counter-creative. Counter in ${ol}.\n${QOYOD_VOICE}\n${urlHint}\nReturn ONLY valid JSON with EXACTLY ONE card matching the competitor selected:\n{"cards":[{"competitor":"${mComp}","platform":"${mChan}","hook":"...","message":"...","why_works":"...","weakness":"...","counter":{"hook_ar":"...","body_ar":"...","trust":"...","cta_ar":"...","funnel":"TOF/MOF/BOF"}}]}`;
+    const usr=`Competitor:${mComp}\nChannel:${mChan}\nInput:${mDesc}`;
+    setMLd(true);setMErr("");setMRes(null);
+    try{
+      const r=await callAI(sys,usr,2500);
+      // Force-filter to only the selected competitor card to prevent multi-card responses
+      if(Array.isArray(r.cards)){
+        const matched=r.cards.filter(c=>(c.competitor||"").toLowerCase().includes(mComp.toLowerCase()));
+        r.cards=matched.length?matched:r.cards.slice(0,1);
+      }
+      setMRes(r);
+      if(r.cards?.[0])setIlog(p=>[{date:new Date().toLocaleDateString(),comp:mComp,ch:mChan,desc:mDesc.slice(0,48)},...p]);
+    }catch(e){setMErr(e.message);}finally{setMLd(false);}
   },[lang,mComp,mChan,mDesc]);
 
   const genBrief=useCallback(async()=>{
@@ -1527,7 +1532,7 @@ export default function CreativeOS(){
                     </div>
                   ))}
                 </div>
-                <Btn ch={T("ابدأ التحليل الآن","Start Analysis Now")} onClick={runScan} dis={mLd} full/>
+                <p style={{fontSize:10.5,color:"#6a96aa",direction:"rtl",textAlign:"right",marginTop:6}}>{T("اختر منافساً من الأعلى ثم املأ النموذج أدناه لتوليد نسخة مضادة","Pick a competitor above, then fill the form below to generate a counter-creative")}</p>
               </div>
             </div>
             <div style={{...card,marginTop:10}}>
@@ -1809,6 +1814,247 @@ export default function CreativeOS(){
         {/* ══════════════════════════════════════════════════
             EMAIL / WA SEQUENCES
         ══════════════════════════════════════════════════ */}
+
+        {tab==="library"&&(
+          <div className="qa">
+            <SH title={T("مكتبة الإعلانات","Ad Library")} sub={T("14 إعلاناً مرجعياً","14 reference ads")}/>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>
+              {CREATIVE_LIBRARY.map(ad=>{
+                const fCol=ad.funnel==="TOF"?"#f5a623":ad.funnel==="MOF"?"#17a3a3":"#5dc87a";
+                const cCol=ad.category.includes("ZATCA")?"#f07070":ad.category.includes("فاتورة")?"#17a3a3":"#6a96aa";
+                return(
+                  <div key={ad.id} style={{...card,marginBottom:0}}>
+                    <div style={{height:4,background:`linear-gradient(90deg,${cCol},${fCol})`}}/>
+                    <div style={{padding:"10px 12px"}}>
+                      <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:8,direction:"rtl"}}><Tag ch={ad.id} style={{fontSize:9,fontWeight:700,color:"#f5a623"}}/><Tag ch={ad.category} style={{fontSize:9,color:cCol}}/><Tag ch={ad.funnel} style={{fontSize:9,color:fCol}}/><Tag ch={ad.format} style={{fontSize:9}}/></div>
+                      <p style={{fontSize:13,fontWeight:700,direction:"rtl",textAlign:"right",lineHeight:1.5,marginBottom:6}}>{ad.headline}</p>
+                      {ad.sub_top&&<p style={{fontSize:10.5,color:"#5dc87a",direction:"rtl",textAlign:"right",marginBottom:2}}>✓ {ad.sub_top}</p>}
+                      {ad.sub_bot&&<p style={{fontSize:10.5,color:"#f07070",direction:"rtl",textAlign:"right",marginBottom:6}}>✗ {ad.sub_bot}</p>}
+                      <Btn ch={T("استخدم كمرجع","Use as Reference")} line full onClick={()=>{setBMsg(ad.headline);setBHook(ad.sub_top||"");setBCta(ad.cta||"");setTab("brief");}}/>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {tab==="icp"&&(
+          <div className="qa">
+            <SH title={T("شرائح العملاء","Customer Profiles")} sub={T(`${ICP_PERSONAS.length+customPersonas.length} شرائح`,`${ICP_PERSONAS.length+customPersonas.length} personas`)}/>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:10}}>
+              {[...ICP_PERSONAS,...customPersonas].map((p,idx)=>{
+                const tCol=p.tier==="A"?"#17a3a3":"#f5a623";
+                const isCustom=idx>=ICP_PERSONAS.length;
+                return(
+                  <div key={p.id||idx} style={{...card,marginBottom:0,border:isCustom?"1.5px solid rgba(245,166,35,.25)":"1px solid rgba(1,53,90,.45)"}}>
+                    <div style={{...cHead,background:`${tCol}08`}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:18}}>{p.icon||"👤"}</span><div><div style={{fontSize:12,fontWeight:700}}>{p.title}</div><div style={{fontSize:9.5,color:"#6a96aa"}}>{p.en||p.title}</div></div></div>
+                      <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                        <Tag ch={`Tier ${p.tier}`} style={{fontSize:9.5,color:tCol,fontWeight:700}}/>
+                        {isCustom&&<button onClick={()=>setCustomPersonas(prev=>prev.filter((_,i)=>i!==idx-ICP_PERSONAS.length))} style={{background:"none",border:"none",color:"#f07070",cursor:"pointer",fontSize:14,lineHeight:1}}>×</button>}
+                      </div>
+                    </div>
+                    <div style={{padding:"12px 14px"}}>
+                      <p style={{fontSize:11.5,direction:"rtl",textAlign:"right",lineHeight:1.7,marginBottom:8}}>{p.pain_ar}</p>
+                      <div style={{marginBottom:10,padding:"8px 10px",background:"rgba(245,166,35,.05)",borderRadius:6,borderRight:"2px solid #f5a623"}}><p style={{fontSize:12.5,fontWeight:600,color:"#f5a623",direction:"rtl"}}>{p.hook_ar}</p></div>
+                      <div style={{display:"flex",gap:5}}>
+                        <button onClick={()=>{setExtraNote(`الجمهور: ${p.title} — ${p.pain_ar}`);setFunnel(p.funnel);setTab("content");}} style={{flex:1,padding:"7px 4px",borderRadius:6,border:"1px solid rgba(23,163,164,.35)",background:"rgba(23,163,164,.08)",color:"#17a3a3",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{T("نسخة إعلان","Ad Copy")}</button>
+                        <button onClick={()=>{setBMsg(p.hook_ar||"");setBHook(p.hook_ar||"");setBCta(p.cta_ar||"ابدأ الآن");setTab("brief");}} style={{flex:1,padding:"7px 4px",borderRadius:6,border:"1px solid rgba(245,166,35,.35)",background:"rgba(245,166,35,.08)",color:"#f5a623",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{T("استوديو تصميم","Design Studio")}</button>
+                        <button onClick={()=>{setExtraNote(`الجمهور: ${p.title} — ${p.pain_ar}`);setFunnel(p.funnel);setBMsg(p.hook_ar||"");setBHook(p.hook_ar||"");setBCta(p.cta_ar||"ابدأ الآن");setTab("content");}} style={{flex:1,padding:"7px 4px",borderRadius:6,border:"1px solid rgba(93,200,122,.35)",background:"rgba(93,200,122,.08)",color:"#5dc87a",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{T("الاثنين معاً","Both")}</button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              <div style={{...card,marginBottom:0,border:"1.5px dashed rgba(1,53,90,.4)",cursor:"pointer"}} onClick={()=>setShowAddPersona(p=>!p)}>
+                <div style={{padding:"20px 14px",textAlign:"center",color:"#2e5468"}}>
+                  <div style={{fontSize:24,marginBottom:6}}>+</div>
+                  <div style={{fontSize:11.5,fontWeight:600}}>{T("أضف شريحة عميل","Add Custom Persona")}</div>
+                </div>
+              </div>
+            </div>
+            {showAddPersona&&(
+              <div style={{...card,marginTop:12}}>
+                <div style={cHead}><span style={{fontSize:11,fontWeight:600,color:"#f5a623"}}>{T("شريحة عميل جديدة","New Persona")}</span></div>
+                <div style={cBody}>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                    <Fld label={T("المسمى الوظيفي (عربي)","Role (Arabic)")}><input value={newPersona.title} onChange={e=>setNewPersona(p=>({...p,title:e.target.value}))} placeholder={T("مثال: مدير التسويق","e.g. مدير التسويق")} dir="rtl"/></Fld>
+                    <Fld label={T("المسمى (إنجليزي)","Role (English)")}><input value={newPersona.en} onChange={e=>setNewPersona(p=>({...p,en:e.target.value}))} placeholder="e.g. Marketing Manager"/></Fld>
+                  </div>
+                  <Fld label={T("المشكلة / نقطة الألم","Pain Point")}><textarea value={newPersona.pain_ar} onChange={e=>setNewPersona(p=>({...p,pain_ar:e.target.value}))} rows={2} dir="rtl" style={{textAlign:"right"}} placeholder={T("ما الذي يؤرقه؟","What is their pain?")}/></Fld>
+                  <Fld label={T("الهوك الإعلاني","Hook")}><input value={newPersona.hook_ar} onChange={e=>setNewPersona(p=>({...p,hook_ar:e.target.value}))} placeholder={T("الرسالة الأقوى لهذا الجمهور","The strongest message for this audience")} dir="rtl"/></Fld>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                    <Fld label="Tier"><div style={{display:"flex",gap:4}}>{["A","B"].map(t=><Seg key={t} ch={`Tier ${t}`} on={newPersona.tier===t} onClick={()=>setNewPersona(p=>({...p,tier:t}))}/>)}</div></Fld>
+                    <Fld label={T("مرحلة القمع","Funnel")}><div style={{display:"flex",gap:4}}>{["TOF","MOF","BOF"].map(f=><Seg key={f} ch={f} on={newPersona.funnel===f} onClick={()=>setNewPersona(p=>({...p,funnel:f}))}/>)}</div></Fld>
+                  </div>
+                  <div style={{display:"flex",gap:6,marginTop:4}}>
+                    <Btn ch={T("حفظ الشريحة","Save Persona")} gold onClick={()=>{if(!newPersona.title||!newPersona.pain_ar)return;const id=`CP${customPersonas.length+1}`;setCustomPersonas(prev=>[...prev,{...newPersona,id}]);setNewPersona({title:"",en:"",icon:"👤",tier:"A",pain_ar:"",hook_ar:"",funnel:"TOF",channels:[]});setShowAddPersona(false);}} full/>
+                    <Btn ch={T("إلغاء","Cancel")} line onClick={()=>setShowAddPersona(false)} full/>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════
+            A/B VARIANTS
+        ══════════════════════════════════════════════════ */}
+        {tab==="abtest"&&(
+          <div className="qa">
+            <SH title={T("توليد نسختين A/B","A/B Copy Variants")} sub={T("نسختان بزاوية مختلفة — أيهما يُحوّل أكثر؟","Two different angles — which one converts better?")}/>
+            <ErrBox msg={abErr}/>
+            <div style={card}>
+              <div style={cHead}><span style={{fontSize:11,fontWeight:600,color:"#6a96aa"}}>{T("إعدادات الاختبار","Test Settings")}</span></div>
+              <div style={cBody}>
+                <Fld label={T("المنتج","Product")}><GroupedProductPicker selected={abProd} onSelect={setAbProd} lang={lang}/></Fld>
+                <Fld label={T("الفكرة أو الرسالة الأساسية","Core concept or message")}>
+                  <textarea value={abConcept} onChange={e=>setAbConcept(e.target.value)} rows={3} dir="rtl" style={{textAlign:"right"}} placeholder={T("مثال: قيود يوفر عليك توظيف محاسب كامل","e.g. Qoyod saves you a full-time accountant cost")}/>
+                </Fld>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+                  <Fld label={T("القناة","Channel")}><select value={abChan} onChange={e=>setAbChan(e.target.value)}>{["Instagram","TikTok","Snapchat","Meta","Google","LinkedIn"].map(c=><option key={c}>{c}</option>)}</select></Fld>
+                  <Fld label={T("الصيغة","Format")}><select value={abFmt} onChange={e=>setAbFmt(e.target.value)}>{["Static","Reel","Story","Carousel","Video"].map(f=><option key={f}>{f}</option>)}</select></Fld>
+                  <Fld label={T("مرحلة الجمهور","Funnel Stage")}><select value={abAud} onChange={e=>setAbAud(e.target.value)}>{["TOF","MOF","BOF"].map(s=><option key={s}>{s}</option>)}</select></Fld>
+                </div>
+                <Btn ch={abLd?T("يولّد...","Generating..."):`${T("ولّد نسختين","Generate A/B Variants")}`} gold={!abLd} onClick={genAB} dis={abLd} full/>
+              </div>
+            </div>
+            {abLd&&<Loader msg={T("يكتب نسختين بزاوية مختلفة...","Writing two different angles...")}/>}
+            {abRes&&!abLd&&(
+              <>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:10}}>
+                  {["variant_a","variant_b"].map(key=>{
+                    const v=abRes[key];if(!v)return null;
+                    const isA=key==="variant_a";
+                    const accent=isA?"#17a3a3":"#f59e0b";
+                    return(
+                      <div key={key} style={{...card,marginBottom:0,border:`1.5px solid ${accent}30`}}>
+                        <div style={{...cHead,background:`${accent}08`,borderBottom:`1px solid ${accent}20`}}>
+                          <span style={{fontSize:12,fontWeight:700,color:accent}}>{v.label||key}</span>
+                          <Tag ch={`CTR: ${v.predicted_ctr}`} style={{fontSize:9,background:`${accent}15`,color:accent,border:`1px solid ${accent}30`}}/>
+                        </div>
+                        <div style={{padding:"12px 14px",display:"flex",flexDirection:"column",gap:8}}>
+                          <div style={{padding:"8px 10px",background:"rgba(23,163,164,.05)",borderRadius:6,direction:"rtl"}}>
+                            <p style={{fontSize:9,color:"#6a96aa",marginBottom:3}}>{T("الهوك","Hook")}</p>
+                            <p style={{fontSize:13,fontWeight:700,color:"#ddeef4"}}>{v.hook}</p>
+                          </div>
+                          <div style={{direction:"rtl"}}>
+                            <p style={{fontSize:9,color:"#6a96aa",marginBottom:2}}>{T("الهيدلاين","Headline")}</p>
+                            <p style={{fontSize:12,fontWeight:600}}>{v.headline}</p>
+                          </div>
+                          <div style={{direction:"rtl"}}>
+                            <p style={{fontSize:9,color:"#6a96aa",marginBottom:2}}>{T("البودي","Body")}</p>
+                            <p style={{fontSize:11.5,lineHeight:1.7}}>{v.body}</p>
+                          </div>
+                          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                            <Tag ch={`CTA: ${v.cta}`} style={{fontSize:9.5,background:`${accent}12`,color:accent}}/>
+                            <Tag ch={v.hook_type} style={{fontSize:9.5}}/>
+                            <Tag ch={v.emotional_trigger} style={{fontSize:9.5}}/>
+                          </div>
+                          <p style={{fontSize:10.5,color:"#5dc87a",direction:"rtl"}}>{v.why}</p>
+                          <Btn ch={T("نسخ","Copy")} line onClick={()=>copyText(`${v.hook}\n\n${v.body}\n\n${v.cta}`)} full/>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {(abRes.recommendation||abRes.testing_note)&&(
+                  <div style={{...card,marginTop:10}}>
+                    <div style={cBody}>
+                      {abRes.recommendation&&<Row label={T("التوصية","Recommendation")} val={abRes.recommendation}/>}
+                      {abRes.testing_note&&<Row label={T("ملاحظة الاختبار","Testing Note")} val={abRes.testing_note}/>}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════
+            CONTENT CALENDAR
+        ══════════════════════════════════════════════════ */}
+        {tab==="calendar"&&(
+          <div className="qa">
+            <SH title={T("خطة المحتوى الشهرية","Monthly Content Calendar")} sub={T("خطة نشر كاملة بالمنصة والفكرة والكابشن","Full posting plan with platform, topic and caption")}/>
+            <ErrBox msg={calErr}/>
+            <div style={card}>
+              <div style={cHead}><span style={{fontSize:11,fontWeight:600,color:"#6a96aa"}}>{T("إعدادات الخطة","Plan Settings")}</span></div>
+              <div style={cBody}>
+                <Fld label={T("المنتج","Product")}><GroupedProductPicker selected={calProd} onSelect={setCalProd} lang={lang} extras={calExtras} onToggleExtra={v=>setCalExtras(prev=>prev.includes(v)?prev.filter(x=>x!==v):[...prev,v])}/></Fld>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  <Fld label={T("الشهر / الفترة","Month / Period")}><input value={calMonth} onChange={e=>setCalMonth(e.target.value)} placeholder="مايو 2025"/></Fld>
+                  <Fld label={T("هدف الخطة","Goal")}><input value={calGoal} onChange={e=>setCalGoal(e.target.value)} placeholder="Awareness + Leads"/></Fld>
+                </div>
+                <Fld label={T("تكرار النشر","Posting Frequency")}>
+                  <select value={calFreq} onChange={e=>setCalFreq(e.target.value)}>
+                    {["daily","5 posts/week","4 posts/week","3 posts/week","2 posts/week","1 post/week"].map(f=><option key={f}>{f}</option>)}
+                  </select>
+                </Fld>
+                <Fld label={T("المنصات","Platforms")}>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:4}}>
+                    {["Instagram","TikTok","Snapchat","X (Twitter)","LinkedIn","YouTube Shorts"].map(p=>{
+                      const on=calPlatforms.includes(p);
+                      return <button key={p} onClick={()=>setCalPlatforms(pr=>on?pr.filter(x=>x!==p):[...pr,p])} style={{padding:"3px 9px",borderRadius:4,cursor:"pointer",fontFamily:"inherit",fontSize:10,fontWeight:on?700:400,border:`1px solid ${on?"rgba(23,163,164,.7)":"rgba(1,53,90,.35)"}`,background:on?"rgba(23,163,164,.15)":"#0a1f3d",color:on?"#17a3a3":"#5a8090",transition:"all .12s"}}>{p}</button>;
+                    })}
+                  </div>
+                </Fld>
+                <Btn ch={calLd?T("يبني الخطة...","Building plan..."):`${T("أنشئ الخطة","Generate Calendar")}`} gold={!calLd} onClick={genCalendar} dis={calLd} full/>
+              </div>
+            </div>
+            {calLd&&<Loader msg={T("يبني خطة محتوى شهرية...","Building monthly content plan...")}/>}
+            {calRes&&!calLd&&(
+              <>
+                <div style={{...card,marginTop:10}}>
+                  <div style={cHead}>
+                    <span style={{fontSize:12,fontWeight:700}}>{calRes.month}</span>
+                    <div style={{display:"flex",gap:6}}>
+                      <Tag ch={`${calRes.total_posts} posts`}/>
+                      <Tag ch={calRes.goal||calGoal}/>
+                    </div>
+                  </div>
+                  <div style={{padding:"10px 14px",display:"flex",gap:6,flexWrap:"wrap"}}>
+                    {(calRes.themes||[]).map((t,i)=><Tag key={i} ch={t} style={{fontSize:10.5,background:"rgba(23,163,164,.1)",color:"#17a3a3"}}/>)}
+                  </div>
+                </div>
+                {(calRes.weeks||[]).map(w=>(
+                  <div key={w.week} style={{...card,marginTop:10}}>
+                    <div style={cHead}><span style={{fontSize:11.5,fontWeight:700}}>{T(`الأسبوع ${w.week}`,`Week ${w.week}`)}</span><Tag ch={`${(w.posts||[]).length} posts`}/></div>
+                    <div style={{padding:"0 14px 12px"}}>
+                      {(w.posts||[]).map((post,i)=>(
+                        <div key={i} style={{padding:"12px 0",borderBottom:"1px solid rgba(1,53,90,.3)"}}>
+                          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:6}}>
+                            <Tag ch={post.day} style={{background:"rgba(23,163,164,.1)",color:"#17a3a3"}}/>
+                            <Tag ch={post.platform}/>
+                            <Tag ch={post.format}/>
+                            <Tag ch={post.funnel_stage} style={{background:post.funnel_stage==="TOF"?"rgba(96,165,250,.1)":post.funnel_stage==="MOF"?"rgba(245,158,11,.1)":"rgba(16,185,129,.1)",color:post.funnel_stage==="TOF"?"#60a5fa":post.funnel_stage==="MOF"?"#f59e0b":"#10b981"}}/>
+                          </div>
+                          <p style={{fontSize:12.5,fontWeight:700,color:"#ddeef4",direction:"rtl",marginBottom:4}}>{post.design_text}</p>
+                          <p style={{fontSize:11.5,color:"#6a96aa",direction:"rtl",marginBottom:6,lineHeight:1.6}}>{post.caption}</p>
+                          <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+                            <span style={{fontSize:9.5,color:"#2e5468"}}>{post.hashtags}</span>
+                            <Tag ch={`CTA: ${post.cta}`} style={{fontSize:9.5,color:"#f59e0b",background:"rgba(245,158,11,.08)"}}/>
+                            <Btn ch={T("نسخ","Copy")} line onClick={()=>copyText(`${post.design_text}\n\n${post.caption}\n\n${post.hashtags}`)}/>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                {calRes.hashtag_sets&&(
+                  <div style={{...card,marginTop:10}}>
+                    <div style={cHead}><span style={{fontSize:11,fontWeight:600,color:"#6a96aa"}}>{T("مجموعات الهاشتاق","Hashtag Sets")}</span></div>
+                    <div style={cBody}>
+                      <Row label={T("رئيسي","Main")} val={calRes.hashtag_sets.main}/>
+                      <Row label={T("ثانوي","Secondary")} val={calRes.hashtag_sets.secondary}/>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
         {tab==="email"&&(
           <div className="qa">
             <SH title={T("رسائل التسويق التسلسلي","Email & WhatsApp Sequences")} sub={T("سلسلة رسائل لكل مرحلة من رحلة العميل","Message sequences for every stage of the customer journey")}/>
