@@ -299,9 +299,9 @@ export default function AgentPanel() {
           fontFamily: "inherit",
           boxShadow: "0 4px 14px rgba(2,21,68,0.4)",
         }}
-        title="سمعه — وكيلك التسويقي · اكتب أي طلب وستنفذه"
+        title="سُمعه - معاك لمساعدتك"
       >
-        {open ? "× إغلاق" : "🤖 سمعه — وكيلك"}
+        {open ? "× إغلاق" : "🤖 سُمعه - معاك لمساعدتك"}
       </button>
 
       {open && (
