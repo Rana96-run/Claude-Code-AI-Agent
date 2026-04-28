@@ -122,13 +122,12 @@ router.post("/competitor-ads", async (req, res) => {
   } else if (source === "google") {
     // fortuitous_pirate's Google Ads Transparency scraper (8K+ runs, 200+ users).
     // NOTE: this actor's allowed regions are US/GB/DE/FR/CA/AU only — Saudi
-    // Arabia is not on the list. We pass empty region (any) so it returns
-    // all ads for the advertiser globally; you can filter for SA-relevance
-    // visually since most local advertisers run SA-targeted ads.
+    // Arabia is not on the list. We pass empty region (any) and brand name
+    // (not domain) since the search index is by advertiser name.
     actor = "fortuitous_pirate~google-ads-transparency-scraper";
     input = {
-      query: c.domain,
-      region: "", // empty = any country (SA not officially supported)
+      query: c.fb_query, // brand name like "Daftra", not "daftra.com"
+      region: "",
       maxItems: apifyMinCount,
     };
   } else if (source === "instagram") {
