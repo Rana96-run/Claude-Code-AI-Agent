@@ -179,6 +179,53 @@ export async function sheetsAppendCompetitorPosts(posts: CompetitorPost[]): Prom
   }
 }
 
+/** Read recent WIN-tagged hypotheses from "Hypothesis Ledger" tab.
+ *  Used by D1 (Pattern Library auto-feed) — top N most recent winners
+ *  get injected as few-shot examples in content generation prompts.
+ *  Schema columns: id | shipped_at | hypothesis | expected_lift |
+ *                  actual_result | verdict | lesson | atomic_id |
+ *                  sector | channel | funnel_stage
+ */
+export async function sheetsReadWinners(limit = 5): Promise<Array<{
+  id: string;
+  hypothesis: string;
+  actual_result?: string;
+  lesson?: string;
+  sector?: string;
+  channel?: string;
+  funnel_stage?: string;
+  shipped_at?: string;
+}>> {
+  if (!SPREADSHEET_ID) return [];
+  try {
+    const s = getSheetsClient();
+    const r = await s.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: "'Hypothesis Ledger'!A2:K", // skip header row
+    });
+    const rows = r.data.values ?? [];
+    const wins = rows
+      .filter((row) => (row[5] || "").toUpperCase() === "WIN")
+      // Sort by shipped_at descending
+      .sort((a, b) => (b[1] || "").localeCompare(a[1] || ""))
+      .slice(0, limit)
+      .map((row) => ({
+        id: row[0] || "",
+        shipped_at: row[1],
+        hypothesis: row[2] || "",
+        actual_result: row[4],
+        lesson: row[6],
+        sector: row[8],
+        channel: row[9],
+        funnel_stage: row[10],
+      }));
+    return wins;
+  } catch (e) {
+    logger.warn({ err: String(e) }, "sheets-client: read winners failed");
+    return [];
+  }
+}
+
 /** Append a hypothesis/result to the "Hypothesis Ledger" tab.
  *  Schema follows the master prompt section 3.1: id, hypothesis, expected_lift,
  *  actual_result, verdict, lesson, atomic_id, sector, channel, funnel_stage. */

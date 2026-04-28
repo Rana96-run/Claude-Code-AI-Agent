@@ -672,6 +672,30 @@ export default function CreativeOS(){
   const[liveAdsLd,setLiveAdsLd]=useState(false);
   const[liveAdsErr,setLiveAdsErr]=useState("");
 
+  /* ── Hypothesis logging (D1 — Pattern Library foundation) ── */
+  const[hypModalOpen,setHypModalOpen]=useState(false);
+  const[hypText,setHypText]=useState("");
+  const[hypExpectedLift,setHypExpectedLift]=useState("");
+  const[hypLd,setHypLd]=useState(false);
+  const[hypMsg,setHypMsg]=useState("");
+
+  const submitHypothesis=useCallback(async()=>{
+    if(!hypText.trim()){setHypMsg(T("اكتب الفرضية أولاً","Enter a hypothesis first"));return;}
+    setHypLd(true);setHypMsg("");
+    try{
+      // Generate a master-prompt-style ID: Q-YYYY-Wnn-NNN
+      const now=new Date();
+      const week=Math.ceil((((now-new Date(now.getFullYear(),0,1))/86400000)+1)/7);
+      const id=`Q-${now.getFullYear()}-W${String(week).padStart(2,"0")}-${String(Math.floor(Math.random()*999)).padStart(3,"0")}`;
+      const r=await fetchWithTimeout("/api/hypothesis/log",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,hypothesis:hypText.trim(),expected_lift:hypExpectedLift.trim()||undefined,channel:chan,sector,funnel_stage:funnel,verdict:"PENDING"})},15000);
+      const j=await r.json();
+      if(!r.ok||j.error)throw new Error(j.error||`Error ${r.status}`);
+      setHypMsg(T(`✓ تم تسجيل الفرضية: ${id}`,`✓ Logged: ${id}`));
+      setHypText("");setHypExpectedLift("");
+      setTimeout(()=>{setHypModalOpen(false);setHypMsg("");},1800);
+    }catch(e){setHypMsg(`⚠ ${e.message}`);}finally{setHypLd(false);}
+  },[hypText,hypExpectedLift,chan,sector,funnel,lang]);
+
   /* ── Quick Agent Terminal (on-demand free-form prompt) ── */
   const[termOpen,setTermOpen]=useState(false);
   const[termPrompt,setTermPrompt]=useState("");
@@ -733,9 +757,6 @@ export default function CreativeOS(){
   const[driveLd,setDriveLd]=useState({});
   const[driveLinks,setDriveLinks]=useState({});
   const[driveErrs,setDriveErrs]=useState({});
-  const[syncLd,setSyncLd]=useState(false);
-  const[syncResult,setSyncResult]=useState(null);
-  const[syncErr,setSyncErr]=useState("");
   /* (Nano-Banana SVG refinement removed with the new design pipeline.) */
   const[advContent,setAdvContent]=useState(false);
   const[customPersonas,setCustomPersonas]=useState([]);
@@ -1005,11 +1026,6 @@ export default function CreativeOS(){
           <div style={{display:"flex",background:"#0a1f3d",border:"1px solid rgba(1,53,90,.45)",borderRadius:6,overflow:"hidden",height:26}}>
             {["ar","en"].map(l=><button key={l} onClick={()=>setLang(l)} style={{padding:"0 10px",height:"100%",background:lang===l?"rgba(23,163,164,.1)":"none",border:"none",color:lang===l?"#17a3a3":"#2e5468",fontSize:10.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{l.toUpperCase()}</button>)}
           </div>
-          <button onClick={syncProjectToDrive} disabled={syncLd} title={T("مزامنة ملفات المشروع إلى Google Drive","Sync project files to Google Drive")} style={{display:"flex",alignItems:"center",gap:5,padding:"3px 9px",borderRadius:5,border:"1px solid rgba(66,133,244,.35)",background:syncResult?"rgba(66,133,244,.12)":"transparent",color:syncResult?"#5dc87a":"#4285f4",fontSize:9.5,cursor:"pointer",fontFamily:"inherit",fontWeight:600,opacity:syncLd?.6:1}}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M12 2v6m0 0l3-3m-3 3L9 5"/><path d="M20 12a8 8 0 11-16 0 8 8 0 0116 0z" strokeDasharray="4 2"/><path d="M8 17H5a2 2 0 01-2-2v-3"/><path d="M16 17h3a2 2 0 002-2v-3"/></svg>
-            {syncLd?T("يزامن...","Syncing…"):syncResult?`✓ ${syncResult.synced?.length} ${T("ملف","files")}`:T("مزامنة Drive","Sync Drive")}
-          </button>
-          {syncErr&&<span style={{fontSize:9,color:"#f07070",maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={syncErr}>⚠ {syncErr}</span>}
           <button onClick={()=>setTermOpen(v=>!v)} title={T("وكيل سريع — أدخل أي طلب","Quick Agent — type any request")} style={{display:"flex",alignItems:"center",gap:5,padding:"3px 9px",borderRadius:5,border:`1px solid ${termOpen?"rgba(245,166,35,.5)":"rgba(245,166,35,.3)"}`,background:termOpen?"rgba(245,166,35,.15)":"transparent",color:"#f5a623",fontSize:9.5,cursor:"pointer",fontFamily:"inherit",fontWeight:600}}>
             {T("وكيل سريع","Quick Agent")}
           </button>
@@ -1057,14 +1073,6 @@ export default function CreativeOS(){
           </div>
         </div>
       )}
-      {syncResult&&<div style={{background:"rgba(66,133,244,.08)",borderBottom:"1px solid rgba(66,133,244,.2)",padding:"5px 18px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-        <span style={{fontSize:9.5,color:"#4285f4",fontWeight:600}}>☁ Drive {T("مزامنة ناجحة","Sync Complete")}:</span>
-        {syncResult.synced?.map((f,i)=><span key={i} style={{fontSize:9,padding:"2px 7px",borderRadius:10,background:f.action==="updated"?"rgba(23,163,164,.12)":"rgba(93,200,122,.12)",color:f.action==="updated"?"#17a3a3":"#5dc87a",border:`1px solid ${f.action==="updated"?"rgba(23,163,164,.3)":"rgba(93,200,122,.3)"}`}}>{f.action==="updated"?"↻":"+"} {f.name}</span>)}
-        {syncResult.errors?.length>0&&syncResult.errors.map((e,i)=><span key={i} style={{fontSize:9,padding:"2px 7px",borderRadius:10,background:"rgba(240,112,112,.1)",color:"#f07070",border:"1px solid rgba(240,112,112,.3)"}}>✗ {e.name}</span>)}
-        <a href={syncResult.folderLink} target="_blank" rel="noreferrer" style={{fontSize:9.5,color:"#4285f4",textDecoration:"underline",marginRight:"auto"}}>↗ {T("افتح المجلد","Open Folder")}</a>
-        <button onClick={()=>setSyncResult(null)} style={{fontSize:9,color:"#2e5468",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit"}}>✕</button>
-      </div>}
-
       <div style={{position:"sticky",top:52,zIndex:99,display:"flex",padding:"0 18px",borderBottom:"1px solid rgba(1,53,90,.45)",background:"rgba(2,12,30,.92)",backdropFilter:"blur(10px)",overflowX:"auto"}}>
         {TABS.map(([k,l])=><button key={k} onClick={()=>setTab(k)} style={{padding:"0 14px",height:42,fontSize:11.5,fontFamily:"inherit",fontWeight:tab===k?600:500,color:tab===k?"#17a3a3":"#2e5468",background:"none",border:"none",borderBottom:`2px solid ${tab===k?"#17a3a3":"transparent"}`,cursor:"pointer",whiteSpace:"nowrap",transition:"all .15s"}}>{l}</button>)}
       </div>
@@ -1169,6 +1177,7 @@ export default function CreativeOS(){
                           <div style={{display:"flex",gap:5}}>
                             <Tag ch={v.predicted_ctr||"—"} style={{fontSize:9,background:`${accent}15`,color:accent}}/>
                             <Btn ch={T("نسخ الكل","Copy All")} xs onClick={()=>copyText(fullCopy)}/>
+                            <Btn ch={T("سجّل كاختبار","Log as Test")} xs onClick={()=>{setHypText(`${v.label||`Variant ${idx+1}`}: ${v.ad_copy?.hook||""}`);setHypModalOpen(true);}}/>
                           </div>
                         </div>
                         <div style={{padding:"10px 14px",display:"flex",flexDirection:"column",gap:8}}>
@@ -1217,6 +1226,7 @@ export default function CreativeOS(){
                         if(chan==="Google Ads")copyText(`${base}\n\nGoogle Headlines:\n${(cr.google_headlines||[]).map((h,i)=>`H${i+1}: ${h}`).join("\n")}\n\nDescriptions:\n${(cr.google_descriptions||[]).map((d,i)=>`D${i+1}: ${d}`).join("\n")}`);
                         else copyText(`${base}\n\n${chan} Caption:\n${cr.caption||""}`);
                       }}/>
+                      <Btn ch={T("سجّل كاختبار","Log as Test")} xs onClick={()=>{setHypText(cr.ad_copy?.hook||"");setHypModalOpen(true);}}/>
                       <button onClick={()=>{
                         const base=`${cr.ad_copy?.hook}\n\n${cr.ad_copy?.body}\n\nCTA: ${cr.ad_copy?.cta}`;
                         const full=chan==="Google Ads"?`${base}\n\nGoogle Headlines:\n${(cr.google_headlines||[]).map((h,i)=>`H${i+1}: ${h}`).join("\n")}\n\nDescriptions:\n${(cr.google_descriptions||[]).map((d,i)=>`D${i+1}: ${d}`).join("\n")}`:`${base}\n\n${chan} Caption:\n${cr.caption||""}`;
@@ -1862,6 +1872,34 @@ export default function CreativeOS(){
           </div>
         )}
 
+        {/* ══════════════════════════════════════════════════
+            HYPOTHESIS LOG MODAL (D1 — Pattern Library foundation)
+            ══════════════════════════════════════════════════ */}
+        {hypModalOpen&&(
+          <div onClick={()=>!hypLd&&setHypModalOpen(false)} style={{position:"fixed",inset:0,background:"rgba(2,12,30,.85)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
+            <div onClick={e=>e.stopPropagation()} style={{...card,width:"100%",maxWidth:520,marginBottom:0,direction:dir}}>
+              <div style={cHead}>
+                <span style={{fontSize:11.5,fontWeight:700,color:"#f5a623"}}>{T("سجّل هذا كاختبار","Log This as a Test")}</span>
+                <button onClick={()=>setHypModalOpen(false)} disabled={hypLd} style={{background:"none",border:"none",color:"#6a96aa",fontSize:14,cursor:"pointer"}}>✕</button>
+              </div>
+              <div style={cBody}>
+                <p style={{fontSize:10.5,color:"#6a96aa",marginBottom:10,lineHeight:1.6,direction:dir}}>{T("الفرضيات تتراكم في 'مكتبة الأنماط' — كل WIN يصير قدوة للأجيال القادمة.","Hypotheses compound into the Pattern Library — every WIN seeds future generations.")}</p>
+                <Fld label={T("الفرضية (If X then Y because Z)","Hypothesis (If X then Y because Z)")}>
+                  <textarea value={hypText} onChange={e=>setHypText(e.target.value)} rows={3} dir={dir} style={{textAlign:lang==="ar"?"right":"left",fontFamily:"inherit",fontSize:11.5,padding:"8px 10px",borderRadius:6,border:"1px solid rgba(245,166,35,.3)",background:"#0a1f3d",color:"#ddeef4",resize:"vertical",width:"100%"}} placeholder={T("مثال: زاوية الخوف من غرامة ZATCA تتفوق على البساطة لتجار التجزئة في الرياض","e.g. Fear angle on ZATCA fines outperforms simplicity for Tier-A retail")}/>
+                </Fld>
+                <Fld label={T("التأثير المتوقع","Expected Lift")}>
+                  <input value={hypExpectedLift} onChange={e=>setHypExpectedLift(e.target.value)} placeholder={T("مثال: +15% CTR vs control","e.g. +15% CTR vs control")} style={{width:"100%",fontFamily:"inherit"}}/>
+                </Fld>
+                <p style={{fontSize:10,color:"#2e5468",marginBottom:8,direction:dir}}>{T(`السياق التلقائي: قناة=${chan} · قطاع=${sector} · مرحلة=${funnel}`,`Auto-context: channel=${chan} · sector=${sector} · funnel=${funnel}`)}</p>
+                {hypMsg&&<div style={{padding:"6px 10px",fontSize:10.5,borderRadius:5,background:hypMsg.startsWith("✓")?"rgba(93,200,122,.08)":"rgba(240,112,112,.08)",border:`1px solid ${hypMsg.startsWith("✓")?"rgba(93,200,122,.3)":"rgba(240,112,112,.3)"}`,color:hypMsg.startsWith("✓")?"#5dc87a":"#f07070",marginBottom:8}}>{hypMsg}</div>}
+                <div style={{display:"flex",gap:6}}>
+                  <Btn ch={hypLd?T("يحفظ...","Saving..."):T("احفظ في السجل","Save to Ledger")} gold onClick={submitHypothesis} dis={hypLd||!hypText.trim()} full/>
+                  <Btn ch={T("إلغاء","Cancel")} line onClick={()=>setHypModalOpen(false)} dis={hypLd}/>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>

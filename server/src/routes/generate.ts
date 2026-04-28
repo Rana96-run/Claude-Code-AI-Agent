@@ -2,6 +2,9 @@ import { Router } from "express";
 import { createHash } from "crypto";
 import { getContextSnippet } from "../lib/competitor-context.js";
 import { getBrandLawSnippet, getCreativeKit } from "../lib/qoyod-brand-law.js";
+import { getCustomerVoiceSnippet } from "../lib/customer-voice.js";
+import { getZatcaSnippet } from "../lib/zatca-watcher.js";
+import { getPatternLibrarySnippet } from "../lib/pattern-library.js";
 
 const router = Router();
 
@@ -295,6 +298,9 @@ router.post("/generate", async (req, res) => {
     json_mode = false,
     skip_competitor_context = false,
     skip_brand_law = false,
+    skip_customer_voice = false,
+    skip_zatca = false,
+    skip_pattern_library = false,
     persona,
     creative_kit = false,
   } = req.body ?? {};
@@ -304,15 +310,29 @@ router.post("/generate", async (req, res) => {
     return;
   }
 
-  // Layered system-prompt enrichment (in order of importance):
-  //   1. Brand law — Qoyod's non-negotiable identity, dialect, golden rule
-  //   2. Creative kit — sector + hook + competitor angles (only for content gen)
-  //   3. Competitor context — what rivals shipped this week (auto-refreshed)
-  // All three can be opted out per request for non-creative endpoints.
+  // Layered system-prompt enrichment (knowledge feeds, in order of importance):
+  //   1. Brand law           — Qoyod's non-negotiable identity, dialect, golden rule
+  //   2. Creative kit        — sector + hook + competitor angles (only for content gen)
+  //   3. Competitor context  — what rivals shipped this week (auto-refreshed Sunday)
+  //   4. Customer voice (D2) — real pain quotes from App Store / Play Store / X
+  //   5. ZATCA intel (D3)    — recent regulatory news + opportunities
+  // All can be opted out per request for non-creative endpoints.
   const lawSnippet = skip_brand_law ? "" : `\n\n${getBrandLawSnippet(persona)}\n\n`;
   const kitSnippet = creative_kit ? `\n\n${getCreativeKit()}\n\n` : "";
   const ctxSnippet = skip_competitor_context ? "" : getContextSnippet();
-  const enrichedSystem = lawSnippet + String(system) + kitSnippet + ctxSnippet;
+  const voiceSnippet = skip_customer_voice ? "" : getCustomerVoiceSnippet();
+  const zatcaSnippet = skip_zatca ? "" : getZatcaSnippet();
+  // Pattern library is async (reads Sheet) — only fetch when caller wants it,
+  // since most generations don't need few-shot examples and we save the round-trip.
+  const patternSnippet = skip_pattern_library ? "" : await getPatternLibrarySnippet();
+  const enrichedSystem =
+    lawSnippet +
+    String(system) +
+    kitSnippet +
+    ctxSnippet +
+    voiceSnippet +
+    zatcaSnippet +
+    patternSnippet;
 
   const totalLength = enrichedSystem.length + String(user).length;
   if (totalLength > MAX_PROMPT_CHARS) {

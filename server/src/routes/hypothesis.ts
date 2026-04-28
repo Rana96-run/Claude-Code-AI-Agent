@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { sheetsAppendHypothesis } from "../lib/sheets-client.js";
+import { bustPatternLibraryCache } from "../lib/pattern-library.js";
 import { logger } from "../lib/logger.js";
 
 const router = Router();
@@ -53,7 +54,10 @@ router.post("/hypothesis/log", async (req, res) => {
       channel,
       funnel_stage,
     });
-    logger.info({ id, hypothesis: String(hypothesis).slice(0, 80) }, "hypothesis: logged");
+    // If this is a WIN, invalidate the Pattern Library cache so next /api/generate
+    // call picks it up immediately (D1 — closing the learning loop)
+    if (verdict === "WIN") bustPatternLibraryCache();
+    logger.info({ id, hypothesis: String(hypothesis).slice(0, 80), verdict }, "hypothesis: logged");
     res.status(200).json({ ok: true, id });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });

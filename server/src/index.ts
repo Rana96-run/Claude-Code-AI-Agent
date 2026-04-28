@@ -3,6 +3,9 @@ import { startSocialPoller } from "./lib/hubspot-social-poller.js";
 import { startCompetitorPoller } from "./lib/competitor-poller.js";
 import { startWeeklyDigest } from "./lib/weekly-digest.js";
 import { startMonitorScheduler } from "./lib/competitor-monitor.js";
+import { startVoiceRefresher } from "./lib/customer-voice.js";
+import { startZatcaWatcher } from "./lib/zatca-watcher.js";
+import { callClaude } from "./lib/ai-call.js";
 
 const port = Number(process.env.PORT) || 8080;
 
@@ -13,4 +16,7 @@ app.listen(port, () => {
   startCompetitorPoller();
   startWeeklyDigest();
   startMonitorScheduler();
+  // Knowledge feeds (D2 + D3) — make the agent smarter every day
+  startVoiceRefresher(callClaude);
+  startZatcaWatcher(callClaude);
 });

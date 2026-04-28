@@ -44,6 +44,10 @@ export interface WeekDiff {
   instagram_top_post?: AdSnapshot;
   youtube_new_videos: number;
   notable_angles: string[];
+  /* Master prompt §8.4: ads running >30 days = likely profitable.
+     We surface these separately so the AI weights them higher when shaping
+     counter-creatives. Format: "[source] hook (Nd live)" */
+  proven_winners: string[];
   /* Top 3 items (mix of FB + Google + IG + YT) with images, for Slack samples */
   top_samples: Array<AdSnapshot & { source: "facebook" | "google" | "instagram" | "youtube" }>;
 }
@@ -85,6 +89,30 @@ export function diffSnapshots(
     .filter((h): h is string => !!h)
     .slice(0, 5);
 
+  // Proven winners — master prompt §8.4: ads live >30 days are likely profitable.
+  // Look across the FULL current snapshot (not just "new this week") for items
+  // whose started date is >30 days ago.
+  const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1_000;
+  const now = Date.now();
+  const allCurrent = [
+    ...(thisWeek.facebook || []).map((a) => ({ ...a, src: "facebook" as const })),
+    ...(thisWeek.google || []).map((a) => ({ ...a, src: "google" as const })),
+    ...(thisWeek.instagram || []).map((a) => ({ ...a, src: "instagram" as const })),
+    ...(thisWeek.youtube || []).map((a) => ({ ...a, src: "youtube" as const })),
+  ];
+  const provenWinners = allCurrent
+    .filter((a) => {
+      if (!a.started) return false;
+      const started = Date.parse(a.started);
+      return !isNaN(started) && now - started > THIRTY_DAYS_MS;
+    })
+    .map((a) => {
+      const days = Math.floor((now - Date.parse(a.started!)) / (24 * 60 * 60 * 1_000));
+      const hook = (a.hook || a.body || "").slice(0, 70);
+      return `[${a.src}] "${hook}" (${days}d live)`;
+    })
+    .slice(0, 5);
+
   // Top 3 visual samples: prefer ones WITH images, mix sources
   const samples: WeekDiff["top_samples"] = [];
   const tag = (arr: AdSnapshot[], src: "facebook" | "google" | "instagram" | "youtube"): WeekDiff["top_samples"] =>
@@ -114,6 +142,7 @@ export function diffSnapshots(
     instagram_top_post: igNew[0],
     youtube_new_videos: ytNew.length,
     notable_angles: angles,
+    proven_winners: provenWinners,
     top_samples: samples,
   };
 }
@@ -167,7 +196,9 @@ Return ONLY valid JSON:
   Google:   +${d.google_new} new ads, -${d.google_paused} paused
   Instagram: +${d.instagram_new_posts} new posts
   Notable hooks/angles seen:
-${d.notable_angles.map((a) => `    - "${a}"`).join("\n") || "    (none captured)"}`,
+${d.notable_angles.map((a) => `    - "${a}"`).join("\n") || "    (none captured)"}
+  PROVEN WINNERS (live >30 days — likely profitable, weight these higher):
+${d.proven_winners.map((p) => `    * ${p}`).join("\n") || "    (none yet)"}`,
     )
     .join("\n\n")}`;
 
@@ -261,6 +292,19 @@ export function formatSlackBlocks(
       blocks.push({
         type: "section",
         text: { type: "mrkdwn", text: analysisBits.join("\n\n") },
+      });
+    }
+
+    // Proven winners (master prompt §8.4 — ads >30 days are likely profitable)
+    if (d.proven_winners && d.proven_winners.length > 0) {
+      blocks.push({
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text:
+            `*✅ إعلانات مثبتة (مشغّلة >30 يوم — مرجّح ربحية)*\n` +
+            d.proven_winners.slice(0, 3).map((p) => `• ${p}`).join("\n"),
+        },
       });
     }
 
