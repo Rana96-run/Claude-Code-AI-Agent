@@ -171,6 +171,42 @@ router.post("/competitor-ads", async (req, res) => {
   });
 });
 
+/* ─── GET /api/competitor-ads/actor-schema?id=user~name ───────────────────
+   Returns the actor's input schema so we know what fields it expects. */
+router.get("/competitor-ads/actor-schema", async (req, res) => {
+  const token = process.env.APIFY_TOKEN;
+  if (!token) {
+    res.status(500).json({ error: "APIFY_TOKEN not set" });
+    return;
+  }
+  const id = String(req.query.id || "").trim();
+  if (!id) {
+    res.status(400).json({ error: "Missing id parameter" });
+    return;
+  }
+  try {
+    const r = await fetch(`https://api.apify.com/v2/acts/${id}?token=${encodeURIComponent(token)}`, {
+      signal: AbortSignal.timeout(10000),
+    });
+    const j = (await r.json().catch(() => ({}))) as { data?: any };
+    if (!r.ok) {
+      res.status(r.status).json({ error: `HTTP ${r.status}` });
+      return;
+    }
+    const a = j.data || {};
+    res.status(200).json({
+      id: `${a.username}~${a.name}`,
+      title: a.title,
+      defaultRunInput: a.defaultRunOptions?.input,
+      exampleInput: a.exampleRunInput || a.defaultRunInput,
+      inputSchema: a.inputSchema ? Object.keys(a.inputSchema?.properties || {}) : null,
+      readme_excerpt: (a.readme || "").slice(0, 1000),
+    });
+  } catch (err) {
+    res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
 /* ─── GET /api/competitor-ads/discover-actor?q=google+ads ─────────────────
    Helper to find the right Apify actor ID for a search term, since
    actor names change and there's no canonical list. */
