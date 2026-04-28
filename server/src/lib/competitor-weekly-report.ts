@@ -110,7 +110,7 @@ Return ONLY valid JSON:
   return { system, user };
 }
 
-/* ─── Slack Block Kit formatter ────────────────────────────────────────── */
+/* ─── Slack Block Kit formatter — humanly-read narrative ───────────────── */
 export function formatSlackBlocks(
   diffs: WeekDiff[],
   ai: {
@@ -120,67 +120,98 @@ export function formatSlackBlocks(
     alert?: string | null;
   },
   weekLabel: string,
+  sheetUrl?: string,
 ) {
+  // Friendly opener — different message based on activity level
+  const totalNew = diffs.reduce(
+    (s, d) => s + d.facebook_new + d.google_new + d.instagram_new_posts,
+    0,
+  );
+  const opener =
+    totalNew === 0
+      ? "أسبوع هادئ على ساحة المنافسين — مافي حركة كبيرة هذا الأسبوع."
+      : totalNew < 5
+      ? `أسبوع متوسط — رصدنا ${totalNew} نشاط جديد عند المنافسين.`
+      : `أسبوع نشط جداً — المنافسين أطلقوا ${totalNew} نشاط جديد.`;
+
   const blocks: any[] = [
     {
       type: "header",
-      text: { type: "plain_text", text: `📊 Competitor Intel — ${weekLabel}`, emoji: true },
+      text: { type: "plain_text", text: `📊 ملخّص المنافسين — ${weekLabel}`, emoji: true },
     },
     {
       type: "section",
-      text: { type: "mrkdwn", text: `*${ai.headline || "أسبوع نشاط منافسين"}*` },
+      text: {
+        type: "mrkdwn",
+        text: `${opener}\n\n*${ai.headline || "اتجاه الأسبوع"}*`,
+      },
     },
     { type: "divider" },
   ];
 
-  // Per-competitor cards
+  // Per-competitor — narrative paragraph (not stat dump)
   for (const d of diffs) {
-    const ct = (ai.competitors || []).find((c) => c.name.toLowerCase() === d.competitor.toLowerCase());
-    const totalNew = d.facebook_new + d.google_new + d.instagram_new_posts;
-    if (totalNew === 0 && d.facebook_paused === 0 && d.google_paused === 0) continue;
+    const ct = (ai.competitors || []).find(
+      (c) => c.name.toLowerCase() === d.competitor.toLowerCase(),
+    );
+    const compTotal = d.facebook_new + d.google_new + d.instagram_new_posts;
+    if (compTotal === 0 && d.facebook_paused === 0 && d.google_paused === 0) continue;
 
-    const stats = [
-      d.facebook_new > 0 ? `Meta: +${d.facebook_new}` : null,
-      d.facebook_paused > 0 ? `Meta paused: -${d.facebook_paused}` : null,
-      d.google_new > 0 ? `Google: +${d.google_new}` : null,
-      d.google_paused > 0 ? `Google paused: -${d.google_paused}` : null,
-      d.instagram_new_posts > 0 ? `IG posts: +${d.instagram_new_posts}` : null,
-    ]
-      .filter(Boolean)
-      .join("  ·  ");
+    // Build a natural-language sentence about what they did
+    const activity: string[] = [];
+    if (d.facebook_new > 0) activity.push(`أطلقوا ${d.facebook_new} إعلان جديد على Meta`);
+    if (d.google_new > 0) activity.push(`${d.google_new} إعلان على Google`);
+    if (d.instagram_new_posts > 0) activity.push(`نشروا ${d.instagram_new_posts} منشور على إنستغرام`);
+    if (d.facebook_paused > 0) activity.push(`أوقفوا ${d.facebook_paused} إعلان من Meta`);
+    if (d.google_paused > 0) activity.push(`أوقفوا ${d.google_paused} إعلان من Google`);
 
+    const activityLine = activity.length > 0 ? activity.join("، ") : "لا تغيير ملحوظ";
+
+    let body = `*🏢 ${d.competitor}*\n${activityLine}.`;
+    if (ct?.summary) body += `\n\n_${ct.summary}_`;
+    if (ct?.watch) body += `\n\n👀 *للمراقبة:* ${ct.watch}`;
+    if (d.notable_angles.length > 0) {
+      body += `\n\n💡 الزوايا الجديدة:\n${d.notable_angles.map((a) => `   • _${a}_`).join("\n")}`;
+    }
+
+    blocks.push({
+      type: "section",
+      text: { type: "mrkdwn", text: body },
+    });
+    blocks.push({ type: "divider" });
+  }
+
+  // Recommended actions — friendly framing
+  if (ai.recommended_actions && ai.recommended_actions.length > 0) {
     blocks.push({
       type: "section",
       text: {
         type: "mrkdwn",
-        text: `*${d.competitor.toUpperCase()}*\n${stats}${ct ? `\n_${ct.summary}_` : ""}${ct?.watch ? `\n⚠ Watch: ${ct.watch}` : ""}`,
+        text: `🎯 *إيش نسوي نحن؟*\n${ai.recommended_actions
+          .map((a, i) => `*${i + 1}.* ${a}`)
+          .join("\n")}`,
       },
     });
-    if (d.notable_angles.length > 0) {
-      blocks.push({
-        type: "context",
-        elements: [{ type: "mrkdwn", text: `Angles: ${d.notable_angles.map((a) => `\`${a}\``).join(" · ")}` }],
-      });
-    }
   }
 
-  // Recommended actions
-  if (ai.recommended_actions && ai.recommended_actions.length > 0) {
+  // Urgent alert — visually distinct
+  if (ai.alert) {
+    blocks.push({ type: "divider" });
+    blocks.push({
+      type: "section",
+      text: { type: "mrkdwn", text: `🚨 *تنبيه عاجل*\n${ai.alert}` },
+    });
+  }
+
+  // Sheet link + signature
+  if (sheetUrl) {
     blocks.push({ type: "divider" });
     blocks.push({
       type: "section",
       text: {
         type: "mrkdwn",
-        text: `🎯 *الإجراءات المقترحة لقيود:*\n${ai.recommended_actions.map((a, i) => `${i + 1}. ${a}`).join("\n")}`,
+        text: `📋 *كل البيانات الخام (الإعلانات + المنشورات) محفوظة في الشيت:*\n<${sheetUrl}|افتح Google Sheet — تبويب "Competitor Posts">`,
       },
-    });
-  }
-
-  // Urgent alert
-  if (ai.alert) {
-    blocks.push({
-      type: "section",
-      text: { type: "mrkdwn", text: `🚨 *تنبيه:* ${ai.alert}` },
     });
   }
 
@@ -189,7 +220,7 @@ export function formatSlackBlocks(
     elements: [
       {
         type: "mrkdwn",
-        text: `_Auto-generated by Somaa · Powered by Apify + Claude · Open the app to drill in._`,
+        text: `_Somaa — وكيل المحتوى الذكي · ${new Date().toLocaleString("ar-SA", { dateStyle: "medium", timeStyle: "short" })}_`,
       },
     ],
   });

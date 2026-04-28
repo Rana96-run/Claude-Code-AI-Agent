@@ -21,6 +21,8 @@ import {
   type CompetitorSnapshot,
   type AdSnapshot,
 } from "./competitor-weekly-report.js";
+import { sheetsAppendCompetitorPosts, sheetsHealthCheck } from "./sheets-client.js";
+import type { CompetitorPost } from "./content-library.js";
 import { logger } from "./logger.js";
 
 // Tracked competitors — each entry is the COMPETITORS key from competitor-ads.ts
@@ -187,12 +189,40 @@ export async function runMonitorOnce(opts: { competitors?: string[]; postToSlack
 
   logger.info({ competitors, today }, "monitor: starting weekly run");
 
-  // 1. Scrape each competitor
+  // 1. Scrape each competitor + write each batch to the Google Sheet
   const thisWeek: CompetitorSnapshot[] = [];
+  const allSheetRows: CompetitorPost[] = [];
+  const fetchedAt = new Date().toISOString();
   for (const comp of competitors) {
     const snap = await scrapeCompetitor(comp);
     writeSnapshot(snap, today);
     thisWeek.push(snap);
+    // Flatten this competitor's ads into the Sheet's CompetitorPost shape
+    const flatten = (ads: AdSnapshot[] | undefined, channel: string) =>
+      (ads || []).map((a): CompetitorPost => ({
+        competitor: comp,
+        channel,
+        content_text: [a.hook, a.body, a.caption].filter(Boolean).join(" — ").slice(0, 800),
+        post_url: a.detail_url || undefined,
+        fetched_at: fetchedAt,
+        engagement_hint: (a.platforms || []).join(",") || undefined,
+      }));
+    allSheetRows.push(...flatten(snap.facebook, "Facebook Ads"));
+    allSheetRows.push(...flatten(snap.instagram, "Instagram"));
+    allSheetRows.push(...flatten(snap.google, "Google Ads"));
+  }
+
+  // Append all scraped posts to the Google Sheet (deduped by URL inside)
+  if (allSheetRows.length > 0) {
+    try {
+      await sheetsAppendCompetitorPosts(allSheetRows);
+      logger.info({ count: allSheetRows.length }, "monitor: posts appended to Google Sheet");
+    } catch (err) {
+      logger.warn(
+        { err: err instanceof Error ? err.message : String(err) },
+        "monitor: sheet append failed (non-fatal)",
+      );
+    }
   }
 
   // 2. Load last week's snapshots (for diff). Missing = treated as fresh.
@@ -224,8 +254,17 @@ export async function runMonitorOnce(opts: { competitors?: string[]; postToSlack
     ai = { headline: "AI summary unavailable", competitors: [], recommended_actions: [] };
   }
 
-  // 5. Slack
-  const blocks = formatSlackBlocks(diffs, ai, weekLabel);
+  // 5. Resolve the Google Sheet URL so the Slack message can link to full data
+  let sheetUrl: string | undefined;
+  try {
+    const health = await sheetsHealthCheck();
+    if (health.ok) sheetUrl = health.url;
+  } catch {
+    // non-fatal — message just won't include the sheet link
+  }
+
+  // 6. Slack — narrative, human-readable format
+  const blocks = formatSlackBlocks(diffs, ai, weekLabel, sheetUrl);
   let slackPosted = false;
   if (opts.postToSlack !== false) {
     await postToSlack(blocks, ai.headline || `Competitor Intel — ${weekLabel}`);
