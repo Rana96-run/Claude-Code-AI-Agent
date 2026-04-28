@@ -1386,7 +1386,7 @@ export default function CreativeOS(){
                         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
                           <div style={{display:"flex",alignItems:"center",gap:5}}>
                             <span style={{fontSize:10,fontWeight:700,color:"#17a3a3"}}>{ad.page_name}</span>
-                            <span style={{fontSize:8,fontWeight:700,padding:"1px 5px",borderRadius:3,...(isPaid?{background:"rgba(245,166,35,.12)",color:"#f5a623"}:{background:"rgba(93,200,122,.1)",color:"#5dc87a"})}}>{isPaid?T("مدفوع","PAID"):"Organic"}</span>
+                            <span style={{fontSize:8,fontWeight:700,padding:"1px 5px",borderRadius:3,...(isPaid?{background:"rgba(245,166,35,.12)",color:"#f5a623"}:{background:"rgba(93,200,122,.1)",color:"#5dc87a"})}}>{ isPaid?"Paid":"Organic"}</span>
                           </div>
                           <div style={{display:"flex",gap:3}}>{(ad.platforms||[]).slice(0,3).map(p=><Tag key={p} ch={p.slice(0,3)} style={{fontSize:8.5}}/>)}</div>
                         </div>
