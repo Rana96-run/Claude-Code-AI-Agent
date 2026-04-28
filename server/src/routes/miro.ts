@@ -135,7 +135,7 @@ router.post("/update-board", async (req, res) => {
   const { board_id, clear = true } = req.body as { board_id?: string; clear?: boolean };
   if (!board_id) return res.status(400).json({ error: "board_id required" });
   try {
-    if (clear) await clearBoard(miroToken.access_token, board_id);
+    if (clear) await clearArchitectureFrame(miroToken.access_token, board_id, true);
     await drawAgentFlow(miroToken.access_token, board_id);
     res.json({ ok: true, view_link: `https://miro.com/app/board/${board_id}/` });
   } catch (e) {
@@ -153,7 +153,8 @@ router.post("/draw-system-architecture", async (req, res) => {
   const boardId =
     (req.body as { board_id?: string }).board_id ?? process.env.MIRO_BOARD_ID;
   if (!boardId) return res.status(400).json({ error: "board_id required or set MIRO_BOARD_ID" });
-  const clear = (req.body as { clear?: boolean }).clear !== false;
+  // Default to false — only wipe the architecture frame, not the whole board
+  const clear = (req.body as { clear?: boolean }).clear === true;
   const viewLink = `https://miro.com/app/board/${boardId}/`;
 
   // Fire-and-forget: drawing 30+ shapes + 22 connectors takes 60-90s
@@ -170,7 +171,7 @@ router.post("/draw-system-architecture", async (req, res) => {
   console.log("[miro] system architecture render started in background");
   (async () => {
     try {
-      if (clear) await clearBoard(miroToken!.access_token, boardId);
+      await clearArchitectureFrame(miroToken!.access_token, boardId, clear);
       await drawSystemArchitecture(miroToken!.access_token, boardId);
       // eslint-disable-next-line no-console
       console.log("[miro] system architecture render complete");
@@ -198,29 +199,51 @@ router.post("/draw-agent-flow", async (req, res) => {
   }
 });
 
-/* Delete every item on a board so we can start fresh */
-async function clearBoard(token: string, boardId: string) {
+/* ── Architecture frame name — the only thing we ever auto-delete ── */
+const ARCH_FRAME_TITLE = "Qoyod Creative OS — Architecture v3";
+
+/* Find and delete the architecture frame (and everything inside it).
+   When forceWipeBoard=true (only via explicit API call), falls back to
+   deleting every item — useful for a full reset. All other content the
+   team manually adds to the board is always preserved. */
+async function clearArchitectureFrame(token: string, boardId: string, forceWipeBoard = false) {
   const hdrs = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
-  let cursor: string | undefined;
-  let deleted = 0;
-  do {
-    const url = cursor
-      ? `${MIRO_API}/boards/${boardId}/items?limit=50&cursor=${cursor}`
-      : `${MIRO_API}/boards/${boardId}/items?limit=50`;
-    const r = await fetch(url, { headers: hdrs });
-    if (!r.ok) break;
-    const data = (await r.json()) as { data?: { id: string }[]; cursor?: string };
-    const items = data.data ?? [];
-    for (const item of items) {
-      await fetch(`${MIRO_API}/boards/${boardId}/items/${item.id}`, {
-        method: "DELETE",
-        headers: hdrs,
-      }).catch(() => {});
-      deleted++;
+
+  // Find frames with our known title
+  const r = await fetch(`${MIRO_API}/boards/${boardId}/frames?limit=50`, { headers: hdrs });
+  if (r.ok) {
+    const data = (await r.json()) as { data?: { id: string; data?: { title?: string } }[] };
+    for (const frame of data.data ?? []) {
+      if (frame.data?.title === ARCH_FRAME_TITLE) {
+        await fetch(`${MIRO_API}/boards/${boardId}/frames/${frame.id}`, {
+          method: "DELETE",
+          headers: hdrs,
+        }).catch(() => {});
+        console.log("[miro] deleted architecture frame:", frame.id);
+        return;
+      }
     }
-    cursor = data.cursor;
-  } while (cursor);
-  return deleted;
+  }
+
+  // Frame not found — if forceWipeBoard is explicitly set, wipe everything
+  if (forceWipeBoard) {
+    let cursor: string | undefined;
+    do {
+      const url = cursor
+        ? `${MIRO_API}/boards/${boardId}/items?limit=50&cursor=${cursor}`
+        : `${MIRO_API}/boards/${boardId}/items?limit=50`;
+      const pr = await fetch(url, { headers: hdrs });
+      if (!pr.ok) break;
+      const pd = (await pr.json()) as { data?: { id: string }[]; cursor?: string };
+      for (const item of pd.data ?? []) {
+        await fetch(`${MIRO_API}/boards/${boardId}/items/${item.id}`, {
+          method: "DELETE",
+          headers: hdrs,
+        }).catch(() => {});
+      }
+      cursor = pd.cursor;
+    } while (cursor);
+  }
 }
 
 async function drawWorkflow(token: string, boardId: string) {
@@ -793,11 +816,35 @@ router.post("/draw-designer-pipeline", async (req, res) => {
 async function drawSystemArchitecture(token: string, boardId: string) {
   const BASE = `${MIRO_API}/boards/${boardId}`;
   const hdrs = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+
+  // Create the named architecture frame first.
+  // All items will be children of this frame so future re-renders
+  // only ever delete this frame — never touching the rest of the board.
+  const FRAME_W = 1700;
+  const FRAME_H = 1600;
+  const FRAME_X = 0;   // centre of board
+  const FRAME_Y = 0;
+  const frameRes = await fetch(`${BASE}/frames`, {
+    method: "POST",
+    headers: hdrs,
+    body: JSON.stringify({
+      data: { title: ARCH_FRAME_TITLE, format: "custom", type: "freeform" },
+      style: { fillColor: "#021030" },
+      position: { x: FRAME_X, y: FRAME_Y, origin: "center" },
+      geometry: { width: FRAME_W, height: FRAME_H },
+    }),
+  });
+  const frameData = (await frameRes.json()) as { id?: string; message?: string };
+  if (!frameRes.ok) throw new Error(`frame: ${frameData.message || JSON.stringify(frameData)}`);
+  const frameId = frameData.id!;
+
   const post = async (path: string, body: object) => {
+    // Inject parent frame into every item so they live inside the frame
+    const enriched = { ...(body as Record<string, unknown>), parent: { id: frameId } };
     const r = await fetch(`${BASE}${path}`, {
       method: "POST",
       headers: hdrs,
-      body: JSON.stringify(body),
+      body: JSON.stringify(enriched),
     });
     const d = (await r.json()) as { message?: string; description?: string; id?: string };
     if (!r.ok) throw new Error(`${path}: ${d.message || d.description || JSON.stringify(d)}`);
