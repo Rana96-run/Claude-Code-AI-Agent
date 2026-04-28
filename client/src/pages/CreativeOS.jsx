@@ -988,6 +988,55 @@ export default function CreativeOS(){
     }catch(e){setMErr(e.message);}finally{setMLd(false);}
   },[lang,mComp,mChan,mDesc]);
 
+  /* ── Content Calendar ── */
+  const genCalendar=useCallback(async()=>{
+    if(!calPlatforms.length){setCalErr(T("اختر منصة واحدة على الأقل","Select at least one platform"));return;}
+    const px=PRODUCTS.find(p=>p.v===calProd)||PRODUCTS[0];
+    const ol=lang==="en"?"All captions in English.":"All captions in Saudi Arabic dialect (مو/وش/ليش). NEVER Egyptian.";
+    const refCopy=`Reference captions from real Qoyod campaigns:\n- "سهل إدارة أعمالك بنظام فواتير ذكي وأصدر فواتيرك الإلكترونية من جوالك مع قيود"\n- "ركّز على نمو مشروعك واترك تعقيد الحسابات علينا — SOCPA certified"\n- "آلاف التجار دخلوا المرحلة الثانية للفوترة الإلكترونية مع قيود، أنت جاهز؟"\nUse these as tone/style benchmark.`;
+    const postsPerMonth=({"daily":30,"5 posts/week":20,"4 posts/week":16,"3 posts/week":12,"2 posts/week":8,"1 post/week":4})[calFreq]||12;
+    const sys=`You are a social media content strategist for Qoyod (Saudi cloud accounting SaaS, ZATCA-certified). ${ol}\n${QOYOD_VOICE}\n${refCopy}\nIMPORTANT: Each post is on ONE platform only. Distribute the ${postsPerMonth} posts across the selected platforms (rotate them — do NOT generate the same post on every platform). Captions ≤80 words each. Themes ≤5 words each.\nReturn ONLY valid JSON:\n{"month":"...","goal":"...","total_posts":${postsPerMonth},"weeks":[{"week":1,"posts":[{"day":"...","platform":"...","format":"Static/Reel/Story/Carousel","topic":"...","design_text":"...","caption":"...","hashtags":"...","cta":"...","funnel_stage":"TOF/MOF/BOF"}]}],"themes":["..."],"hashtag_sets":{"main":"...","secondary":"..."}}`;
+    const extraProds=calExtras.map(v=>PRODUCTS.find(p=>p.v===v)).filter(Boolean);
+    const extraCtx=extraProds.length?` | Also highlight: ${extraProds.map(p=>lang==="en"?p.v:p.ar).join(", ")}`:"";
+    const usr=`Product:${calProd} Desc:${lang==="en"?px.desc_en:px.desc_ar}${extraCtx} Month:${calMonth} Platforms:${calPlatforms.join(",")} (${calPlatforms.length} platforms — rotate posts across them) Frequency:${calFreq} (${postsPerMonth} posts total) Goal:${calGoal}`;
+    const budget=Math.min(Math.max(2500,postsPerMonth*150+calPlatforms.length*250+1500),8000);
+    setCalLd(true);setCalErr("");setCalRes(null);
+    try{setCalRes(await callAI(sys,usr,budget));}catch(e){setCalErr(e.message);}finally{setCalLd(false);}
+  },[lang,calProd,calExtras,calMonth,calPlatforms,calFreq,calGoal]);
+
+  /* ── A/B Variants ── */
+  const genAB=useCallback(async()=>{
+    if(!abConcept){setAbErr(T("اكتب الفكرة أو الرسالة أولاً","Enter a concept or message first"));return;}
+    const px=PRODUCTS.find(p=>p.v===abProd)||PRODUCTS[0];
+    const ol=lang==="en"?"Write all copy in English.":"Write all Arabic copy in Saudi dialect (مو/وش/ليش). NEVER Egyptian.";
+    const sys=`Senior CRO copywriter for Qoyod (Saudi cloud accounting SaaS). ${ol}\n${QOYOD_VOICE}\nProduce two genuinely different A/B variants — different angle, different hook type, different emotional trigger.\nReturn ONLY valid JSON:\n{"concept_summary":"...","variant_a":{"label":"A — [angle name]","hook":"...","headline":"...","body":"...","cta":"...","trust":"...","hook_type":"...","emotional_trigger":"...","predicted_ctr":"high/med/low","why":"..."},"variant_b":{"label":"B — [angle name]","hook":"...","headline":"...","body":"...","cta":"...","trust":"...","hook_type":"...","emotional_trigger":"...","predicted_ctr":"high/med/low","why":"..."},"recommendation":"...","testing_note":"..."}`;
+    const usr=`Product:${abProd} Desc:${lang==="en"?px.desc_en:px.desc_ar} Channel:${abChan} Format:${abFmt} Audience:${abAud} Concept:"${abConcept}"`;
+    setAbLd(true);setAbErr("");setAbRes(null);
+    try{setAbRes(await callAI(sys,usr,2500));}catch(e){setAbErr(e.message);}finally{setAbLd(false);}
+  },[lang,abProd,abConcept,abChan,abFmt,abAud]);
+
+  /* ── Email / WhatsApp Sequences ── */
+  const genSeq=useCallback(async()=>{
+    const px=PRODUCTS.find(p=>p.v===seqProd)||PRODUCTS[0];
+    const ol=lang==="en"?"Write all copy in English.":"Write all Arabic copy in Saudi dialect. NEVER Egyptian.";
+    const typeLabel={"welcome":"Welcome series","nurture":"Nurture series","winback":"Win-back series","demo":"Post-demo follow-up","announcement":"Feature announcement"}[seqType]||seqType;
+    const channelNote=seqChannel==="whatsapp"?"Messages must be short (max 3 lines each), conversational, no bullet lists, include one link placeholder [LINK].":seqChannel==="sms"?"SMS: max 160 chars per message, ultra-brief.":"Email: subject line + preview text + body (3-6 sentences) + CTA button label.";
+    const sys=`You are a B2B lifecycle marketing specialist for Qoyod. ${ol}\n${QOYOD_VOICE}\n${channelNote}\nSequence type: ${typeLabel}\nReturn ONLY valid JSON:\n{"sequence_name":"...","channel":"${seqChannel}","type":"${seqType}","messages":[{"step":1,"send_timing":"...","subject":"...","preview_text":"...","body":"...","cta":"...","goal":"...","tone":"..."}]}`;
+    const usr=`Product:${seqProd} Desc:${lang==="en"?px.desc_en:px.desc_ar} Steps:${seqSteps} Channel:${seqChannel} Type:${seqType}`;
+    setSeqLd(true);setSeqErr("");setSeqRes(null);
+    try{setSeqRes(await callAI(sys,usr,3500));}catch(e){setSeqErr(e.message);}finally{setSeqLd(false);}
+  },[lang,seqProd,seqType,seqSteps,seqChannel]);
+
+  /* ── Ad Spec Sheet ── */
+  const genSpec=useCallback(async()=>{
+    const px=PRODUCTS.find(p=>p.v===specProd)||PRODUCTS[0];
+    const ol=lang==="en"?"Respond in English.":"Respond in Arabic with English tech terms where standard.";
+    const sys=`You are a performance creative strategist for Qoyod. ${ol}\nGenerate a complete ad creative spec sheet for the selected platforms and product.\nReturn ONLY valid JSON:\n{"product":"...","goal":"...","platforms":[{"platform":"...","formats":[{"format":"...","dimensions":"...","aspect_ratio":"...","text_limit":"...","creative_direction":"...","dos":["..."],"donts":["..."]}]}],"global_dos":["..."],"global_donts":["..."]}`;
+    const usr=`Product:${specProd} Desc:${lang==="en"?px.desc_en:px.desc_ar} Platforms:${specPlatforms.join(",")} Goal:${specGoal}`;
+    setSpecLd(true);setSpecErr("");setSpecRes(null);
+    try{setSpecRes(await callAI(sys,usr,3500));}catch(e){setSpecErr(e.message);}finally{setSpecLd(false);}
+  },[lang,specProd,specPlatforms,specGoal]);
+
 
   const TABS=[
     ["content", T("إنشاء محتوى","Content")],
