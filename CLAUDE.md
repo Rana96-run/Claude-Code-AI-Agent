@@ -88,13 +88,23 @@ fine and only shows up as black screens to the user.
 
 | File | Purpose |
 |------|---------|
-| `server/src/routes/generate.ts` | Anthropic proxy with multi-provider fallback (Anthropic→Gemini), retry, dedup |
-| `server/src/routes/competitor-ads.ts` | Apify-powered FB+IG capture, jina-powered Google ads, weekly monitor trigger |
+| `server/src/routes/generate.ts` | 3-provider AI proxy (Anthropic→OpenAI→Gemini) with retry, dedup, layered prompt enrichment (Brand Law + Competitor Context + Customer Voice + ZATCA + Pattern Library) |
+| `server/src/routes/competitor-ads.ts` | Apify FB+IG capture, jina Google ads, YouTube Data API, manual monitor trigger |
+| `server/src/routes/hypothesis.ts` | POST /api/hypothesis/log → Sheet "Hypothesis Ledger" tab |
+| `server/src/routes/editor-qa.ts` | 11-rule pre-publish checklist (master prompt §13) |
+| `server/src/routes/reports.ts` | Daily Pulse + Monthly Strategic Review (master prompt §9) |
 | `server/src/routes/fetch-url.ts` | Generic URL content fetcher (X/LinkedIn/web) via r.jina.ai |
-| `server/src/lib/competitor-monitor.ts` | Sunday 09:00 UTC scheduled monitor → Sheet + Slack |
-| `server/src/lib/competitor-weekly-report.ts` | Diff/AI-summary/Slack-blocks formatter |
+| `server/src/lib/competitor-monitor.ts` | Sunday 09:00 UTC scheduled monitor → Sheet + Slack + Google Doc |
+| `server/src/lib/competitor-weekly-report.ts` | Diff/AI-summary/Slack-blocks formatter (incl. proven_winners >30d) |
+| `server/src/lib/competitor-doc-renderer.ts` | HTML→Google Doc weekly visual report |
+| `server/src/lib/competitor-context.ts` | Synthesizes scrape into prompt-injectable brief |
+| `server/src/lib/customer-voice.ts` | App Store + Play Store + X reviews → pain quotes (D2) |
+| `server/src/lib/zatca-watcher.ts` | ZATCA news + tweets → regulatory awareness (D3) |
+| `server/src/lib/pattern-library.ts` | Reads WIN-tagged hypotheses → few-shot examples (D1) |
+| `server/src/lib/qoyod-brand-law.ts` | Compressed brand law from Master Prompt v1.1 |
+| `server/data/qoyod-master-prompt.md` | Source of truth — full 535-line operating prompt |
 | `server/src/lib/agent-personas.ts` | 6 personas: social, content, cro (paid media), email, editor, orchestrator |
-| `client/src/pages/CreativeOS.jsx` | Main UI: 7 tabs (Content, Campaign, Calendar, Email/WA, Market Watch, Library, ICP) |
+| `client/src/pages/CreativeOS.jsx` | Main UI: 7 tabs (Content, Campaign, Calendar, Email/WA, Market Watch, Library, ICP) + Quick Agent terminal + Hypothesis log modal |
 
 ## Focus areas (no graphic design)
 

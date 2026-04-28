@@ -746,14 +746,6 @@ export default function CreativeOS(){
   },[termPrompt,termPersona,lang]);
 
 
-  const[canvaConn,setCanvaConn]=useState(false);
-  const[canvaLd,setCanvaLd]=useState(false);
-  const[canvaMsg,setCanvaMsg]=useState({});
-  const[miroConn,setMiroConn]=useState(false);
-  const[miroLd,setMiroLd]=useState(false);
-  const[miroMsg,setMiroMsg]=useState("");
-  const[miroErr,setMiroErr]=useState("");
-  const[miroBoardId,setMiroBoardId]=useState("");
   const[driveLd,setDriveLd]=useState({});
   const[driveLinks,setDriveLinks]=useState({});
   const[driveErrs,setDriveErrs]=useState({});
@@ -1321,30 +1313,6 @@ export default function CreativeOS(){
                 ))}
               </div>
             </div>
-            {/* ── Miro Integration Bar ── */}
-            <div style={{...card,padding:0,overflow:"hidden"}}>
-              <div style={{padding:"10px 14px",background:"rgba(7,22,48,.6)",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-                <svg width="20" height="20" viewBox="0 0 64 64" fill="none"><rect width="64" height="64" rx="10" fill="#FFD02F"/><text x="32" y="44" textAnchor="middle" fontSize="32" fontWeight="800" fontFamily="sans-serif" fill="#050038">M</text></svg>
-                <span style={{fontSize:10.5,fontWeight:600,color:miroConn?"#5dc87a":"#6a96aa",flex:1}}>
-                  {miroConn?T("Miro متصل — ابنِ مخطط النظام على لوحتك","Miro connected — build system workflow on your board"):T("اربط Miro لإنشاء مخطط النظام كاملاً","Connect Miro to generate the full system workflow diagram")}
-                </span>
-                {miroConn?(
-                  <>
-                    <button onClick={createMiroBoard} disabled={miroLd} style={{padding:"5px 14px",borderRadius:6,border:"none",background:"#FFD02F",color:"#050038",fontSize:10.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit",opacity:miroLd?.6:1}}>
-                      {miroLd?(
-                        <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:9,height:9,border:"1.5px solid rgba(5,0,56,.3)",borderTopColor:"#050038",borderRadius:"50%",display:"inline-block",animation:"spin 0.8s linear infinite"}}/>{T("يبني...","Building...")}</span>
-                      ):T("✦ أنشئ لوحة Miro","✦ Create Miro Board")}
-                    </button>
-                    <button onClick={disconnectMiro} style={{padding:"5px 10px",borderRadius:6,border:"1px solid rgba(240,112,112,.35)",background:"transparent",color:"#f07070",fontSize:9.5,cursor:"pointer",fontFamily:"inherit"}}>{T("قطع","Disconnect")}</button>
-                  </>
-                ):(
-                  <button onClick={connectMiro} style={{padding:"5px 14px",borderRadius:6,border:"1px solid rgba(255,208,47,.4)",background:"rgba(255,208,47,.1)",color:"#FFD02F",fontSize:10.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{T("ربط Miro","Connect Miro")}</button>
-                )}
-              </div>
-              {miroMsg&&<p style={{padding:"6px 14px",fontSize:10,color:"#5dc87a",margin:0,borderTop:"1px solid rgba(1,53,90,.3)"}}>{miroMsg}{miroBoardId&&<a href={`https://miro.com/app/board/${miroBoardId}/`} target="_blank" rel="noreferrer" style={{color:"#FFD02F",marginRight:8,textDecoration:"underline"}}> ← {T("افتح اللوحة","Open Board")}</a>}</p>}
-              {miroErr&&<p style={{padding:"6px 14px",fontSize:10,color:"#f07070",margin:0,borderTop:"1px solid rgba(1,53,90,.3)"}}>{miroErr}</p>}
-            </div>
-
             {campLd&&<Loader msg={T("يبني الحملة...","Building campaign...")}/>}
             {campRes&&!campLd&&(
               <div style={{...card,animation:"qrise .3s ease both"}}>

@@ -865,11 +865,13 @@ async function drawSystemArchitecture(token: string, boardId: string) {
     text: NAVY,
   });
 
-  // Layer 2 — INPUTS (3 nodes)
-  const xIn = cols(3);
-  nodes.push({ id: "qa", x: xIn[0], y: Y_INPUTS, w: COL_W + 60, h: COL_H, label: "Quick Agent Terminal\nfree-form prompt", fill: TEAL, text: WHITE });
-  nodes.push({ id: "master", x: xIn[1], y: Y_INPUTS, w: COL_W + 60, h: COL_H, label: "Master Prompt v1.1\nbrand law · checklists", fill: TEAL, text: WHITE });
-  nodes.push({ id: "ctx", x: xIn[2], y: Y_INPUTS, w: COL_W + 60, h: COL_H, label: "Competitor Context\nweekly auto-injected", fill: TEAL, text: WHITE });
+  // Layer 2 — KNOWLEDGE FEEDS (5 auto-injected sources of truth)
+  const xIn = cols(5);
+  nodes.push({ id: "qa", x: xIn[0], y: Y_INPUTS, w: COL_W, h: COL_H, label: "Quick Agent\nfree-form prompt", fill: TEAL, text: WHITE });
+  nodes.push({ id: "master", x: xIn[1], y: Y_INPUTS, w: COL_W, h: COL_H, label: "Brand Law\nMaster Prompt v1.1", fill: TEAL, text: WHITE });
+  nodes.push({ id: "ctx", x: xIn[2], y: Y_INPUTS, w: COL_W, h: COL_H, label: "Competitor Context\n(D4: weighted by longevity)", fill: TEAL, text: WHITE });
+  nodes.push({ id: "voice", x: xIn[3], y: Y_INPUTS, w: COL_W, h: COL_H, label: "Customer Voice\n(D2: App Store + X)", fill: GOLD, text: NAVY });
+  nodes.push({ id: "zatca", x: xIn[4], y: Y_INPUTS, w: COL_W, h: COL_H, label: "ZATCA Intel\n(D3: news + deadlines)", fill: GOLD, text: NAVY });
 
   // Layer 3 — AI ENGINE (header bar + 3 providers + reliability stack)
   nodes.push({ id: "ai_bar", x: 0, y: Y_AI_BAR, w: W, h: BANNER_H, label: "AI ENGINE  ·  3-Provider Fallback  +  Retry  +  Dedup  +  Health Probe", fill: NAVY, text: WHITE });
@@ -919,8 +921,8 @@ async function drawSystemArchitecture(token: string, boardId: string) {
 
   // Layer 7 — SELF-LEARNING LOOP
   const loop = [
-    { id: "l_hyp", label: "Hypothesis Ledger\nevery creative logged" },
-    { id: "l_pattern", label: "Pattern Library\nwins → templates" },
+    { id: "l_hyp", label: "Hypothesis Ledger\nLog as Test → Sheet" },
+    { id: "l_pattern", label: "Pattern Library (D1)\nWINs → few-shot prompts" },
     { id: "l_anti", label: "Anti-Pattern Lib\nlosses → guardrails" },
     { id: "l_review", label: "Weekly Self-Review\nMon AM" },
   ];
@@ -962,10 +964,12 @@ async function drawSystemArchitecture(token: string, boardId: string) {
 
   // Connectors — show data flow (subset, key arrows only)
   const conns: Array<[string, string]> = [
-    // Inputs converge into AI engine
+    // All 5 knowledge feeds converge into AI engine
     ["qa", "ai_bar"],
     ["master", "ai_bar"],
     ["ctx", "ai_bar"],
+    ["voice", "ai_bar"],
+    ["zatca", "ai_bar"],
     // AI engine fans out to tabs
     ["anth", "tab_content"],
     ["anth", "tab_camp"],
@@ -982,9 +986,10 @@ async function drawSystemArchitecture(token: string, boardId: string) {
     ["s_g", "s_synth"],
     ["s_yt", "s_synth"],
     ["s_synth", "ctx"],
-    // Self-learning loop feeds back into personas
-    ["l_hyp", "p_content"],
-    ["l_pattern", "p_content"],
+    // Self-learning loop — closes back into the Pattern Library knowledge feed
+    ["tab_content", "l_hyp"],
+    ["l_hyp", "l_pattern"],
+    ["l_pattern", "ai_bar"], // ← THE LOOP: winners feed next generation
     ["l_review", "l_pattern"],
     ["l_review", "l_anti"],
     // Outputs from intel pipeline
