@@ -679,6 +679,56 @@ export default function CreativeOS(){
   const[liveAdsLd,setLiveAdsLd]=useState(false);
   const[liveAdsErr,setLiveAdsErr]=useState("");
 
+  /* ── Quick Agent Terminal (on-demand free-form prompt) ── */
+  const[termOpen,setTermOpen]=useState(false);
+  const[termPrompt,setTermPrompt]=useState("");
+  const[termPersona,setTermPersona]=useState("");
+  const[termLd,setTermLd]=useState(false);
+  const[termTask,setTermTask]=useState(null);
+  const[termErr,setTermErr]=useState("");
+
+  const PERSONAS_LIST=[
+    {id:"",ar:"تلقائي",en:"Auto"},
+    {id:"graphic_designer",ar:"مصمم",en:"Designer"},
+    {id:"social_media",ar:"سوشيال",en:"Social"},
+    {id:"content_creator",ar:"محتوى",en:"Content"},
+    {id:"cro",ar:"CRO",en:"CRO"},
+    {id:"email_lifecycle",ar:"بريد",en:"Email"},
+    {id:"editor_qa",ar:"محرر",en:"Editor"},
+  ];
+
+  const submitTerm=useCallback(async()=>{
+    const text=termPrompt.trim();
+    if(!text){setTermErr(T("اكتب طلبك","Enter your request"));return;}
+    setTermLd(true);setTermErr("");setTermTask(null);
+    try{
+      const r=await fetchWithTimeout("/api/agent/run",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({title:text.slice(0,80),body:text,actor:"ui",persona:termPersona||undefined})},20000);
+      const j=await r.json();
+      if(!r.ok||j.error){throw new Error(j.error||`Error ${r.status}`);}
+      if(j.deduped){setTermErr(T("نفس الطلب أُرسل قبل قليل","Same request was just submitted"));setTermLd(false);return;}
+      // Poll the task status every 2s up to 5 min
+      const taskId=j.task_id;
+      setTermTask({id:taskId,status:j.status,persona:j.persona});
+      let attempts=0;
+      const maxAttempts=150; // 5 min
+      const poll=async()=>{
+        attempts++;
+        try{
+          const tr=await fetchWithTimeout(`/api/agent/tasks/${taskId}`,{},10000);
+          const tj=await tr.json();
+          setTermTask(tj);
+          if(tj.status==="done"||tj.status==="failed"){setTermLd(false);return;}
+          if(attempts<maxAttempts)setTimeout(poll,2000);
+          else{setTermErr(T("انتهت مهلة الانتظار","Polling timed out"));setTermLd(false);}
+        }catch(e){
+          if(attempts<maxAttempts)setTimeout(poll,2000);
+          else{setTermErr(e.message);setTermLd(false);}
+        }
+      };
+      setTimeout(poll,2000);
+    }catch(e){setTermErr(e.message);setTermLd(false);}
+  },[termPrompt,termPersona,lang]);
+
   const[bProd,setBProd]=useState("QFlavours");
   const[bProdExtras,setBProdExtras]=useState([]);
   const[bMsg,setBMsg]=useState("");
@@ -1272,11 +1322,53 @@ export default function CreativeOS(){
             {syncLd?T("يزامن...","Syncing…"):syncResult?`✓ ${syncResult.synced?.length} ${T("ملف","files")}`:T("مزامنة Drive","Sync Drive")}
           </button>
           {syncErr&&<span style={{fontSize:9,color:"#f07070",maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={syncErr}>⚠ {syncErr}</span>}
+          <button onClick={()=>setTermOpen(v=>!v)} title={T("وكيل سريع — أدخل أي طلب","Quick Agent — type any request")} style={{display:"flex",alignItems:"center",gap:5,padding:"3px 9px",borderRadius:5,border:`1px solid ${termOpen?"rgba(245,166,35,.5)":"rgba(245,166,35,.3)"}`,background:termOpen?"rgba(245,166,35,.15)":"transparent",color:"#f5a623",fontSize:9.5,cursor:"pointer",fontFamily:"inherit",fontWeight:600}}>
+            💬 {T("وكيل سريع","Agent")}
+          </button>
           <div style={{display:"flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:4,border:"1px solid rgba(23,163,164,.12)",fontSize:9.5,color:"#2e5468"}}>
             <div style={{width:4,height:4,borderRadius:"50%",background:"#17a3a3"}}/>LIVE
           </div>
         </div>
       </div>
+      {termOpen&&(
+        <div style={{borderBottom:"1px solid rgba(245,166,35,.25)",background:"rgba(245,166,35,.04)",padding:"12px 18px"}}>
+          <div style={{maxWidth:840,margin:"0 auto",display:"flex",flexDirection:"column",gap:8,direction:dir}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+              <span style={{fontSize:11,fontWeight:700,color:"#f5a623"}}>💬 {T("وكيل سريع — أدخل أي طلب","Quick Agent — type any request")}</span>
+              <select value={termPersona} onChange={e=>setTermPersona(e.target.value)} style={{padding:"3px 8px",borderRadius:4,fontSize:10,fontFamily:"inherit"}}>
+                {PERSONAS_LIST.map(p=><option key={p.id} value={p.id}>{lang==="ar"?p.ar:p.en}</option>)}
+              </select>
+            </div>
+            <textarea value={termPrompt} onChange={e=>setTermPrompt(e.target.value)} rows={3} placeholder={T("مثال: اكتب 5 كابشن إنستغرام عن قيود لرمضان — بلهجة سعودية","e.g. Write 5 Instagram captions for Qoyod Ramadan offer in Saudi dialect")} dir={dir} style={{textAlign:lang==="ar"?"right":"left",fontFamily:"inherit",fontSize:11.5,padding:"8px 10px",borderRadius:6,border:"1px solid rgba(245,166,35,.3)",background:"#0a1f3d",color:"#ddeef4",resize:"vertical"}}/>
+            {termErr&&<div style={{padding:"5px 9px",fontSize:10,borderRadius:5,background:"rgba(240,112,112,.08)",border:"1px solid rgba(240,112,112,.25)",color:"#f07070"}}>{termErr}</div>}
+            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+              <button onClick={submitTerm} disabled={termLd||!termPrompt.trim()} style={{padding:"6px 16px",borderRadius:5,border:"none",background:termLd?"rgba(245,166,35,.4)":"#f5a623",color:"#021544",fontSize:11,fontWeight:700,cursor:termLd?"wait":"pointer",fontFamily:"inherit",opacity:termLd||!termPrompt.trim()?.7:1}}>
+                {termLd?T("يعمل...","Running..."):T("شغّل الوكيل","Run Agent")}
+              </button>
+              {termTask&&<span style={{fontSize:9.5,color:"#6a96aa"}}>{termTask.persona&&`@${termTask.persona}`} · {termTask.status}</span>}
+              <button onClick={()=>{setTermOpen(false);setTermTask(null);setTermErr("");}} style={{marginLeft:"auto",padding:"4px 10px",borderRadius:5,border:"1px solid rgba(106,150,170,.3)",background:"none",color:"#6a96aa",fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>{T("إغلاق","Close")}</button>
+            </div>
+            {termTask&&(termTask.status==="done"||termTask.status==="failed")&&(
+              <div style={{padding:"10px 12px",borderRadius:6,background:termTask.status==="done"?"rgba(93,200,122,.06)":"rgba(240,112,112,.06)",border:`1px solid ${termTask.status==="done"?"rgba(93,200,122,.25)":"rgba(240,112,112,.25)"}`,fontSize:11.5,color:"#ddeef4",direction:dir,maxHeight:300,overflow:"auto"}}>
+                {termTask.status==="done"?(
+                  <>
+                    {termTask.summary&&<p style={{fontSize:10.5,color:"#5dc87a",marginBottom:6,fontWeight:600}}>{termTask.summary}</p>}
+                    {termTask.steps&&termTask.steps.length>0&&<div>
+                      {termTask.steps.map((s,i)=><div key={i} style={{padding:"5px 0",borderBottom:i<termTask.steps.length-1?"1px solid rgba(1,53,90,.3)":"none"}}>
+                        <span style={{fontSize:9,color:"#6a96aa",textTransform:"uppercase"}}>{s.tool||"text"}</span>
+                        <p style={{fontSize:11,lineHeight:1.6,whiteSpace:"pre-wrap",marginTop:2}}>{typeof s.output==="string"?s.output:JSON.stringify(s.output,null,2)}</p>
+                      </div>)}
+                    </div>}
+                    {!termTask.summary&&!termTask.steps?.length&&<pre style={{fontSize:10.5,whiteSpace:"pre-wrap"}}>{JSON.stringify(termTask,null,2).slice(0,1500)}</pre>}
+                  </>
+                ):(
+                  <p style={{color:"#f07070"}}>{termTask.error||T("فشلت المهمة","Task failed")}</p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       {syncResult&&<div style={{background:"rgba(66,133,244,.08)",borderBottom:"1px solid rgba(66,133,244,.2)",padding:"5px 18px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
         <span style={{fontSize:9.5,color:"#4285f4",fontWeight:600}}>☁ Drive {T("مزامنة ناجحة","Sync Complete")}:</span>
         {syncResult.synced?.map((f,i)=><span key={i} style={{fontSize:9,padding:"2px 7px",borderRadius:10,background:f.action==="updated"?"rgba(23,163,164,.12)":"rgba(93,200,122,.12)",color:f.action==="updated"?"#17a3a3":"#5dc87a",border:`1px solid ${f.action==="updated"?"rgba(23,163,164,.3)":"rgba(93,200,122,.3)"}`}}>{f.action==="updated"?"↻":"+"} {f.name}</span>)}

@@ -120,12 +120,16 @@ router.post("/competitor-ads", async (req, res) => {
     input = { urls: [{ url: fbUrl }], count: apifyMinCount };
   } else if (source === "google") {
     // solidcode/ads-transparency-scraper — most reliable (17K runs)
+    // The actor uses startUrls pointing at the Ads Transparency Center page.
     actor = "solidcode~ads-transparency-scraper";
+    const adsUrl = `https://adstransparency.google.com/?region=${country}&domain=${c.domain}`;
     input = {
+      startUrls: [{ url: adsUrl }],
+      maxResults: apifyMinCount,
+      // Some variants of the actor look for these fields too — pass all to be safe
+      domain: c.domain,
       domains: [c.domain],
       region: country,
-      maxResults: apifyMinCount,
-      includeImages: true,
     };
   } else if (source === "instagram") {
     if (!c.ig) {
