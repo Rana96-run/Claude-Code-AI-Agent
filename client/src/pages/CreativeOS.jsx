@@ -620,6 +620,23 @@ async function callAI(sys,usr,max_tokens=1400,raw_text=false,_retrying=false){
 export default function CreativeOS(){
   const[lang,setLang]=useState("ar");
   const[tab,setTab]=useState("content");
+  const[aiHealth,setAiHealth]=useState(null); // {ok, provider, latency_ms, degraded?}
+
+  // Probe AI health on mount + every 5 min. Shows a banner if degraded.
+  useEffect(()=>{
+    let cancelled=false;
+    const probe=async()=>{
+      try{
+        const r=await fetch("/api/ai-health");
+        if(!r.ok)return;
+        const j=await r.json();
+        if(!cancelled)setAiHealth(j);
+      }catch{/* silent — health probe failure is non-fatal */}
+    };
+    probe();
+    const id=setInterval(probe,5*60*1000);
+    return()=>{cancelled=true;clearInterval(id);};
+  },[]);
 
   const[prod,setProd]=useState("Qoyod Main");
   const[prodExtras,setProdExtras]=useState([]);
@@ -636,7 +653,7 @@ export default function CreativeOS(){
   const[cl,setCl]=useState(false);
   const[ce,setCe]=useState("");
   const[pvRatio,setPvRatio]=useState("1:1");
-  const[abMode,setAbMode]=useState(false);
+  const[variantCount,setVariantCount]=useState(1); // 1 = single, 2-5 = multi-variant
   const[abConceptCt,setAbConceptCt]=useState("");
 
   const[campType,setCampType]=useState("Seasonal");
@@ -681,40 +698,6 @@ export default function CreativeOS(){
   const[designPrompts,setDesignPrompts]=useState({});
   const[imageProvider,setImageProvider]=useState("nano_banana_2");
 
-  const[lpProd,setLpProd]=useState("QFlavours");
-  const[lpCompUrl,setLpCompUrl]=useState("");
-  const[lpCompDesc,setLpCompDesc]=useState("");
-  const[lpGoal,setLpGoal]=useState("Leads");
-  const[lpSector,setLpSector]=useState("Restaurant");
-  const[lpRes,setLpRes]=useState(null);
-  const[lpLd,setLpLd]=useState(false);
-  const[lpErr,setLpErr]=useState("");
-  const[lpHtml,setLpHtml]=useState("");
-  const[lpHtmlLd,setLpHtmlLd]=useState(false);
-  const[lpHtmlErr,setLpHtmlErr]=useState("");
-  const[lpCopied,setLpCopied]=useState(false);
-  const[lpHtmlB,setLpHtmlB]=useState("");
-  const[lpHtmlBLd,setLpHtmlBLd]=useState(false);
-  const[lpHtmlBErr,setLpHtmlBErr]=useState("");
-  const[lpHtmlBCopied,setLpHtmlBCopied]=useState(false);
-  const[wpUrl,setWpUrl]=useState("");
-  const[wpUser,setWpUser]=useState("");
-  const[wpPass,setWpPass]=useState("");
-  const[wpShowSettings,setWpShowSettings]=useState(false);
-  const[wpUploadingA,setWpUploadingA]=useState(false);
-  const[wpUploadingB,setWpUploadingB]=useState(false);
-  const[wpResA,setWpResA]=useState(null);
-  const[wpResB,setWpResB]=useState(null);
-  const[wpErrA,setWpErrA]=useState("");
-  const[wpErrB,setWpErrB]=useState("");
-  const[wpConfigured,setWpConfigured]=useState(false);
-  const[hsConfigured,setHsConfigured]=useState(false);
-  const[hsUploadingA,setHsUploadingA]=useState(false);
-  const[hsUploadingB,setHsUploadingB]=useState(false);
-  const[hsResA,setHsResA]=useState(null);
-  const[hsResB,setHsResB]=useState(null);
-  const[hsErrA,setHsErrA]=useState("");
-  const[hsErrB,setHsErrB]=useState("");
   const[canvaConn,setCanvaConn]=useState(false);
   const[canvaLd,setCanvaLd]=useState(false);
   const[canvaMsg,setCanvaMsg]=useState({});
@@ -730,12 +713,7 @@ export default function CreativeOS(){
   const[syncResult,setSyncResult]=useState(null);
   const[syncErr,setSyncErr]=useState("");
   /* (Nano-Banana SVG refinement removed with the new design pipeline.) */
-  const[lpQuickDlLd,setLpQuickDlLd]=useState(false);
-  const[lpQuickWpLd,setLpQuickWpLd]=useState(false);
-  const[lpQuickHsLd,setLpQuickHsLd]=useState(false);
-  const[lpQuickErr,setLpQuickErr]=useState("");
   const[advContent,setAdvContent]=useState(false);
-  const[advLP,setAdvLP]=useState(false);
   const[customPersonas,setCustomPersonas]=useState([]);
   const[newPersona,setNewPersona]=useState({title:"",en:"",icon:"👤",tier:"A",pain_ar:"",hook_ar:"",funnel:"TOF",channels:[]});
   const[showAddPersona,setShowAddPersona]=useState(false);
@@ -864,16 +842,21 @@ export default function CreativeOS(){
   },[lang,prod,prodExtras,chan,funnel,sector,featFocus,contentICP,extraNote,buildProdCtx]);
 
   const genContentAB=useCallback(async()=>{
-    if(!abConceptCt.trim()){setCe(T("اكتب الفكرة أو الرسالة لتوليد نسختين","Enter a concept or message to generate A/B variants"));return;}
+    if(!abConceptCt.trim()){setCe(T("اكتب الفكرة أو الرسالة لتوليد النسخ","Enter a concept or message to generate variants"));return;}
+    const n=Math.max(2,Math.min(5,variantCount));
     const{names:prodNames,desc:prodDesc}=buildProdCtx(prod,prodExtras,lang);
     const icpP=ICP_PERSONAS.find(p=>p.id===contentICP);
     const icpCtx=icpP?`Target ICP: ${icpP.title} — Pain: ${icpP.pain_ar} — Hook: ${icpP.hook_ar}`:"";
     const ol=lang==="en"?"Write all copy in English.":"Write all Arabic copy in Saudi dialect (مو/وش/ليش). NEVER Egyptian.";
-    const sys=`Senior CRO copywriter for Qoyod (Saudi cloud accounting SaaS). ${ol}\n${QOYOD_VOICE}\n${icpCtx?"ICP: "+icpCtx:""}\nTwo genuinely different A/B variants — different angle, different hook, different trigger.\nReturn ONLY valid JSON:\n{"variant_a":{"label":"A — [angle name]","ad_copy":{"hook":"...","body":"...","cta":"..."},"google_headlines":["≤30 chars","≤30 chars","≤30 chars"],"captions":{"instagram":"...with hashtags","linkedin":"..."},"predicted_ctr":"high/med/low","why":"..."},"variant_b":{"label":"B — [angle name]","ad_copy":{"hook":"...","body":"...","cta":"..."},"google_headlines":["≤30 chars","≤30 chars","≤30 chars"],"captions":{"instagram":"...with hashtags","linkedin":"..."},"predicted_ctr":"high/med/low","why":"..."},"recommendation":"..."}`;
-    const usr=`Products:${prodNames} Desc:${prodDesc} Channel:${chan} Audience:${funnel} Sector:${sector} ICP:${icpP?.title||"general"} Concept:"${abConceptCt}"`;
+    const labels=["A","B","C","D","E"];
+    const variantSchema=Array.from({length:n},(_,i)=>`{"label":"${labels[i]} — [angle name]","ad_copy":{"hook":"...","body":"...","cta":"..."},"google_headlines":["≤30 chars","≤30 chars","≤30 chars"],"captions":{"instagram":"...with hashtags","linkedin":"..."},"predicted_ctr":"high/med/low","why":"..."}`).join(",");
+    const sys=`Senior CRO copywriter for Qoyod (Saudi cloud accounting SaaS). ${ol}\n${QOYOD_VOICE}\n${icpCtx?"ICP: "+icpCtx:""}\nProduce EXACTLY ${n} genuinely different variants — each with a different angle, different hook, different trigger. Do not repeat or paraphrase across variants.\nReturn ONLY valid JSON:\n{"variants":[${variantSchema}],"recommendation":"..."}`;
+    const usr=`Products:${prodNames} Desc:${prodDesc} Channel:${chan} Audience:${funnel} Sector:${sector} ICP:${icpP?.title||"general"} Variants:${n} Concept:"${abConceptCt}"`;
+    // ~1500 tokens per variant (Arabic is verbose), capped at 8000
+    const budget=Math.min(1500*n,8000);
     setCl(true);setCe("");setCr(null);setAbRes(null);
-    try{setAbRes(await callAI(sys,usr,3000));}catch(e){setCe(e.message);}finally{setCl(false);}
-  },[lang,prod,prodExtras,chan,funnel,sector,contentICP,abConceptCt,buildProdCtx]);
+    try{setAbRes(await callAI(sys,usr,budget));}catch(e){setCe(e.message);}finally{setCl(false);}
+  },[lang,prod,prodExtras,chan,funnel,sector,contentICP,abConceptCt,variantCount,buildProdCtx]);
 
   const genCampaign=useCallback(async()=>{
     if(!campTheme){setCampErr(T("اكتب موضوع الحملة","Enter a campaign theme"));return;}
@@ -1115,245 +1098,6 @@ export default function CreativeOS(){
   /* SVG refinement removed — designs are now AI-generated PNGs.
      To refine, click Retry with a tweaked concept or use the prompt panel below. */
 
-  const genLP=useCallback(async()=>{
-    if(!lpCompDesc&&!lpCompUrl){setLpErr(T("اوصف الصفحة أو أدخل رابطاً","Describe the page or enter URL"));return;}
-    const ol=lang==="en"?"English":"Saudi Arabic dialect";
-    const sys=`Senior conversion-focused web strategist for Qoyod. Analyze competitor landing page, then produce a Qoyod version.\nLanguage: ${ol}\nReturn ONLY valid JSON:\n{"comp_analysis":{"hero_message":"...","key_sections":["..."],"cta_strategy":"...","trust_elements":["..."],"what_works":"...","what_to_improve":"..."},"qoyod_lp":{"page_title":"...","hero":{"headline":"...","subline":"...","cta_primary":"...","cta_secondary":"...","device_shown":"cashier/dashboard/both","trust_badge":"..."},"sections":[{"name":"...","purpose":"...","content":"...","device_mockup":"yes/no","cta":"..."}],"overall_direction":"...","device_mockup_note":"..."}}`;
-    const usr=`Competitor URL: ${lpCompUrl||"n/a"}\nDescription: ${lpCompDesc}\nOur product: ${lpProd}\nGoal: ${lpGoal}\nSector: ${lpSector}`;
-    setLpLd(true);setLpErr("");setLpRes(null);
-    try{setLpRes(await callAI(sys,usr));}catch(e){setLpErr(e.message);}finally{setLpLd(false);}
-  },[lang,lpProd,lpCompUrl,lpCompDesc,lpGoal,lpSector]);
-
-  const genLPHtml=useCallback(async()=>{
-    if(!lpRes)return;
-    const lp=lpRes.qoyod_lp;
-    const prodObj=PRODUCTS.find(p=>p.v===lpProd)||PRODUCTS[0];
-    const isAr=lang==="ar";
-    const dir=isAr?"rtl":"ltr";
-    const sys=`You are a senior front-end engineer at a top-tier B2B SaaS company. Your output is ONLY raw HTML — no markdown, no triple backticks, no explanations. The file must be self-contained (all CSS inline in <style>, no JS frameworks, Google Fonts allowed). It must look like a premium, professionally designed landing page — not a template. Standard is: agency-quality, conversion-focused, mobile-responsive.\n\n${QOYOD_VOICE}\n\n${QOYOD_HTML}\n\n${QOYOD_DESIGN}`;
-    const usr=`Build a complete landing page for: ${lpProd} — a product by Qoyod (Saudi cloud accounting SaaS, ZATCA-certified).
-
-CONTENT:
-- Page title (browser tab): ${lp?.page_title||lpProd}
-- Hero headline: ${lp?.hero?.headline}
-- Hero subline: ${lp?.hero?.subline}
-- Primary CTA button: ${lp?.hero?.cta_primary||(isAr?"ابدأ تجربتك المجانية":"Start Your Free Trial")}
-- Secondary CTA button: ${lp?.hero?.cta_secondary||(isAr?"اطلب عرضاً":"Request a Demo")}
-- Product description: ${isAr?prodObj.desc_ar:prodObj.desc_en}
-- Sections to include: ${JSON.stringify(lp?.sections||[])}
-- Strategic direction: ${lp?.overall_direction}
-
-DESIGN SYSTEM — follow EXACTLY:
-- Direction: ${dir}
-- Language: ${isAr?"Arabic — Saudi dialect ONLY (مو/وش/ليش). Never Egyptian.":"English — professional, direct."}
-- Font: Google Fonts — ${isAr?'"IBM Plex Sans Arabic" weights 400,500,600,700':'"Inter" weights 400,500,600,700'}
-- Colour tokens:
-    --navy: #021544         (primary backgrounds, headings)
-    --turq-dark: #01355A    (secondary navy)
-    --blue: #13778D         (mid accent)
-    --turq: #17A3A4         (primary teal accent, CTAs, highlights)
-    --turq-soft: #CFECEC    (light badge backgrounds)
-    --turq-50: #EAF6F6      (very light teal for cards)
-    --ink: #0B1220          (body text)
-    --ink-soft: #2A3345     (secondary text)
-    --muted: #6B7280        (captions)
-    --line: #E4E8EE         (borders)
-    --bg: #FFFFFF
-    --bg-soft: #F7FAFB
-- Gradient: linear-gradient(225deg, #021544, #01355A)
-
-REQUIRED PAGE STRUCTURE (match the reference HTML design exactly, in this order):
-1. Sticky nav — white bg, blur backdrop, Qoyod wordmark "${isAr?"قيود":"Qoyod"}" (navy bold), nav links (${isAr?"المزايا / كيف يعمل / الأسعار / الأسئلة الشائعة":"Features / How it works / Pricing / FAQ"}), primary CTA btn (navy, border-radius 12px)
-2. Hero — white bg, radial gradient accents; SPLIT grid (1.05fr / 0.95fr), content ${isAr?"right":"left"}, form ${isAr?"left":"right"}:
-   - Content: .eyebrow pill (teal-50 bg + turq border), h1 with accent gradient text on key words, lead paragraph, two CTAs (.btn-primary + outlined), trust list 3 items with ✓ SVG checkmarks: ${isAr?"ZATCA-معتمد / لا يُشترط كارت بنكي / ابدأ في دقيقتين":"ZATCA-certified / No credit card required / Get started in 2 minutes"}
-   - Form card: white, border-radius 24px, shadow-pop, 34px padding, ::before pseudo-glow (grad-primary, blur 24px, opacity .18); fields: ${isAr?"الاسم الأول* + الاسم الأخير* (2-col grid), رقم الجوال (phone-wrap: 110px country-code select + phone input) + البريد الإلكتروني* (2-col), المدينة*, اسم الشركة*, نوع النشاط (checkbox-group grid 2×3 with custom CSS checkboxes)":"First Name* + Last Name* (2-col grid), Phone (phone-wrap: 110px country-code select + input) + Email* (2-col), City*, Company Name*, Business Type (checkbox-group grid 2×3 with custom CSS checkboxes)"}, full-width submit btn; TOS footnote
-3. Features — .features-bg (bg-soft), 4-col grid; each card: .f-card (border-radius 24px, white bg, 1px line border), .f-icon (52×52 turq-50 bg teal-colored SVG), h3 navy, paragraph ink-soft; hover: translateY(-6px) + shadow-pop + turq-soft border
-4. How it works — 3-col grid; .how-card (white, border, radius 24px); .how-num badge (absolute top-right -20px, 48px square, nav gradient, white text); step title + description
-5. Pricing — 3-column .price-grid; each .price-card (white, 1.5px line border, radius 24px, flex-col); featured card has turq border + turq-50 gradient bg + .price-badge pill top-right; price amount in 44px font; feature list with ✓ SVG icons; CTA button at bottom
-6. Testimonial — centered .testi-card (white, shadow-card, radius 24px, 48px 44px padding); teal quote-mark icon top-right; 19px quote text font-weight 500; avatar circle (grad-primary bg, white initial); name + role
-7. FAQ — .faq-wrap (max-width 820px centered); use <details>/<summary> HTML elements styled as accordion; summary: font-weight 600, +/− indicator via ::after; faq-item[open]: turq border + shadow-card
-8. CTA band — full-width .cta-box (max-width 1100px, radius 24px, grad-primary bg, 60px 48px padding, decorative ::before/::after shapes); white h2 + p; .btn with white bg + navy text + hover → turq bg white text
-9. Footer — var(--navy-deep) bg; 4-col grid (1.5fr 1fr 1fr 1fr); Qoyod wordmark + tagline; footer links; copyright bar with 1px rgba white border-top
-
-CSS RULES:
-- Use CSS custom properties (var(--navy) etc.)
-- Cards: box-shadow: 0 10px 30px rgba(2,21,68,.08); border-radius: 20px; border: 1px solid var(--line)
-- Buttons: border-radius: 12px; font-weight: 600; transition: transform .15s, box-shadow .2s
-- Primary button hover: translateY(-2px) + deeper shadow
-- Inputs: border: 1.5px solid var(--line); border-radius: 12px; focus: border-color teal + 3px teal glow ring
-- Section padding: 80px 24px
-- Max content width: 1200px centered with margin:0 auto
-- Fully mobile responsive (grid → single column at ≤900px, ≤560px)
-- No emojis anywhere — use clean SVG inline icons or pure CSS shapes for feature icons`;
-    setLpHtmlLd(true);setLpHtmlErr("");setLpHtml("");
-    try{
-      const raw=await callAI(sys,usr,4000,true);
-      const html=typeof raw==="string"?raw:JSON.stringify(raw,null,2);
-      const cleaned=html.replace(/^```html\n?|\n?```$/g,"").trim();
-      setLpHtml(cleaned);
-    }catch(e){setLpHtmlErr(e.message);}
-    finally{setLpHtmlLd(false);}
-  },[lang,lpProd,lpRes]);
-
-  /* shared LP HTML builder — returns raw HTML string */
-  const _buildLPHtml=useCallback(async(lp)=>{
-    const prodObj=PRODUCTS.find(p=>p.v===lpProd)||PRODUCTS[0];
-    const isAr=lang==="ar";
-    const dir=isAr?"rtl":"ltr";
-    const sys=`You are a senior front-end engineer at a top-tier B2B SaaS company. Your output is ONLY raw HTML — no markdown, no triple backticks, no explanations. The file must be self-contained (all CSS inline in <style>, no JS frameworks, Google Fonts allowed). It must look like a premium, professionally designed landing page — not a template. Standard is: agency-quality, conversion-focused, mobile-responsive.\n\n${QOYOD_VOICE}\n\n${QOYOD_HTML}\n\n${QOYOD_DESIGN}`;
-    const usr=`Build a complete landing page for: ${lpProd} — a product by Qoyod (Saudi cloud accounting SaaS, ZATCA-certified).\n\nCONTENT:\n- Page title (browser tab): ${lp?.page_title||lpProd}\n- Hero headline: ${lp?.hero?.headline}\n- Hero subline: ${lp?.hero?.subline}\n- Primary CTA button: ${lp?.hero?.cta_primary||(isAr?"ابدأ تجربتك المجانية":"Start Your Free Trial")}\n- Secondary CTA button: ${lp?.hero?.cta_secondary||(isAr?"اطلب عرضاً":"Request a Demo")}\n- Product description: ${isAr?prodObj.desc_ar:prodObj.desc_en}\n- Sections to include: ${JSON.stringify(lp?.sections||[])}\n- Strategic direction: ${lp?.overall_direction}\n\nDIRECTION: ${dir} | LANGUAGE: ${isAr?"Arabic — Saudi dialect ONLY":"English — professional, direct."} | FONT: ${isAr?'"IBM Plex Sans Arabic"':'"Inter"'}\n\n${QOYOD_DESIGN}`;
-    const raw=await callAI(sys,usr,4000,true);
-    const html=typeof raw==="string"?raw:JSON.stringify(raw,null,2);
-    return html.replace(/^```html\n?|\n?```$/g,"").trim();
-  },[lang,lpProd]);
-
-  /* one-click: generate HTML A + export to destination */
-  const genLPHtmlAndExport=useCallback(async(dest)=>{
-    if(!lpRes)return;
-    const setLd=dest==="dl"?setLpQuickDlLd:dest==="wp"?setLpQuickWpLd:setLpQuickHsLd;
-    setLd(true);setLpQuickErr("");
-    try{
-      const html=await _buildLPHtml(lpRes.qoyod_lp);
-      setLpHtml(html);
-      if(dest==="dl"){
-        const blob=new Blob([html],{type:"text/html;charset=utf-8"});
-        const url=URL.createObjectURL(blob);
-        const a=document.createElement("a");
-        a.href=url;a.download=`${lpProd.toLowerCase().replace(/\s+/g,"-")}-landing-page.html`;
-        a.click();URL.revokeObjectURL(url);
-      }else if(dest==="wp"){
-        if(!wpConfigured&&(!wpUrl||!wpUser||!wpPass)){setWpShowSettings(true);setLd(false);return;}
-        const r=await fetchWithTimeout(`/api/wp-draft`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({siteUrl:wpUrl,username:wpUser,appPassword:wpPass,content:html,title:`Qoyod Landing Page — ${lpProd}`,slug:`qoyod-lp-${lpProd.toLowerCase().replace(/\s+/g,"-")}`})},60000);
-        const json=await r.json().catch(()=>({error:"WordPress server returned malformed response"}));
-        if(!r.ok||json.error)throw new Error(json.error||"WordPress upload failed");
-        setWpResA(json);
-      }else if(dest==="hs"){
-        const r=await fetchWithTimeout(`/api/hs-draft`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({content:html,title:`Qoyod Landing Page — ${lpProd}`,slug:`qoyod-lp-${lpProd.toLowerCase().replace(/\s+/g,"-")}-${Date.now()}`})},60000);
-        const json=await r.json().catch(()=>({error:"HubSpot server returned malformed response"}));
-        if(!r.ok||json.error)throw new Error(json.error||"HubSpot upload failed");
-        setHsResA(json);
-      }
-    }catch(e){setLpQuickErr(e.message);}
-    finally{setLd(false);}
-  },[lpRes,lpProd,_buildLPHtml,wpConfigured,wpUrl,wpUser,wpPass]);
-
-  const downloadLP=useCallback(()=>{
-    if(!lpHtml)return;
-    const blob=new Blob([lpHtml],{type:"text/html;charset=utf-8"});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement("a");
-    a.href=url;a.download=`${lpProd.toLowerCase().replace(/\s+/g,"-")}-landing-page.html`;
-    a.click();URL.revokeObjectURL(url);
-  },[lpHtml,lpProd]);
-
-  const copyLP=useCallback(()=>{
-    if(!lpHtml)return;
-    navigator.clipboard.writeText(lpHtml).then(()=>{setLpCopied(true);setTimeout(()=>setLpCopied(false),2000);});
-  },[lpHtml]);
-
-  const genLPHtmlB=useCallback(async()=>{
-    if(!lpRes)return;
-    const lp=lpRes.qoyod_lp;
-    const prodObj=PRODUCTS.find(p=>p.v===lpProd)||PRODUCTS[0];
-    const isAr=lang==="ar";
-    const dir=isAr?"rtl":"ltr";
-    const sys=`You are a senior front-end engineer at a top-tier B2B SaaS company. Your output is ONLY raw HTML — no markdown, no triple backticks, no explanations. The file must be self-contained (all CSS inline in <style>, no JS frameworks, Google Fonts allowed). It must look like a premium, professionally designed landing page — not a template. Standard is: agency-quality, conversion-focused, mobile-responsive.\n\n${QOYOD_VOICE}\n\n${QOYOD_HTML}\n\n${QOYOD_DESIGN}`;
-    const usr=`Build a complete landing page VARIANT B (A/B Test) for: ${lpProd} — a product by Qoyod (Saudi cloud accounting SaaS, ZATCA-certified).
-
-THIS IS VARIANT B — use a COMPLETELY DIFFERENT ANGLE than Variant A:
-- Variant A angle: value, productivity, time-saving, ease of use
-- Variant B angle: TRUST, COMPLIANCE, SECURITY — lead with ZATCA certification, SOCPA, government recognition, data security, expert support team
-
-CONTENT:
-- Page title (browser tab): ${lp?.page_title||lpProd} — Variant B
-- Hero headline: rewrite with trust/compliance focus (e.g. "معتمد من هيئة الزكاة والضريبة والجمارك — إدارة مالية لا تقبل الأخطاء")
-- Hero subline: emphasize compliance, security, and certified expertise
-- Primary CTA button: ${lp?.hero?.cta_primary||(isAr?"ابدأ تجربتك المجانية":"Start Your Free Trial")}
-- Secondary CTA button: ${lp?.hero?.cta_secondary||(isAr?"اطلب عرضاً":"Request a Demo")}
-- Product description: ${isAr?prodObj.desc_ar:prodObj.desc_en}
-- Sections to include: ${JSON.stringify(lp?.sections||[])}
-
-DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different content/angle):
-- Direction: ${dir}
-- Language: ${isAr?"Arabic — Saudi dialect ONLY (مو/وش/ليش). Never Egyptian.":"English — professional, direct."}
-- Font: Google Fonts — ${isAr?'"IBM Plex Sans Arabic" weights 400,500,600,700':'"Inter" weights 400,500,600,700'}
-- Colour tokens: --navy: #021544; --turq: #17A3A4; --turq-soft: #CFECEC; --ink: #0B1220; --bg: #FFFFFF; --bg-soft: #F7FAFB; --line: #E4E8EE
-- REQUIRED SECTIONS (trust-forward order):
-  1. Sticky header (same as Variant A)
-  2. Hero — lead with compliance badge (ZATCA Phase 2 certified), bold trust headline, form on side
-  3. Certifications bar — ZATCA logo + SOCPA + ISO/data security badges
-  4. Social proof — number stats (25,000+ شركة, 99.9% uptime, 24/7 support) in navy cards
-  5. Features — compliance-first framing (e-invoice, VAT returns, audit trail, data encryption)
-  6. Expert support section — team, response time, dedicated account manager
-  7. CTA band
-  8. Footer
-- Add "Variant B" comment in HTML <!-- A/B TEST: VARIANT B — Trust/Compliance angle -->
-- CSS: same card/button/input styles as Variant A
-- Fully mobile responsive. No emojis.`;
-    setLpHtmlBLd(true);setLpHtmlBErr("");setLpHtmlB("");
-    try{
-      const raw=await callAI(sys,usr,4000,true);
-      const html=typeof raw==="string"?raw:JSON.stringify(raw,null,2);
-      setLpHtmlB(html.replace(/^```html\n?|\n?```$/g,"").trim());
-    }catch(e){setLpHtmlBErr(e.message);}
-    finally{setLpHtmlBLd(false);}
-  },[lang,lpProd,lpRes]);
-
-  const downloadLPB=useCallback(()=>{
-    if(!lpHtmlB)return;
-    const blob=new Blob([lpHtmlB],{type:"text/html;charset=utf-8"});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement("a");
-    a.href=url;a.download=`${lpProd.toLowerCase().replace(/\s+/g,"-")}-landing-page-variant-b.html`;
-    a.click();URL.revokeObjectURL(url);
-  },[lpHtmlB,lpProd]);
-
-  const copyLPB=useCallback(()=>{
-    if(!lpHtmlB)return;
-    navigator.clipboard.writeText(lpHtmlB).then(()=>{setLpHtmlBCopied(true);setTimeout(()=>setLpHtmlBCopied(false),2000);});
-  },[lpHtmlB]);
-
-  const uploadToWP=useCallback(async(html,variant)=>{
-    if(!wpConfigured&&(!wpUrl||!wpUser||!wpPass)){setWpShowSettings(true);return;}
-    const setUpl=variant==="B"?setWpUploadingB:setWpUploadingA;
-    const setRes=variant==="B"?setWpResB:setWpResA;
-    const setErr=variant==="B"?setWpErrB:setWpErrA;
-    setUpl(true);setRes(null);setErr("");
-    try{
-      const r=await fetchWithTimeout(`/api/wp-draft`,{
-        method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({
-          siteUrl:wpUrl,username:wpUser,appPassword:wpPass,
-          content:html,
-          title:`Qoyod Landing Page — Variant ${variant}`,
-          slug:`qoyod-lp-variant-${variant.toLowerCase()}`,
-        }),
-      },60000);
-      const json=await r.json().catch(()=>({error:"Server returned malformed response"}));
-      if(!r.ok||json.error)throw new Error(json.error||"Upload failed");
-      setRes(json);
-    }catch(e){setErr(e.message);}finally{setUpl(false);}
-  },[wpUrl,wpUser,wpPass]);
-
-  const uploadToHS=useCallback(async(html,variant)=>{
-    const setUpl=variant==="B"?setHsUploadingB:setHsUploadingA;
-    const setRes=variant==="B"?setHsResB:setHsResA;
-    const setErr=variant==="B"?setHsErrB:setHsErrA;
-    setUpl(true);setRes(null);setErr("");
-    try{
-      const r=await fetchWithTimeout(`/api/hs-draft`,{
-        method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({
-          content:html,
-          title:`Qoyod Landing Page — Variant ${variant}`,
-          slug:`qoyod-lp-variant-${variant.toLowerCase()}-${Date.now()}`,
-        }),
-      },60000);
-      const json=await r.json().catch(()=>({error:"Server returned malformed response"}));
-      if(!r.ok||json.error)throw new Error(json.error||"Upload failed");
-      setRes(json);
-    }catch(e){setErr(e.message);}finally{setUpl(false);}
-  },[]);
 
   const genAllDesigns=useCallback(async()=>{
     for(let i=1;i<=numVariants;i++){await genDesign(i);}
@@ -1424,7 +1168,6 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
     ["email",   T("رسائل / بريد","Email & WA")],
     ["market",  T("مراقبة السوق","Market Watch")],
     ["brief",   T("التصميم","Design")],
-    ["landing", T("صفحات الوصول","Landing Pages")],
     ["library", T("مكتبة الإعلانات","Ad Library")],
     ["icp",     T("شرائح العملاء","ICP")],
   ];
@@ -1469,6 +1212,17 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
       <div style={{position:"sticky",top:52,zIndex:99,display:"flex",padding:"0 18px",borderBottom:"1px solid rgba(1,53,90,.45)",background:"rgba(2,12,30,.92)",backdropFilter:"blur(10px)",overflowX:"auto"}}>
         {TABS.map(([k,l])=><button key={k} onClick={()=>setTab(k)} style={{padding:"0 14px",height:42,fontSize:11.5,fontFamily:"inherit",fontWeight:tab===k?600:500,color:tab===k?"#17a3a3":"#2e5468",background:"none",border:"none",borderBottom:`2px solid ${tab===k?"#17a3a3":"transparent"}`,cursor:"pointer",whiteSpace:"nowrap",transition:"all .15s"}}>{l}</button>)}
       </div>
+
+      {aiHealth&&aiHealth.degraded&&(
+        <div style={{padding:"7px 18px",background:aiHealth.fallback_available?"rgba(245,166,35,.08)":"rgba(240,112,112,.08)",borderBottom:`1px solid ${aiHealth.fallback_available?"rgba(245,166,35,.3)":"rgba(240,112,112,.3)"}`,display:"flex",alignItems:"center",gap:8,fontSize:10.5,direction:dir}}>
+          <span style={{fontSize:11}}>{aiHealth.fallback_available?"⚠":"⛔"}</span>
+          <span style={{color:aiHealth.fallback_available?"#f5a623":"#f07070",fontWeight:600}}>
+            {aiHealth.fallback_available
+              ? T("الخدمة الأساسية بطيئة — يستخدم النظام مزود احتياطي (Gemini)","Primary AI is degraded — using fallback (Gemini)")
+              : T("خدمة الذكاء الاصطناعي غير متاحة حالياً — حاول بعد 5 دقائق","AI service unavailable — try again in 5 min")}
+          </span>
+        </div>
+      )}
 
       <div style={{maxWidth:840,margin:"0 auto",padding:"20px 16px 60px"}}>
 
@@ -1524,34 +1278,38 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
                   </>
                 )}
                 <div style={{padding:"10px 0",borderTop:"1px solid rgba(1,53,90,.25)",marginTop:4}}>
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:abMode?8:0}}>
-                    <span style={{fontSize:11,color:"#6a96aa"}}>{T("عدد النسخ","Output")}</span>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:variantCount>1?8:0}}>
+                    <span style={{fontSize:11,color:"#6a96aa"}}>{T("عدد النسخ","# of Variants")}</span>
                     <div style={{display:"flex",background:"#0a1f3d",border:"1px solid rgba(1,53,90,.45)",borderRadius:5,overflow:"hidden",height:26}}>
-                      {[[false,T("نسخة واحدة","Single")],[true,T("نسختان A/B","A/B")]].map(([v,l])=>(
-                        <button key={String(v)} onClick={()=>{setAbMode(v);setCr(null);setAbRes(null);}} style={{padding:"0 11px",height:"100%",background:abMode===v?"rgba(23,163,164,.15)":"none",border:"none",color:abMode===v?"#17a3a3":"#2e5468",fontSize:10.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{l}</button>
+                      {[1,2,3,4,5].map(n=>(
+                        <button key={n} onClick={()=>{setVariantCount(n);setCr(null);setAbRes(null);}} style={{padding:"0 12px",height:"100%",background:variantCount===n?"rgba(23,163,164,.15)":"none",border:"none",borderLeft:n>1?"1px solid rgba(1,53,90,.45)":"none",color:variantCount===n?"#17a3a3":"#2e5468",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{n}</button>
                       ))}
                     </div>
                   </div>
-                  {abMode&&(
-                    <textarea value={abConceptCt} onChange={e=>setAbConceptCt(e.target.value)} rows={2} dir="rtl" style={{textAlign:"right",marginTop:6}} placeholder={T("الفكرة أو الرسالة الرئيسية للنسختين…","Core concept or message for the two variants…")}/>
+                  {variantCount>1&&(
+                    <textarea value={abConceptCt} onChange={e=>setAbConceptCt(e.target.value)} rows={2} dir="rtl" style={{textAlign:"right",marginTop:6}} placeholder={T(`الفكرة أو الرسالة الرئيسية لـ ${variantCount} نسخ…`,`Core concept or message for ${variantCount} variants…`)}/>
                   )}
                 </div>
-                <Btn ch={cl?T("يكتب...","Writing..."):abMode?T("ولّد نسختين A/B","Generate A/B Variants"):T("أنشئ المحتوى الآن","Create Content Now")} gold={!cl} onClick={abMode?genContentAB:genContent} dis={cl} full/>
+                <Btn ch={cl?T("يكتب...","Writing..."):variantCount>1?T(`ولّد ${variantCount} نسخ`,`Generate ${variantCount} Variants`):T("أنشئ المحتوى الآن","Create Content Now")} gold={!cl} onClick={variantCount>1?genContentAB:genContent} dis={cl} full/>
               </div>
             </div>
-            {cl&&<Loader msg={abMode?T("يكتب نسختين بزاوية مختلفة...","Writing two different angles..."):T("يكتب النص الإعلاني...","Writing ad copy...")}/>}
-            {abRes&&!cl&&(
+            {cl&&<Loader msg={variantCount>1?T(`يكتب ${variantCount} نسخ بزوايا مختلفة...`,`Writing ${variantCount} different angles...`):T("يكتب النص الإعلاني...","Writing ad copy...")}/>}
+            {abRes&&!cl&&(()=>{
+              // Support both new {variants:[]} schema and legacy {variant_a, variant_b} schema
+              const variants=Array.isArray(abRes.variants)?abRes.variants:["variant_a","variant_b"].map(k=>abRes[k]).filter(Boolean);
+              const accents=["#17a3a3","#f59e0b","#a78bfa","#5dc87a","#f07070"];
+              const cols=variants.length<=2?"1fr 1fr":variants.length===3?"1fr 1fr 1fr":"repeat(2,1fr)";
+              return(
               <div className="qa">
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:10}}>
-                  {["variant_a","variant_b"].map(key=>{
-                    const v=abRes[key];if(!v)return null;
-                    const isA=key==="variant_a";
-                    const accent=isA?"#17a3a3":"#f59e0b";
-                    const fullCopy=`${v.ad_copy?.hook}\n\n${v.ad_copy?.body}\n\nCTA: ${v.ad_copy?.cta}\n\nGoogle Headlines:\n${(v.google_headlines||[]).join("\n")}\n\nInstagram:\n${v.captions?.instagram}`;
+                <div style={{display:"grid",gridTemplateColumns:cols,gap:10,marginTop:10}}>
+                  {variants.map((v,idx)=>{
+                    if(!v)return null;
+                    const accent=accents[idx%accents.length];
+                    const fullCopy=`${v.ad_copy?.hook}\n\n${v.ad_copy?.body}\n\nCTA: ${v.ad_copy?.cta}\n\nGoogle Headlines:\n${(v.google_headlines||[]).join("\n")}\n\nInstagram:\n${v.captions?.instagram||""}`;
                     return(
-                      <div key={key} style={{...card,marginBottom:0,border:`1.5px solid ${accent}30`}}>
+                      <div key={idx} style={{...card,marginBottom:0,border:`1.5px solid ${accent}30`}}>
                         <div style={{...cHead,background:`${accent}08`,borderBottom:`1px solid ${accent}20`}}>
-                          <span style={{fontSize:11.5,fontWeight:700,color:accent}}>{v.label||key}</span>
+                          <span style={{fontSize:11.5,fontWeight:700,color:accent}}>{v.label||`Variant ${idx+1}`}</span>
                           <div style={{display:"flex",gap:5}}>
                             <Tag ch={v.predicted_ctr||"—"} style={{fontSize:9,background:`${accent}15`,color:accent}}/>
                             <Btn ch={T("نسخ الكل","Copy All")} xs onClick={()=>copyText(fullCopy)}/>
@@ -1564,17 +1322,21 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
                             <p style={{fontSize:11.5,lineHeight:1.7,color:"#bbd4e0"}}>{v.ad_copy?.body}</p>
                             <Tag ch={v.ad_copy?.cta} style={{marginTop:6,fontSize:10,background:`${accent}18`,color:accent}}/>
                           </div>
-                          <div>
-                            <p style={{fontSize:8.5,color:"#6a96aa",marginBottom:4,textTransform:"uppercase"}}>Google Headlines</p>
-                            <div style={{display:"flex",flexDirection:"column",gap:3}}>
-                              {(v.google_headlines||[]).map((h,i)=><p key={i} style={{fontSize:11,color:"#ddeef4",padding:"4px 8px",background:"rgba(7,22,48,.8)",borderRadius:4,direction:"ltr",textAlign:"left"}}>{h}</p>)}
+                          {v.google_headlines&&v.google_headlines.length>0&&(
+                            <div>
+                              <p style={{fontSize:8.5,color:"#6a96aa",marginBottom:4,textTransform:"uppercase"}}>Google Headlines</p>
+                              <div style={{display:"flex",flexDirection:"column",gap:3}}>
+                                {v.google_headlines.map((h,i)=><p key={i} style={{fontSize:11,color:"#ddeef4",padding:"4px 8px",background:"rgba(7,22,48,.8)",borderRadius:4,direction:"ltr",textAlign:"left"}}>{h}</p>)}
+                              </div>
                             </div>
-                          </div>
-                          <div>
-                            <p style={{fontSize:8.5,color:"#6a96aa",marginBottom:4,textTransform:"uppercase"}}>{T("كابشن","Caption")}</p>
-                            <p style={{fontSize:10.5,color:"#bbd4e0",direction:"rtl",lineHeight:1.6}}>{v.captions?.instagram}</p>
-                          </div>
-                          <p style={{fontSize:10,color:"#5dc87a",direction:"rtl",borderTop:"1px solid rgba(1,53,90,.3)",paddingTop:6}}>{v.why}</p>
+                          )}
+                          {v.captions?.instagram&&(
+                            <div>
+                              <p style={{fontSize:8.5,color:"#6a96aa",marginBottom:4,textTransform:"uppercase"}}>{T("كابشن","Caption")}</p>
+                              <p style={{fontSize:10.5,color:"#bbd4e0",direction:"rtl",lineHeight:1.6}}>{v.captions.instagram}</p>
+                            </div>
+                          )}
+                          {v.why&&<p style={{fontSize:10,color:"#5dc87a",direction:"rtl",borderTop:"1px solid rgba(1,53,90,.3)",paddingTop:6}}>{v.why}</p>}
                         </div>
                       </div>
                     );
@@ -1586,7 +1348,8 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
                   </div>
                 )}
               </div>
-            )}
+              );
+            })()}
             {cr&&!cl&&!abMode&&(
               <div className="qa">
                 <div style={card}>
@@ -2039,443 +1802,6 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
                   )}
                 </div>
               </div>
-            )}
-          </div>
-        )}
-
-        {tab==="landing"&&(
-          <div className="qa">
-            <SH title={T("صفحات الوصول","Landing Pages")} sub={T("حلّل صفحة منافس وأنشئ صفحة HTML جاهزة","Analyze competitor → get HTML ready to deploy")}/>
-            <ErrBox msg={lpErr}/>
-            <div style={card}>
-              <div style={cHead}><span style={{fontSize:11,fontWeight:600,color:"#6a96aa"}}>{T("الإعدادات","Settings")}</span></div>
-              <div style={cBody}>
-                <Fld label={T("المنتج / الخدمة / العرض","Product / Service / Offer")}><GroupedProductChips selected={lpProd} onSelect={setLpProd} lang={lang}/></Fld>
-                <div style={row2}>
-                  <Fld label={T("الهدف","Goal")}>
-                    <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-                      {["Leads","Trial","Demo","Awareness"].map(g=><Seg key={g} ch={g} on={lpGoal===g} onClick={()=>setLpGoal(g)}/>)}
-                    </div>
-                  </Fld>
-                  <Fld label={T("القطاع","Sector")}>
-                    <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-                      {SECTORS.slice(0,5).map(s=><Seg key={s.v} ch={lang==="ar"?s.ar:s.en} on={lpSector===s.v} onClick={()=>setLpSector(s.v)}/>)}
-                    </div>
-                  </Fld>
-                </div>
-                <Fld label={T("رابط صفحة المنافس (اختياري)","Competitor page URL (optional)")}><input value={lpCompUrl} onChange={e=>setLpCompUrl(e.target.value)} placeholder="https://www.foodics.com/ar/..."/></Fld>
-                <Fld label={T("وصف الصفحة أو العرض","Page / offer description")}><textarea value={lpCompDesc} onChange={e=>setLpCompDesc(e.target.value)} rows={3} dir="rtl" style={{textAlign:"right"}} placeholder={T("مثال: صفحة عرض رمضان من فودكس — خصم ٨٠٪ على نظام المطاعم","e.g. Foodics Ramadan offer page — 80% off F&B POS")}/></Fld>
-                <Btn ch={T("① حلّل وأنشئ الاستراتيجية","① Analyze & Build Strategy")} gold onClick={genLP} dis={lpLd} full/>
-              </div>
-            </div>
-            {lpLd&&<Loader msg={T("يحلل صفحة المنافس...","Analyzing competitor page...")}/>}
-            {lpRes&&!lpLd&&(
-              <div className="qa">
-                <div style={card}>
-                  <div style={cHead}><span style={{fontSize:12,fontWeight:600,color:"#f5a623"}}>{T("تحليل المنافس","Competitor Analysis")}</span></div>
-                  <div style={cBody}>
-                    <Hook text={lpRes.comp_analysis?.hero_message}/>
-                    <div style={row2}>
-                      <div><p style={{fontSize:9.5,color:"#5dc87a",marginBottom:6}}>✓ {T("يعمل","Works")}</p><p style={{fontSize:11.5,direction:"rtl",textAlign:"right"}}>{lpRes.comp_analysis?.what_works}</p></div>
-                      <div><p style={{fontSize:9.5,color:"#f07070",marginBottom:6}}>⚠ {T("تحسين","Improve")}</p><p style={{fontSize:11.5,direction:"rtl",textAlign:"right"}}>{lpRes.comp_analysis?.what_to_improve}</p></div>
-                    </div>
-                  </div>
-                </div>
-                <div style={card}>
-                  <div style={cHead}><span style={{fontSize:12,fontWeight:600,color:"#17a3a3"}}>{T("استراتيجية قيود","Qoyod LP Strategy")}</span></div>
-                  <div style={cBody}>
-                    <Hook text={lpRes.qoyod_lp?.page_title}/>
-                    <p style={{fontSize:14,fontWeight:700,direction:"rtl",textAlign:"right",lineHeight:1.6,color:"#fff",marginBottom:6}}>{lpRes.qoyod_lp?.hero?.headline}</p>
-                    <p style={{fontSize:11.5,color:"#6a96aa",direction:"rtl",textAlign:"right",marginBottom:10}}>{lpRes.qoyod_lp?.hero?.subline}</p>
-                    <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
-                      <span style={{padding:"4px 12px",borderRadius:20,background:"rgba(23,163,164,.15)",border:"1px solid rgba(23,163,164,.3)",fontSize:10.5,color:"#17a3a3"}}>{lpRes.qoyod_lp?.hero?.cta_primary}</span>
-                      <span style={{padding:"4px 12px",borderRadius:20,background:"rgba(255,255,255,.05)",border:"1px solid rgba(255,255,255,.1)",fontSize:10.5,color:"#aac"}}>{lpRes.qoyod_lp?.hero?.cta_secondary}</span>
-                    </div>
-                    {(lpRes.qoyod_lp?.sections||[]).map((sec,i)=>(
-                      <div key={i} style={{padding:"8px 10px",marginBottom:6,borderRadius:6,background:"rgba(1,53,90,.25)",borderRight:"2px solid rgba(23,163,164,.3)"}}>
-                        <div style={{fontSize:10,fontWeight:700,color:"#f5a623",marginBottom:3}}>{sec.name}</div>
-                        <div style={{fontSize:11,color:"#aac",direction:"rtl",textAlign:"right",lineHeight:1.5}}>{sec.content}</div>
-                      </div>
-                    ))}
-                    <div style={{marginTop:14,padding:"10px 0",borderTop:"1px solid rgba(1,53,90,.45)"}}>
-                      <ErrBox msg={lpHtmlErr}/>
-                      {lpQuickErr&&<p style={{fontSize:10,color:"#f07070",marginBottom:6,direction:"rtl",textAlign:"right"}}>{lpQuickErr}</p>}
-                      {/* Quick-export row — always visible after strategy */}
-                      {!lpHtml&&(
-                        <>
-                          <p style={{fontSize:10,color:"#6a96aa",marginBottom:8,direction:"rtl",textAlign:"right"}}>② {T("اختر وجهة التصدير — يتم إنشاء الصفحة وتصديرها مباشرةً","Choose export destination — page is generated and exported in one step")}</p>
-                          <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:8}}>
-                            <button onClick={()=>genLPHtmlAndExport("dl")} disabled={lpQuickDlLd||lpQuickWpLd||lpQuickHsLd} style={{flex:1,minWidth:110,padding:"8px 6px",borderRadius:7,border:"none",background:"#17a3a3",color:"#fff",fontSize:10.5,cursor:"pointer",fontFamily:"inherit",fontWeight:700,opacity:(lpQuickDlLd||lpQuickWpLd||lpQuickHsLd)?.6:1}}>
-                              {lpQuickDlLd?<span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:5}}><span style={{width:10,height:10,border:"1.5px solid rgba(255,255,255,.3)",borderTopColor:"#fff",borderRadius:"50%",display:"inline-block",animation:"spin 0.8s linear infinite"}}/>{T("ينشئ...","Building...")}</span>:"⬇ "+T("تحميل HTML","Download HTML")}
-                            </button>
-                            <button onClick={()=>genLPHtmlAndExport("wp")} disabled={lpQuickDlLd||lpQuickWpLd||lpQuickHsLd} style={{flex:1,minWidth:110,padding:"8px 6px",borderRadius:7,border:"none",background:"#21759b",color:"#fff",fontSize:10.5,cursor:"pointer",fontFamily:"inherit",fontWeight:700,opacity:(lpQuickDlLd||lpQuickWpLd||lpQuickHsLd)?.6:1}}>
-                              {lpQuickWpLd?<span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:5}}><span style={{width:10,height:10,border:"1.5px solid rgba(255,255,255,.3)",borderTopColor:"#fff",borderRadius:"50%",display:"inline-block",animation:"spin 0.8s linear infinite"}}/>{T("يرفع...","Uploading...")}</span>:"⬆ WordPress"}
-                            </button>
-                            <button onClick={()=>genLPHtmlAndExport("hs")} disabled={lpQuickDlLd||lpQuickWpLd||lpQuickHsLd} style={{flex:1,minWidth:110,padding:"8px 6px",borderRadius:7,border:"none",background:"#ff7a59",color:"#fff",fontSize:10.5,cursor:"pointer",fontFamily:"inherit",fontWeight:700,opacity:(lpQuickDlLd||lpQuickWpLd||lpQuickHsLd)?.6:1}}>
-                              {lpQuickHsLd?<span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:5}}><span style={{width:10,height:10,border:"1.5px solid rgba(255,255,255,.3)",borderTopColor:"#fff",borderRadius:"50%",display:"inline-block",animation:"spin 0.8s linear infinite"}}/>{T("يرفع...","Uploading...")}</span>:"⬆ HubSpot"}
-                            </button>
-                          </div>
-                          <button onClick={genLPHtml} disabled={lpHtmlLd} style={{width:"100%",padding:"6px",borderRadius:6,border:"1px solid rgba(255,255,255,.12)",background:"transparent",color:"#6a96aa",fontSize:10,cursor:"pointer",fontFamily:"inherit",opacity:lpHtmlLd?.6:1}}>
-                            {lpHtmlLd?T("ينشئ...","Generating..."):"+ "+T("أو أنشئ فقط لمراجعتها أولاً","or generate first to review before exporting")}
-                          </button>
-                          {lpHtmlLd&&<Loader msg={T("ينشئ Variant A...","Building Variant A...")}/>}
-                        </>
-                      )}
-                      {lpHtml&&!lpHtmlB&&(
-                        <>
-                          <Btn ch={lpHtmlBLd?T("ينشئ B...","Generating B..."):"③ "+T("أنشئ Variant B — ثقة وامتثال (A/B Test)","Generate Variant B — Trust/Compliance (A/B)")} onClick={genLPHtmlB} dis={lpHtmlBLd} full/>
-                          {lpHtmlBLd&&<Loader msg={T("ينشئ Variant B — زاوية الثقة والامتثال...","Building Variant B — Trust angle...")}/>}
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                {(lpHtml||lpHtmlB)&&(
-                  <div className="qa">
-                    {/* WordPress Settings */}
-                    <div style={card}>
-                      <div style={{...cHead,cursor:"pointer"}} onClick={()=>setWpShowSettings(s=>!s)}>
-                        <div style={{display:"flex",alignItems:"center",gap:8}}>
-                          <span style={{fontSize:11,fontWeight:600,color:"#6a96aa"}}>⚙ {T("إعدادات WordPress","WordPress Settings")}</span>
-                          {wpConfigured&&<span style={{fontSize:9.5,padding:"2px 8px",borderRadius:10,background:"rgba(93,200,122,.12)",border:"1px solid rgba(93,200,122,.3)",color:"#5dc87a",fontWeight:600}}>✓ {T("مُعدٌّ مسبقاً","Pre-configured")}</span>}
-                        </div>
-                        <span style={{fontSize:10,color:"#2e5468"}}>{wpShowSettings?"▲":"▼"}</span>
-                      </div>
-                      {wpShowSettings&&(
-                        <div style={{...cBody,display:"flex",flexDirection:"column",gap:8}}>
-                          {wpConfigured&&(
-                            <p style={{fontSize:10,color:"#5dc87a",direction:"rtl",textAlign:"right",margin:0,padding:"6px 10px",background:"rgba(93,200,122,.06)",borderRadius:6,border:"1px solid rgba(93,200,122,.2)"}}>
-                              ✓ {T("بيانات الاعتماد مخزّنة على الخادم — ليست بحاجة لإعادة الإدخال","Credentials stored on server — no need to re-enter")}
-                            </p>
-                          )}
-                          <div style={row2}>
-                            <Fld label={T("رابط الموقع","Site URL")}><input value={wpUrl} onChange={e=>setWpUrl(e.target.value)} placeholder="https://yoursite.com"/></Fld>
-                            <Fld label={T("اسم المستخدم","Username")}><input value={wpUser} onChange={e=>setWpUser(e.target.value)} placeholder="admin"/></Fld>
-                          </div>
-                          {!wpConfigured&&(
-                            <Fld label={T("Application Password (من WP Admin)","Application Password (from WP Admin)")}><input type="password" value={wpPass} onChange={e=>setWpPass(e.target.value)} placeholder="xxxx xxxx xxxx xxxx xxxx xxxx"/></Fld>
-                          )}
-                          {wpConfigured&&(
-                            <div style={{padding:"6px 10px",background:"rgba(7,22,48,.5)",borderRadius:6,border:"1px solid rgba(1,53,90,.3)"}}>
-                              <span style={{fontSize:10,color:"#2e5468"}}>🔒 {T("كلمة المرور مخزّنة بأمان على الخادم","Application Password stored securely on server")}</span>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Variant A */}
-                    {lpHtml&&(
-                      <div style={card}>
-                        <div style={{...cHead,background:"rgba(23,163,164,.08)"}}>
-                          <span style={{fontSize:12,fontWeight:700,color:"#17a3a3"}}>✅ Variant A — {T("قيمة وسهولة الاستخدام","Value & Ease")}</span>
-                          <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-                            <button onClick={copyLP} style={{padding:"4px 10px",borderRadius:5,border:"1px solid rgba(23,163,164,.4)",background:"rgba(23,163,164,.1)",color:"#17a3a3",fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>{lpCopied?"✓":T("نسخ","Copy")}</button>
-                            <button onClick={downloadLP} style={{padding:"4px 10px",borderRadius:5,border:"none",background:"#17a3a3",color:"#fff",fontSize:10,cursor:"pointer",fontFamily:"inherit",fontWeight:600}}>⬇ HTML</button>
-                            <button onClick={()=>uploadToDrive(lpHtml,"qoyod-landing-A.html","text/html","lp-a")} disabled={driveLd["lp-a"]} style={{padding:"4px 10px",borderRadius:5,border:"1px solid rgba(66,133,244,.4)",background:"rgba(66,133,244,.1)",color:driveLinks["lp-a"]?"#5dc87a":"#4285f4",fontSize:10,cursor:"pointer",fontFamily:"inherit",fontWeight:600,opacity:driveLd["lp-a"]?.6:1}}>
-                              {driveLd["lp-a"]?"↑…":driveLinks["lp-a"]?<a href={driveLinks["lp-a"]} target="_blank" rel="noreferrer" style={{color:"#5dc87a",textDecoration:"none"}}>✓ Drive</a>:"☁ Drive"}
-                            </button>
-                            {(wpConfigured||(wpUrl&&wpUser&&wpPass))&&(
-                              <button onClick={()=>uploadToWP(lpHtml,"A")} disabled={wpUploadingA} style={{padding:"4px 10px",borderRadius:5,border:"none",background:"#21759b",color:"#fff",fontSize:10,cursor:"pointer",fontFamily:"inherit",fontWeight:600,opacity:wpUploadingA?.6:1}}>
-                                {wpUploadingA?T("يرفع...","Uploading..."):"⬆ WP"}
-                              </button>
-                            )}
-                            {hsConfigured&&(
-                              <button onClick={()=>uploadToHS(lpHtml,"A")} disabled={hsUploadingA} style={{padding:"4px 10px",borderRadius:5,border:"none",background:"#ff7a59",color:"#fff",fontSize:10,cursor:"pointer",fontFamily:"inherit",fontWeight:600,opacity:hsUploadingA?.6:1}}>
-                                {hsUploadingA?T("يرفع...","Uploading..."):"⬆ HubSpot"}
-                              </button>
-                            )}
-                            <button onClick={()=>{setLpHtml("");setLpHtmlErr("");setWpResA(null);setHsResA(null);}} style={{padding:"4px 8px",borderRadius:5,border:"1px solid rgba(255,255,255,.1)",background:"none",color:"#6a96aa",fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>{T("إعادة","Redo")}</button>
-                          </div>
-                        </div>
-                        {wpErrA&&<p style={{padding:"6px 12px",fontSize:10,color:"#f07070"}}>{wpErrA}</p>}
-                        {hsErrA&&<p style={{padding:"6px 12px",fontSize:10,color:"#f07070"}}>HubSpot: {hsErrA}</p>}
-                        {wpResA&&<div style={{padding:"8px 12px",background:"rgba(33,117,155,.12)",borderBottom:"1px solid rgba(1,53,90,.3)"}}><p style={{fontSize:10,color:"#5dc87a",margin:0}}>✓ WordPress — <a href={wpResA.editUrl} target="_blank" rel="noopener" style={{color:"#17a3a3"}}>{T("افتح في المحرر","Open in editor")}</a></p></div>}
-                        {hsResA&&<div style={{padding:"8px 12px",background:"rgba(255,122,89,.08)",borderBottom:"1px solid rgba(255,122,89,.2)"}}><p style={{fontSize:10,color:"#5dc87a",margin:0}}>✓ HubSpot — <a href={hsResA.editUrl} target="_blank" rel="noopener" style={{color:"#ff7a59"}}>{T("افتح في المحرر","Open in editor")}</a></p></div>}
-                        <div style={{padding:12}}>
-                          <pre style={{background:"#010c1e",border:"1px solid rgba(1,53,90,.6)",borderRadius:8,padding:12,overflowX:"auto",fontSize:9.5,color:"#4dd9b0",maxHeight:220,lineHeight:1.5,direction:"ltr",textAlign:"left",whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{lpHtml.slice(0,1400)}{lpHtml.length>1400?"…":""}</pre>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Variant B */}
-                    {lpHtmlBErr&&<ErrBox msg={lpHtmlBErr}/>}
-                    {lpHtmlB&&(
-                      <div style={card}>
-                        <div style={{...cHead,background:"rgba(245,166,35,.06)"}}>
-                          <span style={{fontSize:12,fontWeight:700,color:"#f5a623"}}>🅱 Variant B — {T("ثقة وامتثال (A/B Test)","Trust & Compliance (A/B Test)")}</span>
-                          <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-                            <button onClick={copyLPB} style={{padding:"4px 10px",borderRadius:5,border:"1px solid rgba(245,166,35,.4)",background:"rgba(245,166,35,.1)",color:"#f5a623",fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>{lpHtmlBCopied?"✓":T("نسخ","Copy")}</button>
-                            <button onClick={downloadLPB} style={{padding:"4px 10px",borderRadius:5,border:"none",background:"#f5a623",color:"#021544",fontSize:10,cursor:"pointer",fontFamily:"inherit",fontWeight:600}}>⬇ HTML</button>
-                            <button onClick={()=>uploadToDrive(lpHtmlB,"qoyod-landing-B.html","text/html","lp-b")} disabled={driveLd["lp-b"]} style={{padding:"4px 10px",borderRadius:5,border:"1px solid rgba(66,133,244,.4)",background:"rgba(66,133,244,.1)",color:driveLinks["lp-b"]?"#5dc87a":"#4285f4",fontSize:10,cursor:"pointer",fontFamily:"inherit",fontWeight:600,opacity:driveLd["lp-b"]?.6:1}}>
-                              {driveLd["lp-b"]?"↑…":driveLinks["lp-b"]?<a href={driveLinks["lp-b"]} target="_blank" rel="noreferrer" style={{color:"#5dc87a",textDecoration:"none"}}>✓ Drive</a>:"☁ Drive"}
-                            </button>
-                            {(wpConfigured||(wpUrl&&wpUser&&wpPass))&&(
-                              <button onClick={()=>uploadToWP(lpHtmlB,"B")} disabled={wpUploadingB} style={{padding:"4px 10px",borderRadius:5,border:"none",background:"#21759b",color:"#fff",fontSize:10,cursor:"pointer",fontFamily:"inherit",fontWeight:600,opacity:wpUploadingB?.6:1}}>
-                                {wpUploadingB?T("يرفع...","Uploading..."):"⬆ WP"}
-                              </button>
-                            )}
-                            {hsConfigured&&(
-                              <button onClick={()=>uploadToHS(lpHtmlB,"B")} disabled={hsUploadingB} style={{padding:"4px 10px",borderRadius:5,border:"none",background:"#ff7a59",color:"#fff",fontSize:10,cursor:"pointer",fontFamily:"inherit",fontWeight:600,opacity:hsUploadingB?.6:1}}>
-                                {hsUploadingB?T("يرفع...","Uploading..."):"⬆ HubSpot"}
-                              </button>
-                            )}
-                            <button onClick={()=>{setLpHtmlB("");setLpHtmlBErr("");setWpResB(null);setHsResB(null);}} style={{padding:"4px 8px",borderRadius:5,border:"1px solid rgba(255,255,255,.1)",background:"none",color:"#6a96aa",fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>{T("إعادة","Redo")}</button>
-                          </div>
-                        </div>
-                        {wpErrB&&<p style={{padding:"6px 12px",fontSize:10,color:"#f07070"}}>{wpErrB}</p>}
-                        {hsErrB&&<p style={{padding:"6px 12px",fontSize:10,color:"#f07070"}}>HubSpot: {hsErrB}</p>}
-                        {wpResB&&<div style={{padding:"8px 12px",background:"rgba(33,117,155,.12)",borderBottom:"1px solid rgba(1,53,90,.3)"}}><p style={{fontSize:10,color:"#5dc87a",margin:0}}>✓ WordPress — <a href={wpResB.editUrl} target="_blank" rel="noopener" style={{color:"#17a3a3"}}>{T("افتح في المحرر","Open in editor")}</a></p></div>}
-                        {hsResB&&<div style={{padding:"8px 12px",background:"rgba(255,122,89,.08)",borderBottom:"1px solid rgba(255,122,89,.2)"}}><p style={{fontSize:10,color:"#5dc87a",margin:0}}>✓ HubSpot — <a href={hsResB.editUrl} target="_blank" rel="noopener" style={{color:"#ff7a59"}}>{T("افتح في المحرر","Open in editor")}</a></p></div>}
-                        <div style={{padding:12}}>
-                          <pre style={{background:"#010c1e",border:"1px solid rgba(1,53,90,.6)",borderRadius:8,padding:12,overflowX:"auto",fontSize:9.5,color:"#f5c842",maxHeight:220,lineHeight:1.5,direction:"ltr",textAlign:"left",whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{lpHtmlB.slice(0,1400)}{lpHtmlB.length>1400?"…":""}</pre>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {tab==="library"&&(
-          <div className="qa">
-            <SH title={T("مكتبة الإعلانات","Ad Library")} sub={T("14 إعلاناً مرجعياً","14 reference ads")}/>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>
-              {CREATIVE_LIBRARY.map(ad=>{
-                const fCol=ad.funnel==="TOF"?"#f5a623":ad.funnel==="MOF"?"#17a3a3":"#5dc87a";
-                const cCol=ad.category.includes("ZATCA")?"#f07070":ad.category.includes("فاتورة")?"#17a3a3":"#6a96aa";
-                return(
-                  <div key={ad.id} style={{...card,marginBottom:0}}>
-                    <div style={{height:4,background:`linear-gradient(90deg,${cCol},${fCol})`}}/>
-                    <div style={{padding:"10px 12px"}}>
-                      <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:8,direction:"rtl"}}><Tag ch={ad.id} style={{fontSize:9,fontWeight:700,color:"#f5a623"}}/><Tag ch={ad.category} style={{fontSize:9,color:cCol}}/><Tag ch={ad.funnel} style={{fontSize:9,color:fCol}}/><Tag ch={ad.format} style={{fontSize:9}}/></div>
-                      <p style={{fontSize:13,fontWeight:700,direction:"rtl",textAlign:"right",lineHeight:1.5,marginBottom:6}}>{ad.headline}</p>
-                      {ad.sub_top&&<p style={{fontSize:10.5,color:"#5dc87a",direction:"rtl",textAlign:"right",marginBottom:2}}>✓ {ad.sub_top}</p>}
-                      {ad.sub_bot&&<p style={{fontSize:10.5,color:"#f07070",direction:"rtl",textAlign:"right",marginBottom:6}}>✗ {ad.sub_bot}</p>}
-                      <Btn ch={T("استخدم كمرجع","Use as Reference")} line full onClick={()=>{setBMsg(ad.headline);setBHook(ad.sub_top||"");setBCta(ad.cta||"");setTab("brief");}}/>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {tab==="icp"&&(
-          <div className="qa">
-            <SH title={T("شرائح العملاء","Customer Profiles")} sub={T(`${ICP_PERSONAS.length+customPersonas.length} شرائح`,`${ICP_PERSONAS.length+customPersonas.length} personas`)}/>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:10}}>
-              {[...ICP_PERSONAS,...customPersonas].map((p,idx)=>{
-                const tCol=p.tier==="A"?"#17a3a3":"#f5a623";
-                const isCustom=idx>=ICP_PERSONAS.length;
-                return(
-                  <div key={p.id||idx} style={{...card,marginBottom:0,border:isCustom?"1.5px solid rgba(245,166,35,.25)":"1px solid rgba(1,53,90,.45)"}}>
-                    <div style={{...cHead,background:`${tCol}08`}}>
-                      <div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:18}}>{p.icon||"👤"}</span><div><div style={{fontSize:12,fontWeight:700}}>{p.title}</div><div style={{fontSize:9.5,color:"#6a96aa"}}>{p.en||p.title}</div></div></div>
-                      <div style={{display:"flex",gap:4,alignItems:"center"}}>
-                        <Tag ch={`Tier ${p.tier}`} style={{fontSize:9.5,color:tCol,fontWeight:700}}/>
-                        {isCustom&&<button onClick={()=>setCustomPersonas(prev=>prev.filter((_,i)=>i!==idx-ICP_PERSONAS.length))} style={{background:"none",border:"none",color:"#f07070",cursor:"pointer",fontSize:14,lineHeight:1}}>×</button>}
-                      </div>
-                    </div>
-                    <div style={{padding:"12px 14px"}}>
-                      <p style={{fontSize:11.5,direction:"rtl",textAlign:"right",lineHeight:1.7,marginBottom:8}}>{p.pain_ar}</p>
-                      <div style={{marginBottom:10,padding:"8px 10px",background:"rgba(245,166,35,.05)",borderRadius:6,borderRight:"2px solid #f5a623"}}><p style={{fontSize:12.5,fontWeight:600,color:"#f5a623",direction:"rtl"}}>{p.hook_ar}</p></div>
-                      <div style={{display:"flex",gap:5}}>
-                        <button onClick={()=>{setExtraNote(`الجمهور: ${p.title} — ${p.pain_ar}`);setFunnel(p.funnel);setTab("content");}} style={{flex:1,padding:"7px 4px",borderRadius:6,border:"1px solid rgba(23,163,164,.35)",background:"rgba(23,163,164,.08)",color:"#17a3a3",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{T("نسخة إعلان","Ad Copy")}</button>
-                        <button onClick={()=>{setBMsg(p.hook_ar||"");setBHook(p.hook_ar||"");setBCta(p.cta_ar||"ابدأ الآن");setTab("brief");}} style={{flex:1,padding:"7px 4px",borderRadius:6,border:"1px solid rgba(245,166,35,.35)",background:"rgba(245,166,35,.08)",color:"#f5a623",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{T("استوديو تصميم","Design Studio")}</button>
-                        <button onClick={()=>{setExtraNote(`الجمهور: ${p.title} — ${p.pain_ar}`);setFunnel(p.funnel);setBMsg(p.hook_ar||"");setBHook(p.hook_ar||"");setBCta(p.cta_ar||"ابدأ الآن");setTab("content");}} style={{flex:1,padding:"7px 4px",borderRadius:6,border:"1px solid rgba(93,200,122,.35)",background:"rgba(93,200,122,.08)",color:"#5dc87a",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{T("الاثنين معاً","Both")}</button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-              <div style={{...card,marginBottom:0,border:"1.5px dashed rgba(1,53,90,.4)",cursor:"pointer"}} onClick={()=>setShowAddPersona(p=>!p)}>
-                <div style={{padding:"20px 14px",textAlign:"center",color:"#2e5468"}}>
-                  <div style={{fontSize:24,marginBottom:6}}>+</div>
-                  <div style={{fontSize:11.5,fontWeight:600}}>{T("أضف شريحة عميل","Add Custom Persona")}</div>
-                </div>
-              </div>
-            </div>
-            {showAddPersona&&(
-              <div style={{...card,marginTop:12}}>
-                <div style={cHead}><span style={{fontSize:11,fontWeight:600,color:"#f5a623"}}>{T("شريحة عميل جديدة","New Persona")}</span></div>
-                <div style={cBody}>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                    <Fld label={T("المسمى الوظيفي (عربي)","Role (Arabic)")}><input value={newPersona.title} onChange={e=>setNewPersona(p=>({...p,title:e.target.value}))} placeholder={T("مثال: مدير التسويق","e.g. مدير التسويق")} dir="rtl"/></Fld>
-                    <Fld label={T("المسمى (إنجليزي)","Role (English)")}><input value={newPersona.en} onChange={e=>setNewPersona(p=>({...p,en:e.target.value}))} placeholder="e.g. Marketing Manager"/></Fld>
-                  </div>
-                  <Fld label={T("المشكلة / نقطة الألم","Pain Point")}><textarea value={newPersona.pain_ar} onChange={e=>setNewPersona(p=>({...p,pain_ar:e.target.value}))} rows={2} dir="rtl" style={{textAlign:"right"}} placeholder={T("ما الذي يؤرقه؟","What is their pain?")}/></Fld>
-                  <Fld label={T("الهوك الإعلاني","Hook")}><input value={newPersona.hook_ar} onChange={e=>setNewPersona(p=>({...p,hook_ar:e.target.value}))} placeholder={T("الرسالة الأقوى لهذا الجمهور","The strongest message for this audience")} dir="rtl"/></Fld>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                    <Fld label="Tier"><div style={{display:"flex",gap:4}}>{["A","B"].map(t=><Seg key={t} ch={`Tier ${t}`} on={newPersona.tier===t} onClick={()=>setNewPersona(p=>({...p,tier:t}))}/>)}</div></Fld>
-                    <Fld label={T("مرحلة القمع","Funnel")}><div style={{display:"flex",gap:4}}>{["TOF","MOF","BOF"].map(f=><Seg key={f} ch={f} on={newPersona.funnel===f} onClick={()=>setNewPersona(p=>({...p,funnel:f}))}/>)}</div></Fld>
-                  </div>
-                  <div style={{display:"flex",gap:6,marginTop:4}}>
-                    <Btn ch={T("حفظ الشريحة","Save Persona")} gold onClick={()=>{if(!newPersona.title||!newPersona.pain_ar)return;const id=`CP${customPersonas.length+1}`;setCustomPersonas(prev=>[...prev,{...newPersona,id}]);setNewPersona({title:"",en:"",icon:"👤",tier:"A",pain_ar:"",hook_ar:"",funnel:"TOF",channels:[]});setShowAddPersona(false);}} full/>
-                    <Btn ch={T("إلغاء","Cancel")} line onClick={()=>setShowAddPersona(false)} full/>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ══════════════════════════════════════════════════
-            A/B VARIANTS
-        ══════════════════════════════════════════════════ */}
-        {tab==="abtest"&&(
-          <div className="qa">
-            <SH title={T("توليد نسختين A/B","A/B Copy Variants")} sub={T("نسختان بزاوية مختلفة — أيهما يُحوّل أكثر؟","Two different angles — which one converts better?")}/>
-            <ErrBox msg={abErr}/>
-            <div style={card}>
-              <div style={cHead}><span style={{fontSize:11,fontWeight:600,color:"#6a96aa"}}>{T("إعدادات الاختبار","Test Settings")}</span></div>
-              <div style={cBody}>
-                <Fld label={T("المنتج","Product")}><GroupedProductPicker selected={abProd} onSelect={setAbProd} lang={lang}/></Fld>
-                <Fld label={T("الفكرة أو الرسالة الأساسية","Core concept or message")}>
-                  <textarea value={abConcept} onChange={e=>setAbConcept(e.target.value)} rows={3} dir="rtl" style={{textAlign:"right"}} placeholder={T("مثال: قيود يوفر عليك توظيف محاسب كامل","e.g. Qoyod saves you a full-time accountant cost")}/>
-                </Fld>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-                  <Fld label={T("القناة","Channel")}><select value={abChan} onChange={e=>setAbChan(e.target.value)}>{["Instagram","TikTok","Snapchat","Meta","Google","LinkedIn"].map(c=><option key={c}>{c}</option>)}</select></Fld>
-                  <Fld label={T("الصيغة","Format")}><select value={abFmt} onChange={e=>setAbFmt(e.target.value)}>{["Static","Reel","Story","Carousel","Video"].map(f=><option key={f}>{f}</option>)}</select></Fld>
-                  <Fld label={T("مرحلة الجمهور","Funnel Stage")}><select value={abAud} onChange={e=>setAbAud(e.target.value)}>{["TOF","MOF","BOF"].map(s=><option key={s}>{s}</option>)}</select></Fld>
-                </div>
-                <Btn ch={abLd?T("يولّد...","Generating..."):`${T("ولّد نسختين","Generate A/B Variants")}`} gold={!abLd} onClick={genAB} dis={abLd} full/>
-              </div>
-            </div>
-            {abLd&&<Loader msg={T("يكتب نسختين بزاوية مختلفة...","Writing two different angles...")}/>}
-            {abRes&&!abLd&&(
-              <>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:10}}>
-                  {["variant_a","variant_b"].map(key=>{
-                    const v=abRes[key];if(!v)return null;
-                    const isA=key==="variant_a";
-                    const accent=isA?"#17a3a3":"#f59e0b";
-                    return(
-                      <div key={key} style={{...card,marginBottom:0,border:`1.5px solid ${accent}30`}}>
-                        <div style={{...cHead,background:`${accent}08`,borderBottom:`1px solid ${accent}20`}}>
-                          <span style={{fontSize:12,fontWeight:700,color:accent}}>{v.label||key}</span>
-                          <Tag ch={`CTR: ${v.predicted_ctr}`} style={{fontSize:9,background:`${accent}15`,color:accent,border:`1px solid ${accent}30`}}/>
-                        </div>
-                        <div style={{padding:"12px 14px",display:"flex",flexDirection:"column",gap:8}}>
-                          <div style={{padding:"8px 10px",background:"rgba(23,163,164,.05)",borderRadius:6,direction:"rtl"}}>
-                            <p style={{fontSize:9,color:"#6a96aa",marginBottom:3}}>{T("الهوك","Hook")}</p>
-                            <p style={{fontSize:13,fontWeight:700,color:"#ddeef4"}}>{v.hook}</p>
-                          </div>
-                          <div style={{direction:"rtl"}}>
-                            <p style={{fontSize:9,color:"#6a96aa",marginBottom:2}}>{T("الهيدلاين","Headline")}</p>
-                            <p style={{fontSize:12,fontWeight:600}}>{v.headline}</p>
-                          </div>
-                          <div style={{direction:"rtl"}}>
-                            <p style={{fontSize:9,color:"#6a96aa",marginBottom:2}}>{T("البودي","Body")}</p>
-                            <p style={{fontSize:11.5,lineHeight:1.7}}>{v.body}</p>
-                          </div>
-                          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                            <Tag ch={`CTA: ${v.cta}`} style={{fontSize:9.5,background:`${accent}12`,color:accent}}/>
-                            <Tag ch={v.hook_type} style={{fontSize:9.5}}/>
-                            <Tag ch={v.emotional_trigger} style={{fontSize:9.5}}/>
-                          </div>
-                          <p style={{fontSize:10.5,color:"#5dc87a",direction:"rtl"}}>{v.why}</p>
-                          <Btn ch={T("نسخ","Copy")} line onClick={()=>copyText(`${v.hook}\n\n${v.body}\n\n${v.cta}`)} full/>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                {(abRes.recommendation||abRes.testing_note)&&(
-                  <div style={{...card,marginTop:10}}>
-                    <div style={cBody}>
-                      {abRes.recommendation&&<Row label={T("التوصية","Recommendation")} val={abRes.recommendation}/>}
-                      {abRes.testing_note&&<Row label={T("ملاحظة الاختبار","Testing Note")} val={abRes.testing_note}/>}
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        )}
-
-        {/* ══════════════════════════════════════════════════
-            CONTENT CALENDAR
-        ══════════════════════════════════════════════════ */}
-        {tab==="calendar"&&(
-          <div className="qa">
-            <SH title={T("خطة المحتوى الشهرية","Monthly Content Calendar")} sub={T("خطة نشر كاملة بالمنصة والفكرة والكابشن","Full posting plan with platform, topic and caption")}/>
-            <ErrBox msg={calErr}/>
-            <div style={card}>
-              <div style={cHead}><span style={{fontSize:11,fontWeight:600,color:"#6a96aa"}}>{T("إعدادات الخطة","Plan Settings")}</span></div>
-              <div style={cBody}>
-                <Fld label={T("المنتج","Product")}><GroupedProductPicker selected={calProd} onSelect={setCalProd} lang={lang} extras={calExtras} onToggleExtra={v=>setCalExtras(prev=>prev.includes(v)?prev.filter(x=>x!==v):[...prev,v])}/></Fld>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                  <Fld label={T("الشهر / الفترة","Month / Period")}><input value={calMonth} onChange={e=>setCalMonth(e.target.value)} placeholder="مايو 2025"/></Fld>
-                  <Fld label={T("هدف الخطة","Goal")}><input value={calGoal} onChange={e=>setCalGoal(e.target.value)} placeholder="Awareness + Leads"/></Fld>
-                </div>
-                <Fld label={T("تكرار النشر","Posting Frequency")}>
-                  <select value={calFreq} onChange={e=>setCalFreq(e.target.value)}>
-                    {["daily","5 posts/week","4 posts/week","3 posts/week","2 posts/week","1 post/week"].map(f=><option key={f}>{f}</option>)}
-                  </select>
-                </Fld>
-                <Fld label={T("المنصات","Platforms")}>
-                  <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:4}}>
-                    {["Instagram","TikTok","Snapchat","X (Twitter)","LinkedIn","YouTube Shorts"].map(p=>{
-                      const on=calPlatforms.includes(p);
-                      return <button key={p} onClick={()=>setCalPlatforms(pr=>on?pr.filter(x=>x!==p):[...pr,p])} style={{padding:"3px 9px",borderRadius:4,cursor:"pointer",fontFamily:"inherit",fontSize:10,fontWeight:on?700:400,border:`1px solid ${on?"rgba(23,163,164,.7)":"rgba(1,53,90,.35)"}`,background:on?"rgba(23,163,164,.15)":"#0a1f3d",color:on?"#17a3a3":"#5a8090",transition:"all .12s"}}>{p}</button>;
-                    })}
-                  </div>
-                </Fld>
-                <Btn ch={calLd?T("يبني الخطة...","Building plan..."):`${T("أنشئ الخطة","Generate Calendar")}`} gold={!calLd} onClick={genCalendar} dis={calLd} full/>
-              </div>
-            </div>
-            {calLd&&<Loader msg={T("يبني خطة محتوى شهرية...","Building monthly content plan...")}/>}
-            {calRes&&!calLd&&(
-              <>
-                <div style={{...card,marginTop:10}}>
-                  <div style={cHead}>
-                    <span style={{fontSize:12,fontWeight:700}}>{calRes.month}</span>
-                    <div style={{display:"flex",gap:6}}>
-                      <Tag ch={`${calRes.total_posts} posts`}/>
-                      <Tag ch={calRes.goal||calGoal}/>
-                    </div>
-                  </div>
-                  <div style={{padding:"10px 14px",display:"flex",gap:6,flexWrap:"wrap"}}>
-                    {(calRes.themes||[]).map((t,i)=><Tag key={i} ch={t} style={{fontSize:10.5,background:"rgba(23,163,164,.1)",color:"#17a3a3"}}/>)}
-                  </div>
-                </div>
-                {(calRes.weeks||[]).map(w=>(
-                  <div key={w.week} style={{...card,marginTop:10}}>
-                    <div style={cHead}><span style={{fontSize:11.5,fontWeight:700}}>{T(`الأسبوع ${w.week}`,`Week ${w.week}`)}</span><Tag ch={`${(w.posts||[]).length} posts`}/></div>
-                    <div style={{padding:"0 14px 12px"}}>
-                      {(w.posts||[]).map((post,i)=>(
-                        <div key={i} style={{padding:"12px 0",borderBottom:"1px solid rgba(1,53,90,.3)"}}>
-                          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:6}}>
-                            <Tag ch={post.day} style={{background:"rgba(23,163,164,.1)",color:"#17a3a3"}}/>
-                            <Tag ch={post.platform}/>
-                            <Tag ch={post.format}/>
-                            <Tag ch={post.funnel_stage} style={{background:post.funnel_stage==="TOF"?"rgba(96,165,250,.1)":post.funnel_stage==="MOF"?"rgba(245,158,11,.1)":"rgba(16,185,129,.1)",color:post.funnel_stage==="TOF"?"#60a5fa":post.funnel_stage==="MOF"?"#f59e0b":"#10b981"}}/>
-                          </div>
-                          <p style={{fontSize:12.5,fontWeight:700,color:"#ddeef4",direction:"rtl",marginBottom:4}}>{post.design_text}</p>
-                          <p style={{fontSize:11.5,color:"#6a96aa",direction:"rtl",marginBottom:6,lineHeight:1.6}}>{post.caption}</p>
-                          <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
-                            <span style={{fontSize:9.5,color:"#2e5468"}}>{post.hashtags}</span>
-                            <Tag ch={`CTA: ${post.cta}`} style={{fontSize:9.5,color:"#f59e0b",background:"rgba(245,158,11,.08)"}}/>
-                            <Btn ch={T("نسخ","Copy")} line onClick={()=>copyText(`${post.design_text}\n\n${post.caption}\n\n${post.hashtags}`)}/>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-                {calRes.hashtag_sets&&(
-                  <div style={{...card,marginTop:10}}>
-                    <div style={cHead}><span style={{fontSize:11,fontWeight:600,color:"#6a96aa"}}>{T("مجموعات الهاشتاق","Hashtag Sets")}</span></div>
-                    <div style={cBody}>
-                      <Row label={T("رئيسي","Main")} val={calRes.hashtag_sets.main}/>
-                      <Row label={T("ثانوي","Secondary")} val={calRes.hashtag_sets.secondary}/>
-                    </div>
-                  </div>
-                )}
-              </>
             )}
           </div>
         )}
