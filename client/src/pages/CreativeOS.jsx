@@ -1393,6 +1393,7 @@ export default function CreativeOS(){
                   <Btn ch={T("Meta","Meta")} xs onClick={()=>loadLiveAds("facebook")} dis={liveAdsLd||!mComp}/>
                   <Btn ch={T("Google","Google")} xs onClick={()=>loadLiveAds("google")} dis={liveAdsLd||!mComp}/>
                   <Btn ch={T("IG","IG")} xs onClick={()=>loadLiveAds("instagram")} dis={liveAdsLd||!mComp}/>
+                  <Btn ch={T("YouTube","YouTube")} xs onClick={()=>loadLiveAds("youtube")} dis={liveAdsLd||!mComp}/>
                 </div>
               </div>
               <div style={cBody}>

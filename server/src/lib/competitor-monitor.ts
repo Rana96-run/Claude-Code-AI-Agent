@@ -82,7 +82,7 @@ function previousSundayKey(d = new Date()): string {
 async function scrapeCompetitor(competitor: string): Promise<CompetitorSnapshot> {
   const port = process.env.PORT || 8080;
   const base = `http://localhost:${port}`;
-  const sources = ["facebook", "instagram", "google"] as const;
+  const sources = ["facebook", "instagram", "google", "youtube"] as const;
   const results: Partial<CompetitorSnapshot> = {
     competitor,
     domain: "",
@@ -99,7 +99,7 @@ async function scrapeCompetitor(competitor: string): Promise<CompetitorSnapshot>
       });
       const j = (await r.json().catch(() => ({}))) as any;
       if (j.ok && Array.isArray(j.ads)) {
-        results[source as "facebook" | "instagram" | "google"] = j.ads as AdSnapshot[];
+        results[source as "facebook" | "instagram" | "google" | "youtube"] = j.ads as AdSnapshot[];
         if (j.competitor) results.domain = j.competitor;
       } else {
         logger.warn({ source, competitor, error: j.error }, "monitor: source returned no ads");
@@ -215,6 +215,7 @@ export async function runMonitorOnce(opts: { competitors?: string[]; postToSlack
     allSheetRows.push(...flatten(snap.facebook, "Facebook Ads"));
     allSheetRows.push(...flatten(snap.instagram, "Instagram"));
     allSheetRows.push(...flatten(snap.google, "Google Ads"));
+    allSheetRows.push(...flatten(snap.youtube, "YouTube"));
   }
 
   // Append all scraped posts to the Google Sheet (deduped by URL inside)

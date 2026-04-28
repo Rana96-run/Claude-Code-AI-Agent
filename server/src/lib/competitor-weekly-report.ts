@@ -31,6 +31,7 @@ export interface CompetitorSnapshot {
   facebook?: AdSnapshot[];
   google?: AdSnapshot[];
   instagram?: AdSnapshot[];
+  youtube?: AdSnapshot[];
 }
 
 export interface WeekDiff {
@@ -41,9 +42,10 @@ export interface WeekDiff {
   google_paused: number;
   instagram_new_posts: number;
   instagram_top_post?: AdSnapshot;
+  youtube_new_videos: number;
   notable_angles: string[];
-  /* Top 3 ads (mix of FB + Google + IG) with images, used to render samples in Slack */
-  top_samples: Array<AdSnapshot & { source: "facebook" | "google" | "instagram" }>;
+  /* Top 3 items (mix of FB + Google + IG + YT) with images, for Slack samples */
+  top_samples: Array<AdSnapshot & { source: "facebook" | "google" | "instagram" | "youtube" }>;
 }
 
 /* ─── Diff: this week vs last week ─────────────────────────────────────── */
@@ -56,6 +58,7 @@ export function diffSnapshots(
   const lastFb = idsThis(lastWeek?.facebook);
   const lastGoogle = idsThis(lastWeek?.google);
   const lastIg = idsThis(lastWeek?.instagram);
+  const lastYt = idsThis(lastWeek?.youtube);
 
   const fbNew = (thisWeek.facebook || []).filter(
     (a) => !lastFb.has(a.detail_url || `${a.page_name}|${a.hook}`),
@@ -72,22 +75,29 @@ export function diffSnapshots(
   const igNew = (thisWeek.instagram || []).filter(
     (a) => !lastIg.has(a.detail_url || `${a.page_name}|${a.hook}`),
   );
+  const ytNew = (thisWeek.youtube || []).filter(
+    (a) => !lastYt.has(a.detail_url || `${a.page_name}|${a.hook}`),
+  );
 
-  // Notable angles — distinct hooks across all new content
-  const angles = [...fbNew, ...gNew, ...igNew]
+  // Notable angles — distinct hooks across all new content (incl YT video titles)
+  const angles = [...fbNew, ...gNew, ...igNew, ...ytNew]
     .map((a) => a.hook?.slice(0, 60))
     .filter((h): h is string => !!h)
     .slice(0, 5);
 
   // Top 3 visual samples: prefer ones WITH images, mix sources
   const samples: WeekDiff["top_samples"] = [];
-  const tag = (arr: AdSnapshot[], src: "facebook" | "google" | "instagram"): WeekDiff["top_samples"] =>
+  const tag = (arr: AdSnapshot[], src: "facebook" | "google" | "instagram" | "youtube"): WeekDiff["top_samples"] =>
     arr.map((a) => ({ ...a, source: src }));
-  const candidates = [...tag(fbNew, "facebook"), ...tag(gNew, "google"), ...tag(igNew, "instagram")];
+  const candidates = [
+    ...tag(fbNew, "facebook"),
+    ...tag(gNew, "google"),
+    ...tag(igNew, "instagram"),
+    ...tag(ytNew, "youtube"),
+  ];
   for (const c of candidates) {
     if (c.image_url && samples.length < 3) samples.push(c);
   }
-  // Backfill with non-image ads if we have fewer than 3 with images
   if (samples.length < 3) {
     for (const c of candidates) {
       if (!samples.includes(c) && samples.length < 3) samples.push(c);
@@ -102,6 +112,7 @@ export function diffSnapshots(
     google_paused: gPaused.length,
     instagram_new_posts: igNew.length,
     instagram_top_post: igNew[0],
+    youtube_new_videos: ytNew.length,
     notable_angles: angles,
     top_samples: samples,
   };
@@ -183,7 +194,7 @@ export function formatSlackBlocks(
   reportDocUrl?: string,
 ) {
   const totalNew = diffs.reduce(
-    (s, d) => s + d.facebook_new + d.google_new + d.instagram_new_posts,
+    (s, d) => s + d.facebook_new + d.google_new + d.instagram_new_posts + d.youtube_new_videos,
     0,
   );
   const opener =
@@ -213,7 +224,8 @@ export function formatSlackBlocks(
     const ct = (ai.competitors || []).find(
       (c) => c.name.toLowerCase() === d.competitor.toLowerCase(),
     );
-    const compTotal = d.facebook_new + d.google_new + d.instagram_new_posts;
+    const compTotal =
+      d.facebook_new + d.google_new + d.instagram_new_posts + d.youtube_new_videos;
     if (compTotal === 0 && d.facebook_paused === 0 && d.google_paused === 0) continue;
 
     // Activity sentence in natural Arabic
@@ -221,6 +233,7 @@ export function formatSlackBlocks(
     if (d.facebook_new > 0) activity.push(`أطلقوا ${d.facebook_new} إعلان جديد على Meta`);
     if (d.google_new > 0) activity.push(`${d.google_new} إعلان على Google`);
     if (d.instagram_new_posts > 0) activity.push(`نشروا ${d.instagram_new_posts} منشور على إنستغرام`);
+    if (d.youtube_new_videos > 0) activity.push(`نشروا ${d.youtube_new_videos} فيديو جديد على YouTube`);
     if (d.facebook_paused > 0) activity.push(`أوقفوا ${d.facebook_paused} إعلان من Meta`);
     if (d.google_paused > 0) activity.push(`أوقفوا ${d.google_paused} إعلان من Google`);
     const activityLine = activity.length > 0 ? activity.join("، ") : "لا تغيير ملحوظ";

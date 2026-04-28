@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { diffSnapshots, buildAIPrompt, formatSlackBlocks, type CompetitorSnapshot } from "../lib/competitor-weekly-report.js";
 import { runMonitorOnce } from "../lib/competitor-monitor.js";
+import { scrapeYoutubeChannel } from "../lib/youtube-scraper.js";
 
 const router = Router();
 
@@ -162,8 +163,8 @@ router.post("/competitor-ads", async (req, res) => {
     res.status(400).json({ error: "Missing competitor" });
     return;
   }
-  if (!source || !["facebook", "google", "instagram"].includes(source)) {
-    res.status(400).json({ error: 'source must be "facebook", "google", or "instagram"' });
+  if (!source || !["facebook", "google", "instagram", "youtube"].includes(source)) {
+    res.status(400).json({ error: 'source must be "facebook", "google", "instagram", or "youtube"' });
     return;
   }
 
@@ -212,6 +213,21 @@ router.post("/competitor-ads", async (req, res) => {
       resultsLimit: apifyMinCount,
       addParentData: false,
     };
+  } else if (source === "youtube") {
+    // YouTube uses Google's official Data API (not Apify) — service account
+    const yt = await scrapeYoutubeChannel(competitor, cap);
+    res.status(200).json({
+      ok: yt.ok,
+      source: "youtube",
+      competitor: c.domain,
+      country,
+      actor: "youtube-data-api-v3",
+      channel_id: yt.channelId,
+      count: yt.videos.length,
+      ads: yt.videos,
+      ...(yt.error ? { error: yt.error } : {}),
+    });
+    return;
   }
 
   const result = await runActor(actor, input, token);
