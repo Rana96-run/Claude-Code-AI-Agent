@@ -1188,7 +1188,7 @@ export default function CreativeOS(){
               );
             })()}
             {/* ── Content results — single or multi-channel ── */}
-            {!cl&&!abMode&&Object.keys(crMulti).length>0&&(()=>{
+            {!cl&&variantCount===1&&Object.keys(crMulti).length>0&&(()=>{
               const channelList=Object.keys(crMulti);
               return(
                 <div className="qa">
