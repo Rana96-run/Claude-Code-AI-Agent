@@ -133,21 +133,57 @@ router.post("/competitor-ads", async (req, res) => {
   if (!result.ok) {
     // eslint-disable-next-line no-console
     console.error(`[competitor-ads] ${source} failed`, result);
-    res.status(502).json({ error: result.error, source, competitor: c.domain });
+    res.status(502).json({ error: result.error, source, competitor: c.domain, actor });
     return;
   }
 
   // Normalize across sources
   const ads = result.items.slice(0, cap).map((it) => normalize(it, source));
 
+  // Debug mode: include first raw item so we can see actual field names
+  const debug = req.body?._debug;
   res.status(200).json({
     ok: true,
     source,
     competitor: c.domain,
     country,
+    actor,
     count: ads.length,
     ads,
+    ...(debug && result.items[0] ? { _raw_keys: Object.keys(result.items[0]).slice(0, 30), _raw_sample: result.items[0] } : {}),
   });
+});
+
+/* ─── GET /api/competitor-ads/discover-actor?q=google+ads ─────────────────
+   Helper to find the right Apify actor ID for a search term, since
+   actor names change and there's no canonical list. */
+router.get("/competitor-ads/discover-actor", async (req, res) => {
+  const token = process.env.APIFY_TOKEN;
+  if (!token) {
+    res.status(500).json({ error: "APIFY_TOKEN not set" });
+    return;
+  }
+  const q = String(req.query.q || "").trim();
+  if (!q) {
+    res.status(400).json({ error: "Missing q parameter" });
+    return;
+  }
+  try {
+    const r = await fetch(
+      `https://api.apify.com/v2/store?search=${encodeURIComponent(q)}&limit=10&token=${encodeURIComponent(token)}`,
+      { signal: AbortSignal.timeout(10000) },
+    );
+    const j = (await r.json().catch(() => ({}))) as { data?: { items?: any[] } };
+    const items = (j.data?.items || []).map((it: any) => ({
+      id: `${it.username}~${it.name}`,
+      title: it.title,
+      runs: it.stats?.totalRuns,
+      users: it.stats?.totalUsers,
+    }));
+    res.status(200).json({ q, count: items.length, items });
+  } catch (err) {
+    res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
+  }
 });
 
 /* ─── Normalize each source's response into a common ad shape ────────── */
