@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { diffSnapshots, buildAIPrompt, formatSlackBlocks, type CompetitorSnapshot } from "../lib/competitor-weekly-report.js";
 
 const router = Router();
 
@@ -119,17 +120,13 @@ router.post("/competitor-ads", async (req, res) => {
     const fbUrl = `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=${country}&q=${encodeURIComponent(c.fb_query)}&search_type=keyword_unordered`;
     input = { urls: [{ url: fbUrl }], count: apifyMinCount };
   } else if (source === "google") {
-    // solidcode/ads-transparency-scraper — most reliable (17K runs)
-    // The actor uses startUrls pointing at the Ads Transparency Center page.
-    actor = "solidcode~ads-transparency-scraper";
-    const adsUrl = `https://adstransparency.google.com/?region=${country}&domain=${c.domain}`;
+    // fortuitous_pirate's Google Ads Transparency scraper (8K+ runs, 200+ users).
+    // Uses simpler input shape: query (advertiser/domain) + region.
+    actor = "fortuitous_pirate~google-ads-transparency-scraper";
     input = {
-      startUrls: [{ url: adsUrl }],
-      maxResults: apifyMinCount,
-      // Some variants of the actor look for these fields too — pass all to be safe
-      domain: c.domain,
-      domains: [c.domain],
+      query: c.domain,
       region: country,
+      maxItems: apifyMinCount,
     };
   } else if (source === "instagram") {
     if (!c.ig) {
@@ -169,6 +166,75 @@ router.post("/competitor-ads", async (req, res) => {
     ads,
     ...(debug && result.items[0] ? { _raw_keys: Object.keys(result.items[0]).slice(0, 30), _raw_sample: result.items[0] } : {}),
   });
+});
+
+/* ─── POST /api/competitor-ads/weekly-report-preview ──────────────────────
+   Manual trigger: scrapes 3 competitors right now, builds a fake "last
+   week" baseline (empty for first run), runs AI summary, returns Slack
+   blocks. Use this to validate the report format before wiring auto-cron. */
+router.post("/competitor-ads/weekly-report-preview", async (req, res) => {
+  const apifyToken = process.env.APIFY_TOKEN;
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+  if (!apifyToken || !anthropicKey) {
+    res.status(500).json({ error: "APIFY_TOKEN or ANTHROPIC_API_KEY not set" });
+    return;
+  }
+  const { competitors = ["Daftra", "Foodics", "Rewaa"], country = "SA" } = req.body ?? {};
+
+  // Fetch current week for each competitor (parallel)
+  const thisWeek: CompetitorSnapshot[] = [];
+  for (const compName of competitors) {
+    const c = resolve(compName);
+    if (!c) continue;
+    const snap: CompetitorSnapshot = {
+      competitor: compName,
+      domain: c.domain,
+      fetched_at: new Date().toISOString(),
+    };
+    // Run all 3 sources in parallel
+    const results = await Promise.allSettled([
+      runActor("curious_coder~facebook-ads-library-scraper", { urls: [{ url: `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=${country}&q=${encodeURIComponent(c.fb_query)}&search_type=keyword_unordered` }], count: 10 }, apifyToken),
+      runActor("solidcode~ads-transparency-scraper", { startUrls: [{ url: `https://adstransparency.google.com/?region=${country}&domain=${c.domain}` }], maxResults: 10 }, apifyToken),
+      c.ig
+        ? runActor("apify~instagram-scraper", { directUrls: [`https://www.instagram.com/${c.ig}/`], resultsType: "posts", resultsLimit: 10, addParentData: false }, apifyToken)
+        : Promise.resolve({ ok: true, items: [] } as const),
+    ]);
+    const fb = results[0].status === "fulfilled" && results[0].value.ok ? results[0].value.items.map((i) => normalize(i, "facebook")) : [];
+    const goog = results[1].status === "fulfilled" && results[1].value.ok ? results[1].value.items.map((i) => normalize(i, "google")) : [];
+    const ig = results[2].status === "fulfilled" && results[2].value.ok ? results[2].value.items.map((i) => normalize(i, "instagram")) : [];
+    snap.facebook = fb;
+    snap.google = goog;
+    snap.instagram = ig;
+    thisWeek.push(snap);
+  }
+
+  // For preview, treat lastWeek as empty so everything shows as "new"
+  const diffs = thisWeek.map((tw) => diffSnapshots(tw, null));
+  const weekLabel = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const { system, user } = buildAIPrompt(diffs, weekLabel);
+
+  // Call Anthropic for the AI summary (using same generate route logic)
+  const aiResp = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-api-key": anthropicKey, "anthropic-version": "2023-06-01" },
+    body: JSON.stringify({
+      model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5",
+      max_tokens: 2500,
+      system,
+      messages: [{ role: "user", content: user }, { role: "assistant", content: "{" }],
+    }),
+  });
+  const aiData = (await aiResp.json().catch(() => ({}))) as any;
+  let ai: any = {};
+  try {
+    const text = "{" + (aiData.content?.[0]?.text || "");
+    ai = JSON.parse(text);
+  } catch {
+    ai = { headline: "AI parse failed", competitors: [], recommended_actions: [], alert: null };
+  }
+
+  const blocks = formatSlackBlocks(diffs, ai, weekLabel);
+  res.status(200).json({ ok: true, week: weekLabel, diffs, ai, slack_blocks: blocks });
 });
 
 /* ─── GET /api/competitor-ads/actor-schema?id=user~name ───────────────────
