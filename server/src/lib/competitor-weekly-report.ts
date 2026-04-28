@@ -196,7 +196,7 @@ export function formatSlackBlocks(
   const blocks: any[] = [
     {
       type: "header",
-      text: { type: "plain_text", text: `📊 ملخّص المنافسين — ${weekLabel}`, emoji: true },
+      text: { type: "plain_text", text: `ملخّص المنافسين — ${weekLabel}`, emoji: false },
     },
     {
       type: "section",
@@ -226,7 +226,7 @@ export function formatSlackBlocks(
     const activityLine = activity.length > 0 ? activity.join("، ") : "لا تغيير ملحوظ";
 
     // Header section for this competitor
-    let headerText = `*🏢 ${d.competitor}*\n${activityLine}.`;
+    let headerText = `*${d.competitor}*\n${activityLine}.`;
     if (ct?.summary) headerText += `\n\n_${ct.summary}_`;
     blocks.push({
       type: "section",
@@ -242,7 +242,7 @@ export function formatSlackBlocks(
       analysisBits.push(`*❌ ثغرات نقدر نستفيد منها:*\n${ct.bad.map((b) => `• ${b}`).join("\n")}`);
     }
     if (ct?.qoyod_advantage) {
-      analysisBits.push(`*🎯 ميزة قيود:*\n${ct.qoyod_advantage}`);
+      analysisBits.push(`*ميزة قيود:*\n${ct.qoyod_advantage}`);
     }
     if (analysisBits.length > 0) {
       blocks.push({
@@ -273,7 +273,7 @@ export function formatSlackBlocks(
           elements: [
             {
               type: "mrkdwn",
-              text: `📝 *${sample.source}* — _"${(sample.hook || sample.body || "").slice(0, 120)}"_`,
+              text: `*${sample.source}* — _"${(sample.hook || sample.body || "").slice(0, 120)}"_`,
             },
           ],
         });
@@ -287,7 +287,7 @@ export function formatSlackBlocks(
   if (ai.tasks && ai.tasks.length > 0) {
     blocks.push({
       type: "section",
-      text: { type: "mrkdwn", text: `🎯 *مهام هذا الأسبوع للفريق*` },
+      text: { type: "mrkdwn", text: `*مهام هذا الأسبوع للفريق*` },
     });
     for (const t of ai.tasks) {
       const meta = [t.owner, t.deadline].filter(Boolean).join(" · ");
@@ -307,15 +307,15 @@ export function formatSlackBlocks(
   if (ai.alert) {
     blocks.push({
       type: "section",
-      text: { type: "mrkdwn", text: `🚨 *تنبيه عاجل*\n${ai.alert}` },
+      text: { type: "mrkdwn", text: `*تنبيه عاجل*\n${ai.alert}` },
     });
     blocks.push({ type: "divider" });
   }
 
   // Links — sheet for raw data, doc for full visual report
   const links: string[] = [];
-  if (reportDocUrl) links.push(`📄 <${reportDocUrl}|التقرير الكامل بالصور (Google Doc)>`);
-  if (sheetUrl) links.push(`📋 <${sheetUrl}|البيانات الخام في Google Sheet>`);
+  if (reportDocUrl) links.push(`<${reportDocUrl}|التقرير الكامل بالصور (Google Doc)>`);
+  if (sheetUrl) links.push(`<${sheetUrl}|البيانات الخام في Google Sheet>`);
   if (links.length > 0) {
     blocks.push({
       type: "section",

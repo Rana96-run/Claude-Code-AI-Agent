@@ -1011,7 +1011,7 @@ export default function CreativeOS(){
           </button>
           {syncErr&&<span style={{fontSize:9,color:"#f07070",maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={syncErr}>⚠ {syncErr}</span>}
           <button onClick={()=>setTermOpen(v=>!v)} title={T("وكيل سريع — أدخل أي طلب","Quick Agent — type any request")} style={{display:"flex",alignItems:"center",gap:5,padding:"3px 9px",borderRadius:5,border:`1px solid ${termOpen?"rgba(245,166,35,.5)":"rgba(245,166,35,.3)"}`,background:termOpen?"rgba(245,166,35,.15)":"transparent",color:"#f5a623",fontSize:9.5,cursor:"pointer",fontFamily:"inherit",fontWeight:600}}>
-            💬 {T("وكيل سريع","Agent")}
+            {T("وكيل سريع","Quick Agent")}
           </button>
           <div style={{display:"flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:4,border:"1px solid rgba(23,163,164,.12)",fontSize:9.5,color:"#2e5468"}}>
             <div style={{width:4,height:4,borderRadius:"50%",background:"#17a3a3"}}/>LIVE
@@ -1022,7 +1022,7 @@ export default function CreativeOS(){
         <div style={{borderBottom:"1px solid rgba(245,166,35,.25)",background:"rgba(245,166,35,.04)",padding:"12px 18px"}}>
           <div style={{maxWidth:840,margin:"0 auto",display:"flex",flexDirection:"column",gap:8,direction:dir}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-              <span style={{fontSize:11,fontWeight:700,color:"#f5a623"}}>💬 {T("وكيل سريع — أدخل أي طلب","Quick Agent — type any request")}</span>
+              <span style={{fontSize:11,fontWeight:700,color:"#f5a623"}}>{T("وكيل سريع — أدخل أي طلب","Quick Agent — type any request")}</span>
               <select value={termPersona} onChange={e=>setTermPersona(e.target.value)} style={{padding:"3px 8px",borderRadius:4,fontSize:10,fontFamily:"inherit"}}>
                 {PERSONAS_LIST.map(p=><option key={p.id} value={p.id}>{lang==="ar"?p.ar:p.en}</option>)}
               </select>
