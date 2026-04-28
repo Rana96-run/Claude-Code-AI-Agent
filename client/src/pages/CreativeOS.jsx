@@ -1397,7 +1397,16 @@ export default function CreativeOS(){
                   <Fld label={T("المنافس","Competitor")}><select value={mComp} onChange={e=>setMComp(e.target.value)}><option value="">{T("— اختر —","— Select —")}</option>{COMPS.map(c=><option key={c.id} value={lang==="en"?c.en:c.n}>{lang==="en"?c.en:c.n}</option>)}</select></Fld>
                   <Fld label={T("القناة","Channel")}><select value={mChan} onChange={e=>setMChan(e.target.value)}>{["Instagram","Facebook","TikTok","Snapchat","LinkedIn","Twitter/X"].map(v=><option key={v}>{v}</option>)}</select></Fld>
                 </div>
-                <Fld label={T("وصف الإعلان","Ad Description")}><textarea value={mDesc} onChange={e=>setMDesc(e.target.value)} rows={3} placeholder={T("صف الإعلان: الجملة الافتتاحية، الرسالة...","Describe: hook, message, format...")}/></Fld>
+                <Fld label={T("رابط البوست / الإعلان أو وصفه","Post / Ad URL or Description")}>
+                  <textarea value={mDesc} onChange={e=>setMDesc(e.target.value)} rows={3}
+                    placeholder={T(
+                      "الصق رابط مباشر لأي بوست أو إعلان (IG · FB · LinkedIn · Twitter · أي موقع) — أو اكتب وصفاً يدوياً للإعلان",
+                      "Paste any post or ad URL (IG · FB · LinkedIn · Twitter · any page) — or describe the ad manually"
+                    )}
+                    dir="rtl" style={{textAlign:"right"}}
+                  />
+                  <p style={{fontSize:9.5,color:"#6a96aa",marginTop:4,direction:"rtl"}}>{T("يجلب المحتوى الحقيقي تلقائياً — يعمل مع المنشورات العضوية والإعلانات المدفوعة","Auto-fetches real content — works with organic posts and paid ads")}</p>
+                </Fld>
                 <Btn ch={T("أنشئ النسخة المضادة","Create Counter-Creative")} onClick={genCounter} dis={mLd} full/>
               </div>
             </div>
