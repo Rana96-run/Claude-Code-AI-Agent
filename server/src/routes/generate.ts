@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { createHash } from "crypto";
 import { getContextSnippet } from "../lib/competitor-context.js";
+import { getBrandLawSnippet, getCreativeKit } from "../lib/qoyod-brand-law.js";
 
 const router = Router();
 
@@ -287,18 +288,31 @@ function pruneCache() {
 // ─── Main route ─────────────────────────────────────────────────────────────
 
 router.post("/generate", async (req, res) => {
-  const { system, user, max_tokens = 1400, json_mode = false, skip_competitor_context = false } = req.body ?? {};
+  const {
+    system,
+    user,
+    max_tokens = 1400,
+    json_mode = false,
+    skip_competitor_context = false,
+    skip_brand_law = false,
+    persona,
+    creative_kit = false,
+  } = req.body ?? {};
 
   if (!system || !user) {
     res.status(400).json({ error: "Missing system or user prompt" });
     return;
   }
 
-  // Inject the weekly competitor context into the system prompt so content
-  // generation is automatically aware of what competitors are doing this week.
-  // Caller can opt out via skip_competitor_context (e.g., for non-content prompts).
+  // Layered system-prompt enrichment (in order of importance):
+  //   1. Brand law — Qoyod's non-negotiable identity, dialect, golden rule
+  //   2. Creative kit — sector + hook + competitor angles (only for content gen)
+  //   3. Competitor context — what rivals shipped this week (auto-refreshed)
+  // All three can be opted out per request for non-creative endpoints.
+  const lawSnippet = skip_brand_law ? "" : `\n\n${getBrandLawSnippet(persona)}\n\n`;
+  const kitSnippet = creative_kit ? `\n\n${getCreativeKit()}\n\n` : "";
   const ctxSnippet = skip_competitor_context ? "" : getContextSnippet();
-  const enrichedSystem = String(system) + ctxSnippet;
+  const enrichedSystem = lawSnippet + String(system) + kitSnippet + ctxSnippet;
 
   const totalLength = enrichedSystem.length + String(user).length;
   if (totalLength > MAX_PROMPT_CHARS) {

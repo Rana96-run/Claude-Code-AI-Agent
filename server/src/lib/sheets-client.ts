@@ -179,6 +179,37 @@ export async function sheetsAppendCompetitorPosts(posts: CompetitorPost[]): Prom
   }
 }
 
+/** Append a hypothesis/result to the "Hypothesis Ledger" tab.
+ *  Schema follows the master prompt section 3.1: id, hypothesis, expected_lift,
+ *  actual_result, verdict, lesson, atomic_id, sector, channel, funnel_stage. */
+export async function sheetsAppendHypothesis(h: {
+  id: string;
+  shipped_at: string;
+  hypothesis: string;
+  expected_lift?: string;
+  actual_result?: string;
+  verdict?: "WIN" | "LOSS" | "INCONCLUSIVE" | "PENDING";
+  lesson?: string;
+  atomic_id?: string;
+  sector?: string;
+  channel?: string;
+  funnel_stage?: string;
+}): Promise<void> {
+  await appendRows("Hypothesis Ledger", [[
+    h.id,
+    h.shipped_at,
+    h.hypothesis,
+    h.expected_lift ?? null,
+    h.actual_result ?? null,
+    h.verdict ?? "PENDING",
+    h.lesson ?? null,
+    h.atomic_id ?? null,
+    h.sector ?? null,
+    h.channel ?? null,
+    h.funnel_stage ?? null,
+  ]]);
+}
+
 /** Append a content brief to the "Content Briefs" tab. */
 export async function sheetsAppendBrief(brief: {
   brief_id: string;
