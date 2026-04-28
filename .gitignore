@@ -1,6 +1,7 @@
 node_modules/
-dist/
+server/dist/
 build/
+# client/dist is committed so Railway serves pre-built assets without caching issues
 .env
 .env.local
 .env.*.local
