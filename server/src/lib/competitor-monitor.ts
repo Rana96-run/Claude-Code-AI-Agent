@@ -144,7 +144,9 @@ async function callClaude(system: string, user: string, max_tokens: number): Pro
 
 async function postToSlack(blocks: any[], summary: string): Promise<void> {
   const token = process.env.SLACK_BOT_TOKEN;
-  const channel = process.env.SLACK_REPORT_CHANNEL || process.env.SLACK_CHANNEL || "#general";
+  // Match the convention used by weekly-digest.ts. Optional SLACK_REPORT_CHANNEL
+  // lets you route competitor intel to a different channel than the digest.
+  const channel = process.env.SLACK_REPORT_CHANNEL || process.env.SLACK_DEFAULT_CHANNEL || process.env.SLACK_CHANNEL || "#general";
   if (!token) {
     logger.warn("monitor: SLACK_BOT_TOKEN not set — skipping Slack post");
     return;
