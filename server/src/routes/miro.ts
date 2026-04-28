@@ -154,14 +154,32 @@ router.post("/draw-system-architecture", async (req, res) => {
     (req.body as { board_id?: string }).board_id ?? process.env.MIRO_BOARD_ID;
   if (!boardId) return res.status(400).json({ error: "board_id required or set MIRO_BOARD_ID" });
   const clear = (req.body as { clear?: boolean }).clear !== false;
-  try {
-    if (clear) await clearBoard(miroToken.access_token, boardId);
-    await drawSystemArchitecture(miroToken.access_token, boardId);
-    res.json({ ok: true, view_link: `https://miro.com/app/board/${boardId}/` });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    res.status(500).json({ error: msg });
-  }
+  const viewLink = `https://miro.com/app/board/${boardId}/`;
+
+  // Fire-and-forget: drawing 30+ shapes + 22 connectors takes 60-90s
+  // (sequential Miro API calls). Railway's edge proxy times out at ~100s,
+  // so we return immediately and run the drawing in the background.
+  res.status(202).json({
+    ok: true,
+    accepted: true,
+    view_link: viewLink,
+    note: "Drawing in background — open the board in 30-60 seconds",
+  });
+
+  // eslint-disable-next-line no-console
+  console.log("[miro] system architecture render started in background");
+  (async () => {
+    try {
+      if (clear) await clearBoard(miroToken!.access_token, boardId);
+      await drawSystemArchitecture(miroToken!.access_token, boardId);
+      // eslint-disable-next-line no-console
+      console.log("[miro] system architecture render complete");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      // eslint-disable-next-line no-console
+      console.error("[miro] background render failed:", msg);
+    }
+  })();
 });
 
 /* Draw سمعه agent-specific workflow onto an existing board */
