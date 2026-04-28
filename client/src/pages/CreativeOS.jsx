@@ -675,6 +675,9 @@ export default function CreativeOS(){
   const[mLd,setMLd]=useState(false);
   const[mErr,setMErr]=useState("");
   const[ilog,setIlog]=useState([]);
+  const[liveAds,setLiveAds]=useState([]);
+  const[liveAdsLd,setLiveAdsLd]=useState(false);
+  const[liveAdsErr,setLiveAdsErr]=useState("");
 
   const[bProd,setBProd]=useState("QFlavours");
   const[bProdExtras,setBProdExtras]=useState([]);
@@ -869,6 +872,30 @@ export default function CreativeOS(){
     setCampLd(true);setCampErr("");setCampRes(null);
     try{setCampRes(await callAI(sys,usr,tokenBudget));}catch(e){setCampErr(e.message);}finally{setCampLd(false);}
   },[lang,campType,campTheme,campObj,campChs,campCtx,campBudget,campDuration,campScope]);
+
+  const loadLiveAds=useCallback(async()=>{
+    if(!mComp){setLiveAdsErr(T("اختر منافساً أولاً","Select a competitor first"));return;}
+    setLiveAdsLd(true);setLiveAdsErr("");setLiveAds([]);
+    try{
+      const r=await fetchWithTimeout("/api/meta-ads/search",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({competitor:mComp,country:"SA",limit:12})},20000);
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok||j.error){
+        setLiveAdsErr(j.error||T("فشل تحميل الإعلانات النشطة","Failed to load live ads"));
+        return;
+      }
+      setLiveAds(j.ads||[]);
+      if((j.ads||[]).length===0)setLiveAdsErr(T(`لا توجد إعلانات نشطة لـ ${mComp} في السعودية حالياً`,`No active ads for ${mComp} in Saudi Arabia right now`));
+    }catch(e){setLiveAdsErr(e.message);}finally{setLiveAdsLd(false);}
+  },[mComp,lang]);
+
+  const useLiveAdAsInput=useCallback((ad)=>{
+    // Fill the form with the real ad's content so genCounter has accurate input
+    const text=[ad.hook,ad.body,ad.caption].filter(Boolean).join("\n");
+    setMDesc(text);
+    // If platform info is available, switch the channel select to it
+    if(ad.platforms?.includes("INSTAGRAM"))setMChan("Instagram");
+    else if(ad.platforms?.includes("FACEBOOK"))setMChan("Facebook");
+  },[]);
 
   const genCounter=useCallback(async()=>{
     if(!mComp){setMErr(T("اختر المنافس أولاً","Select a competitor first"));return;}
@@ -1573,7 +1600,36 @@ export default function CreativeOS(){
                     </div>
                   ))}
                 </div>
-                <p style={{fontSize:10.5,color:"#6a96aa",direction:"rtl",textAlign:"right",marginTop:6}}>{T("اختر منافساً من الأعلى ثم املأ النموذج أدناه لتوليد نسخة مضادة","Pick a competitor above, then fill the form below to generate a counter-creative")}</p>
+                <p style={{fontSize:10.5,color:"#6a96aa",direction:"rtl",textAlign:"right",marginTop:6}}>{T("اختر منافساً من الأعلى ثم املأ النموذج أدناه أو حمّل إعلاناتهم النشطة من Meta","Pick a competitor above, then fill the form below or load their live ads from Meta")}</p>
+              </div>
+            </div>
+            {/* Live ads loader (Meta Ad Library API) */}
+            <div style={{...card,marginTop:10}}>
+              <div style={cHead}>
+                <span style={{fontSize:11,fontWeight:600,color:"#6a96aa"}}>{T("الإعلانات النشطة من Meta","Live Ads from Meta")}</span>
+                <Btn ch={liveAdsLd?T("يحمّل...","Loading..."):T("تحميل إعلانات المنافس","Load Competitor Ads")} xs onClick={loadLiveAds} dis={liveAdsLd||!mComp}/>
+              </div>
+              <div style={cBody}>
+                {liveAdsErr&&<div style={{padding:"6px 10px",borderRadius:5,background:"rgba(245,166,35,.06)",border:"1px solid rgba(245,166,35,.25)",fontSize:10.5,color:"#f5a623",direction:"rtl",textAlign:"right",marginBottom:8}}>{liveAdsErr}</div>}
+                {!liveAdsLd&&liveAds.length===0&&!liveAdsErr&&<p style={{fontSize:10.5,color:"#6a96aa",direction:"rtl",textAlign:"right"}}>{T("اختر منافساً واضغط 'تحميل إعلانات المنافس' لجلب الإعلانات النشطة في السعودية من مكتبة إعلانات Meta","Pick a competitor and click 'Load Competitor Ads' to fetch their active ads in Saudi Arabia from Meta Ad Library")}</p>}
+                {liveAds.length>0&&(
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:8}}>
+                    {liveAds.map((ad,i)=>(
+                      <div key={ad.id||i} style={{padding:"10px 12px",borderRadius:7,border:"1px solid rgba(1,53,90,.45)",background:"#0a1f3d"}}>
+                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+                          <span style={{fontSize:10,fontWeight:700,color:"#17a3a3"}}>{ad.page_name}</span>
+                          <div style={{display:"flex",gap:3}}>{(ad.platforms||[]).slice(0,3).map(p=><Tag key={p} ch={p.slice(0,3)} style={{fontSize:8.5}}/>)}</div>
+                        </div>
+                        {ad.hook&&<p style={{fontSize:11,fontWeight:600,color:"#ddeef4",direction:"rtl",textAlign:"right",marginBottom:4}}>{ad.hook.slice(0,80)}</p>}
+                        {ad.body&&<p style={{fontSize:10,color:"#bbd4e0",direction:"rtl",textAlign:"right",lineHeight:1.5,marginBottom:6,maxHeight:60,overflow:"hidden"}}>{ad.body.slice(0,140)}{ad.body.length>140?"…":""}</p>}
+                        <div style={{display:"flex",gap:4}}>
+                          <Btn ch={T("استخدم للتحليل","Use for Analysis")} xs onClick={()=>useLiveAdAsInput(ad)}/>
+                          {ad.snapshot_url&&<a href={ad.snapshot_url} target="_blank" rel="noreferrer" style={{padding:"3px 8px",borderRadius:4,fontSize:9,color:"#6a96aa",textDecoration:"none",border:"1px solid rgba(106,150,170,.3)"}}>{T("معاينة","Preview")}↗</a>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
             <div style={{...card,marginTop:10}}>
