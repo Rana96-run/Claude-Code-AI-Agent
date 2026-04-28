@@ -1,14 +1,16 @@
 /* ══════════════════════════════════════════════════════════════════════════
    Competitor Weekly Intelligence Report — formatter + AI summarizer
    ──────────────────────────────────────────────────────────────────────────
-   This module is ready but NOT yet wired into a scheduler. It takes raw
-   competitor snapshots (from Apify scrapes) plus a previous-week snapshot,
-   asks Claude to summarize what changed, and produces a Slack-formatted
-   message ready to post.
-
-   To activate: call generateWeeklyReport() from a cron job (suggest Sunday
-   09:00 UTC, alongside the existing weekly-digest scheduler), then post the
-   returned blocks to Slack via slack.chat.postMessage.
+   Pipeline:
+   1. Take raw scraped snapshots (FB/IG/Google) for each competitor
+   2. Diff vs last week (or treat all as new on first run)
+   3. Pick top 3 ads per competitor to embed visually in Slack
+   4. Ask Claude to produce strategic brief in Saudi Arabic with:
+      - what each competitor does well (good)
+      - their gaps (bad)
+      - how Qoyod can excel (qoyod_advantage)
+      - concrete tasks the team should do this week
+   5. Render to Slack Block Kit with image blocks + tasks + sheet link
    ══════════════════════════════════════════════════════════════════════════ */
 
 export interface AdSnapshot {
@@ -23,9 +25,9 @@ export interface AdSnapshot {
 }
 
 export interface CompetitorSnapshot {
-  competitor: string;       // "Daftra"
-  domain: string;           // "daftra.com"
-  fetched_at: string;       // ISO timestamp
+  competitor: string;
+  domain: string;
+  fetched_at: string;
   facebook?: AdSnapshot[];
   google?: AdSnapshot[];
   instagram?: AdSnapshot[];
@@ -40,26 +42,57 @@ export interface WeekDiff {
   instagram_new_posts: number;
   instagram_top_post?: AdSnapshot;
   notable_angles: string[];
+  /* Top 3 ads (mix of FB + Google + IG) with images, used to render samples in Slack */
+  top_samples: Array<AdSnapshot & { source: "facebook" | "google" | "instagram" }>;
 }
 
 /* ─── Diff: this week vs last week ─────────────────────────────────────── */
-export function diffSnapshots(thisWeek: CompetitorSnapshot, lastWeek: CompetitorSnapshot | null): WeekDiff {
-  const idsThis = (arr: AdSnapshot[] = []) => new Set(arr.map((a) => a.detail_url || `${a.page_name}|${a.hook}`));
+export function diffSnapshots(
+  thisWeek: CompetitorSnapshot,
+  lastWeek: CompetitorSnapshot | null,
+): WeekDiff {
+  const idsThis = (arr: AdSnapshot[] = []) =>
+    new Set(arr.map((a) => a.detail_url || `${a.page_name}|${a.hook}`));
   const lastFb = idsThis(lastWeek?.facebook);
   const lastGoogle = idsThis(lastWeek?.google);
   const lastIg = idsThis(lastWeek?.instagram);
 
-  const fbNew = (thisWeek.facebook || []).filter((a) => !lastFb.has(a.detail_url || `${a.page_name}|${a.hook}`));
-  const fbPaused = (lastWeek?.facebook || []).filter((a) => !idsThis(thisWeek.facebook).has(a.detail_url || `${a.page_name}|${a.hook}`));
-  const gNew = (thisWeek.google || []).filter((a) => !lastGoogle.has(a.detail_url || `${a.page_name}|${a.hook}`));
-  const gPaused = (lastWeek?.google || []).filter((a) => !idsThis(thisWeek.google).has(a.detail_url || `${a.page_name}|${a.hook}`));
-  const igNew = (thisWeek.instagram || []).filter((a) => !lastIg.has(a.detail_url || `${a.page_name}|${a.hook}`));
+  const fbNew = (thisWeek.facebook || []).filter(
+    (a) => !lastFb.has(a.detail_url || `${a.page_name}|${a.hook}`),
+  );
+  const fbPaused = (lastWeek?.facebook || []).filter(
+    (a) => !idsThis(thisWeek.facebook).has(a.detail_url || `${a.page_name}|${a.hook}`),
+  );
+  const gNew = (thisWeek.google || []).filter(
+    (a) => !lastGoogle.has(a.detail_url || `${a.page_name}|${a.hook}`),
+  );
+  const gPaused = (lastWeek?.google || []).filter(
+    (a) => !idsThis(thisWeek.google).has(a.detail_url || `${a.page_name}|${a.hook}`),
+  );
+  const igNew = (thisWeek.instagram || []).filter(
+    (a) => !lastIg.has(a.detail_url || `${a.page_name}|${a.hook}`),
+  );
 
-  // Notable angles — extract distinct hooks from new ads
+  // Notable angles — distinct hooks across all new content
   const angles = [...fbNew, ...gNew, ...igNew]
     .map((a) => a.hook?.slice(0, 60))
     .filter((h): h is string => !!h)
     .slice(0, 5);
+
+  // Top 3 visual samples: prefer ones WITH images, mix sources
+  const samples: WeekDiff["top_samples"] = [];
+  const tag = (arr: AdSnapshot[], src: "facebook" | "google" | "instagram"): WeekDiff["top_samples"] =>
+    arr.map((a) => ({ ...a, source: src }));
+  const candidates = [...tag(fbNew, "facebook"), ...tag(gNew, "google"), ...tag(igNew, "instagram")];
+  for (const c of candidates) {
+    if (c.image_url && samples.length < 3) samples.push(c);
+  }
+  // Backfill with non-image ads if we have fewer than 3 with images
+  if (samples.length < 3) {
+    for (const c of candidates) {
+      if (!samples.includes(c) && samples.length < 3) samples.push(c);
+    }
+  }
 
   return {
     competitor: thisWeek.competitor,
@@ -70,30 +103,49 @@ export function diffSnapshots(thisWeek: CompetitorSnapshot, lastWeek: Competitor
     instagram_new_posts: igNew.length,
     instagram_top_post: igNew[0],
     notable_angles: angles,
+    top_samples: samples,
   };
 }
 
-/* ─── AI summary prompt ────────────────────────────────────────────────── */
-export function buildAIPrompt(diffs: WeekDiff[], weekLabel: string): { system: string; user: string } {
-  const system = `You are a senior competitive intelligence analyst for Qoyod (Saudi cloud accounting SaaS, ZATCA-certified).
-Your job is to read this week's competitor activity diff and produce a concise, action-oriented brief in Saudi Arabic dialect.
-Focus on:
-1. What changed materially (new ads, paused ads, new angles)
-2. Strategic interpretation — WHY are they doing this, what does it signal?
-3. Recommended Qoyod response (1-3 specific tactical actions)
+/* ─── AI summary prompt ─────────────────────────────────────────────────
+   Asks Claude for richer output: per-competitor good/bad analysis,
+   Qoyod's strategic advantage, and concrete tasks for the team. */
+export function buildAIPrompt(
+  diffs: WeekDiff[],
+  weekLabel: string,
+): { system: string; user: string } {
+  const system = `You are a senior competitive intelligence analyst for Qoyod (Saudi cloud accounting SaaS, ZATCA-certified since 2018).
+
+Your weekly job: read the competitor activity diff, identify what they're doing right and wrong, and tell the Qoyod marketing team EXACTLY what to do this week to win.
+
+Output style:
+- Write in Saudi Arabic dialect (مو/وش/ليش/يكلفك). NEVER Egyptian Arabic.
+- Be direct and tactical — no fluff, no marketing speak.
+- Each "good" should be specific (a real angle, hook, or tactic they're using).
+- Each "bad" must be a real gap Qoyod can exploit, not a generic complaint.
+- Tasks must be doable in 1 week, with a clear owner role (e.g., "Content Writer", "Paid Media").
 
 Return ONLY valid JSON:
 {
-  "headline": "اتجاه الأسبوع — جملة قصيرة جداً",
+  "headline": "اتجاه الأسبوع — جملة قصيرة جداً (max 15 words)",
   "competitors": [
     {
       "name": "Daftra",
-      "summary": "ملخص نشاطهم بجملتين بالعامية السعودية",
-      "watch": "ما يستحق المراقبة المستمرة"
+      "summary": "ملخص نشاطهم هذا الأسبوع بجملتين كحد أقصى",
+      "good": ["شي يعملونه صح — تكتيك محدد", "تكتيك آخر"],
+      "bad": ["ثغرة قيود تقدر تستفيد منها", "ثغرة أخرى"],
+      "qoyod_advantage": "كيف قيود يتفوق عليهم تحديداً"
     }
   ],
-  "recommended_actions": ["إجراء 1", "إجراء 2", "إجراء 3"],
-  "alert": "أي شيء عاجل يحتاج اهتمام فوري — أو null"
+  "tasks": [
+    {
+      "title": "عنوان المهمة بجملة واحدة",
+      "owner": "Content Writer | Social Media | Paid Media | CRO",
+      "deadline": "هذا الأسبوع | الأسبوع القادم",
+      "why": "ليش نسوي هالمهمة (سبب استراتيجي بجملة واحدة)"
+    }
+  ],
+  "alert": "أي شي عاجل يحتاج اهتمام فوري — أو null"
 }`;
 
   const user = `Week: ${weekLabel}\n\nCompetitor activity diff:\n${diffs
@@ -103,26 +155,33 @@ Return ONLY valid JSON:
   Facebook: +${d.facebook_new} new ads, -${d.facebook_paused} paused
   Google:   +${d.google_new} new ads, -${d.google_paused} paused
   Instagram: +${d.instagram_new_posts} new posts
-  Notable angles: ${d.notable_angles.join(" | ") || "none"}`,
+  Notable hooks/angles seen:
+${d.notable_angles.map((a) => `    - "${a}"`).join("\n") || "    (none captured)"}`,
     )
     .join("\n\n")}`;
 
   return { system, user };
 }
 
-/* ─── Slack Block Kit formatter — humanly-read narrative ───────────────── */
+/* ─── Slack Block Kit formatter — now includes ad images + tasks ───────── */
 export function formatSlackBlocks(
   diffs: WeekDiff[],
   ai: {
     headline?: string;
-    competitors?: Array<{ name: string; summary: string; watch: string }>;
-    recommended_actions?: string[];
+    competitors?: Array<{
+      name: string;
+      summary: string;
+      good?: string[];
+      bad?: string[];
+      qoyod_advantage?: string;
+    }>;
+    tasks?: Array<{ title: string; owner: string; deadline?: string; why?: string }>;
     alert?: string | null;
   },
   weekLabel: string,
   sheetUrl?: string,
+  reportDocUrl?: string,
 ) {
-  // Friendly opener — different message based on activity level
   const totalNew = diffs.reduce(
     (s, d) => s + d.facebook_new + d.google_new + d.instagram_new_posts,
     0,
@@ -149,7 +208,7 @@ export function formatSlackBlocks(
     { type: "divider" },
   ];
 
-  // Per-competitor — narrative paragraph (not stat dump)
+  // Per-competitor: narrative + good/bad + Qoyod advantage + 2-3 ad image samples
   for (const d of diffs) {
     const ct = (ai.competitors || []).find(
       (c) => c.name.toLowerCase() === d.competitor.toLowerCase(),
@@ -157,61 +216,110 @@ export function formatSlackBlocks(
     const compTotal = d.facebook_new + d.google_new + d.instagram_new_posts;
     if (compTotal === 0 && d.facebook_paused === 0 && d.google_paused === 0) continue;
 
-    // Build a natural-language sentence about what they did
+    // Activity sentence in natural Arabic
     const activity: string[] = [];
     if (d.facebook_new > 0) activity.push(`أطلقوا ${d.facebook_new} إعلان جديد على Meta`);
     if (d.google_new > 0) activity.push(`${d.google_new} إعلان على Google`);
     if (d.instagram_new_posts > 0) activity.push(`نشروا ${d.instagram_new_posts} منشور على إنستغرام`);
     if (d.facebook_paused > 0) activity.push(`أوقفوا ${d.facebook_paused} إعلان من Meta`);
     if (d.google_paused > 0) activity.push(`أوقفوا ${d.google_paused} إعلان من Google`);
-
     const activityLine = activity.length > 0 ? activity.join("، ") : "لا تغيير ملحوظ";
 
-    let body = `*🏢 ${d.competitor}*\n${activityLine}.`;
-    if (ct?.summary) body += `\n\n_${ct.summary}_`;
-    if (ct?.watch) body += `\n\n👀 *للمراقبة:* ${ct.watch}`;
-    if (d.notable_angles.length > 0) {
-      body += `\n\n💡 الزوايا الجديدة:\n${d.notable_angles.map((a) => `   • _${a}_`).join("\n")}`;
+    // Header section for this competitor
+    let headerText = `*🏢 ${d.competitor}*\n${activityLine}.`;
+    if (ct?.summary) headerText += `\n\n_${ct.summary}_`;
+    blocks.push({
+      type: "section",
+      text: { type: "mrkdwn", text: headerText },
+    });
+
+    // Good / Bad / Advantage analysis (NEW)
+    const analysisBits: string[] = [];
+    if (ct?.good && ct.good.length > 0) {
+      analysisBits.push(`*✅ يعملونه صح:*\n${ct.good.map((g) => `• ${g}`).join("\n")}`);
+    }
+    if (ct?.bad && ct.bad.length > 0) {
+      analysisBits.push(`*❌ ثغرات نقدر نستفيد منها:*\n${ct.bad.map((b) => `• ${b}`).join("\n")}`);
+    }
+    if (ct?.qoyod_advantage) {
+      analysisBits.push(`*🎯 ميزة قيود:*\n${ct.qoyod_advantage}`);
+    }
+    if (analysisBits.length > 0) {
+      blocks.push({
+        type: "section",
+        text: { type: "mrkdwn", text: analysisBits.join("\n\n") },
+      });
     }
 
-    blocks.push({
-      type: "section",
-      text: { type: "mrkdwn", text: body },
-    });
+    // Real ad samples — Slack image blocks (max 3 per competitor)
+    for (const sample of d.top_samples.slice(0, 3)) {
+      if (sample.image_url) {
+        const altText =
+          (sample.hook || sample.body || `${d.competitor} ad`).slice(0, 100) || "Ad sample";
+        blocks.push({
+          type: "image",
+          image_url: sample.image_url,
+          alt_text: altText,
+          title: {
+            type: "plain_text",
+            text: `${sample.source.toUpperCase()} · ${(sample.hook || sample.body || "—").slice(0, 60)}`,
+            emoji: true,
+          },
+        });
+      } else if (sample.hook || sample.body) {
+        // Text-only ad sample (e.g., FB ads without images)
+        blocks.push({
+          type: "context",
+          elements: [
+            {
+              type: "mrkdwn",
+              text: `📝 *${sample.source}* — _"${(sample.hook || sample.body || "").slice(0, 120)}"_`,
+            },
+          ],
+        });
+      }
+    }
+
     blocks.push({ type: "divider" });
   }
 
-  // Recommended actions — friendly framing
-  if (ai.recommended_actions && ai.recommended_actions.length > 0) {
+  // Action tasks — concrete, owner-tagged, deadline-tagged
+  if (ai.tasks && ai.tasks.length > 0) {
     blocks.push({
       type: "section",
-      text: {
-        type: "mrkdwn",
-        text: `🎯 *إيش نسوي نحن؟*\n${ai.recommended_actions
-          .map((a, i) => `*${i + 1}.* ${a}`)
-          .join("\n")}`,
-      },
+      text: { type: "mrkdwn", text: `🎯 *مهام هذا الأسبوع للفريق*` },
     });
+    for (const t of ai.tasks) {
+      const meta = [t.owner, t.deadline].filter(Boolean).join(" · ");
+      const why = t.why ? `\n      _${t.why}_` : "";
+      blocks.push({
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `• *${t.title}*\n      \`${meta}\`${why}`,
+        },
+      });
+    }
+    blocks.push({ type: "divider" });
   }
 
-  // Urgent alert — visually distinct
+  // Alert
   if (ai.alert) {
-    blocks.push({ type: "divider" });
     blocks.push({
       type: "section",
       text: { type: "mrkdwn", text: `🚨 *تنبيه عاجل*\n${ai.alert}` },
     });
+    blocks.push({ type: "divider" });
   }
 
-  // Sheet link + signature
-  if (sheetUrl) {
-    blocks.push({ type: "divider" });
+  // Links — sheet for raw data, doc for full visual report
+  const links: string[] = [];
+  if (reportDocUrl) links.push(`📄 <${reportDocUrl}|التقرير الكامل بالصور (Google Doc)>`);
+  if (sheetUrl) links.push(`📋 <${sheetUrl}|البيانات الخام في Google Sheet>`);
+  if (links.length > 0) {
     blocks.push({
       type: "section",
-      text: {
-        type: "mrkdwn",
-        text: `📋 *كل البيانات الخام (الإعلانات + المنشورات) محفوظة في الشيت:*\n<${sheetUrl}|افتح Google Sheet — تبويب "Competitor Posts">`,
-      },
+      text: { type: "mrkdwn", text: links.join("\n") },
     });
   }
 
@@ -233,15 +341,19 @@ export async function generateWeeklyReport(
   thisWeek: CompetitorSnapshot[],
   lastWeek: CompetitorSnapshot[],
   callAI: (system: string, user: string, max_tokens: number) => Promise<any>,
-): Promise<{ blocks: any[]; markdown: string; ai: any }> {
+): Promise<{ blocks: any[]; markdown: string; ai: any; diffs: WeekDiff[] }> {
   const diffs = thisWeek.map((tw) => {
     const lw = lastWeek.find((l) => l.competitor === tw.competitor) || null;
     return diffSnapshots(tw, lw);
   });
 
-  const weekLabel = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const weekLabel = new Date().toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
   const { system, user } = buildAIPrompt(diffs, weekLabel);
-  const ai = await callAI(system, user, 2500);
+  const ai = await callAI(system, user, 3500);
   const blocks = formatSlackBlocks(diffs, ai, weekLabel);
 
   // Plain markdown fallback for email/preview
@@ -250,5 +362,5 @@ export async function generateWeeklyReport(
     .map((b: any) => (b.type === "header" ? `# ${b.text.text}` : b.text?.text || ""))
     .join("\n\n");
 
-  return { blocks, markdown, ai };
+  return { blocks, markdown, ai, diffs };
 }
