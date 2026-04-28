@@ -435,7 +435,7 @@ function Tag({ch,t,g,green,red,style={}}){
   return<span style={{...base,background:"#0a1f3d",color:"#6a96aa",border:"1px solid rgba(1,53,90,.45)"}}>{ch}</span>;
 }
 function Seg({ch,on,onClick,gold}){
-  return<button onClick={onClick} style={{padding:"4px 11px",borderRadius:5,fontFamily:"inherit",fontSize:11,cursor:"pointer",transition:"all .15s",border:`1px solid ${on?(gold?"rgba(245,166,35,.4)":"rgba(23,163,164,.5)"):"rgba(1,53,90,.45)"}`,background:on?(gold?"rgba(245,166,35,.1)":"rgba(23,163,164,.1)"):"transparent",color:on?(gold?"#f5a623":"#17a3a3"):"#2e5468",fontWeight:on?600:400}}>{ch}</button>;
+  return<button onClick={onClick} style={{padding:"4px 11px",borderRadius:5,fontFamily:"inherit",fontSize:11,cursor:"pointer",transition:"all .15s",border:`1px solid ${on?(gold?"rgba(245,166,35,.4)":"rgba(23,163,164,.5)"):"rgba(1,53,90,.45)"}`,background:on?(gold?"rgba(245,166,35,.1)":"rgba(23,163,164,.1)"):"transparent",color:on?(gold?"#f5a623":"#17a3a3"):"#8aafc4",fontWeight:on?600:400}}>{ch}</button>;
 }
 function Fld({label,children,style={}}){
   return<div style={{marginBottom:12,...style}}><label style={{display:"block",fontSize:10,fontWeight:600,color:"#2e5468",marginBottom:4,letterSpacing:".04em",textTransform:"uppercase"}}>{label}</label>{children}</div>;
@@ -1100,7 +1100,7 @@ export default function CreativeOS(){
                     <Fld label={T("شريحة العميل (ICP)","Target ICP")}>
                       <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
                         <Seg ch={T("عام","Any")} on={contentICP===""} onClick={()=>setContentICP("")}/>
-                        {ICP_PERSONAS.map(p=><Seg key={p.id} ch={`${p.icon} ${p.title}`} on={contentICP===p.id} onClick={()=>setContentICP(p.id)}/>)}
+                        {ICP_PERSONAS.map(p=><Seg key={p.id} ch={p.title} on={contentICP===p.id} onClick={()=>setContentICP(p.id)}/>)}
                       </div>
                     </Fld>
                     <div style={row2}>
