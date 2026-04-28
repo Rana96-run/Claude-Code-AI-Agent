@@ -26,15 +26,15 @@ const APIFY_TIMEOUT_MS = 90_000;
    IG handle). IG handles verified manually — null = no public IG. */
 const COMPETITORS: Record<
   string,
-  { domain: string; ig: string | null; fb_query: string; aliases: string[] }
+  { domain: string; ig: string | null; fb_query: string; tiktok: string | null; aliases: string[] }
 > = {
-  daftra:  { domain: "daftra.com",     ig: "daftraonline", fb_query: "daftra",  aliases: ["دفترة", "daftra"] },
-  dafater: { domain: "dafater.com",    ig: null,           fb_query: "dafater", aliases: ["دفاتر", "dafater"] },
-  foodics: { domain: "foodics.com",    ig: "foodics",      fb_query: "foodics", aliases: ["فودكس", "foodics"] },
-  rewaa:   { domain: "rewaatech.com",  ig: "rewaatech",    fb_query: "rewaa",   aliases: ["رواء", "rewaa"] },
-  wafeq:   { domain: "wafeq.com",      ig: "wafeq.app",    fb_query: "wafeq",   aliases: ["وافق", "wafeq"] },
-  smacc:   { domain: "smacc.com",      ig: null,           fb_query: "smacc",   aliases: ["smacc"] },
-  zoho:    { domain: "zoho.com",       ig: "zoho",         fb_query: "zoho books", aliases: ["zoho", "zoho books"] },
+  daftra:  { domain: "daftra.com",     ig: "daftraonline", fb_query: "daftra",      tiktok: "daftra",      aliases: ["دفترة", "daftra"] },
+  dafater: { domain: "dafater.com",    ig: null,           fb_query: "dafater",     tiktok: null,          aliases: ["دفاتر", "dafater"] },
+  foodics: { domain: "foodics.com",    ig: "foodics",      fb_query: "foodics",     tiktok: "foodics",     aliases: ["فودكس", "foodics"] },
+  rewaa:   { domain: "rewaatech.com",  ig: "rewaatech",    fb_query: "rewaa",       tiktok: "rewaatech",   aliases: ["رواء", "rewaa"] },
+  wafeq:   { domain: "wafeq.com",      ig: "wafeq.app",    fb_query: "wafeq",       tiktok: "wafeqapp",    aliases: ["وافق", "wafeq"] },
+  smacc:   { domain: "smacc.com",      ig: null,           fb_query: "smacc",       tiktok: null,          aliases: ["smacc"] },
+  zoho:    { domain: "zoho.com",       ig: "zoho",         fb_query: "zoho books",  tiktok: "zoho",        aliases: ["zoho", "zoho books"] },
 };
 
 function resolve(input: string) {
@@ -163,8 +163,8 @@ router.post("/competitor-ads", async (req, res) => {
     res.status(400).json({ error: "Missing competitor" });
     return;
   }
-  if (!source || !["facebook", "google", "instagram", "youtube"].includes(source)) {
-    res.status(400).json({ error: 'source must be "facebook", "google", "instagram", or "youtube"' });
+  if (!source || !["facebook", "google", "instagram", "youtube", "tiktok"].includes(source)) {
+    res.status(400).json({ error: 'source must be "facebook", "google", "instagram", "youtube", or "tiktok"' });
     return;
   }
 
@@ -228,6 +228,20 @@ router.post("/competitor-ads", async (req, res) => {
       ...(yt.error ? { error: yt.error } : {}),
     });
     return;
+  } else if (source === "tiktok") {
+    if (!c.tiktok) {
+      res.status(400).json({ error: `No TikTok handle known for ${competitor}` });
+      return;
+    }
+    // clockworks/free-tiktok-scraper: accepts profiles array, returns posts with
+    // text, videoUrl, webVideoUrl, authorMeta.name, diggCount, shareCount, playCount
+    actor = "clockworks~free-tiktok-scraper";
+    input = {
+      profiles: [`https://www.tiktok.com/@${c.tiktok}`],
+      resultsPerPage: apifyMinCount,
+      shouldDownloadVideos: false,
+      shouldDownloadCovers: false,
+    };
   }
 
   const result = await runActor(actor, input, token);
@@ -416,6 +430,22 @@ function normalize(item: any, source: string) {
       detail_url: item.creativeUrl || item.url || null,
       platforms: ["Google " + (item.format || "Ad")],
       started: item.firstShown || item.lastShown,
+    };
+  }
+  if (source === "tiktok") {
+    const plays  = item.playCount  || item.stats?.playCount  || 0;
+    const likes  = item.diggCount  || item.stats?.diggCount  || 0;
+    const shares = item.shareCount || item.stats?.shareCount || 0;
+    const text   = item.text || item.desc || "";
+    return {
+      page_name:  item.authorMeta?.name || item.author?.uniqueId || "",
+      hook:       text.split("\n")[0]?.slice(0, 80) || "",
+      body:       text,
+      caption:    `${Number(plays).toLocaleString()} views, ${Number(likes).toLocaleString()} likes, ${Number(shares).toLocaleString()} shares`,
+      image_url:  item.covers?.[0] || item.cover || null,
+      detail_url: item.webVideoUrl || (item.authorMeta?.name ? `https://www.tiktok.com/@${item.authorMeta.name}` : null),
+      platforms:  ["TikTok"],
+      started:    item.createTime ? new Date(item.createTime * 1000).toISOString() : "",
     };
   }
   // instagram

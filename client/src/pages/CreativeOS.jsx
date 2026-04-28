@@ -883,6 +883,7 @@ export default function CreativeOS(){
     const plats=(ad.platforms||[]).join(" ").toLowerCase();
     if(ad._source==="instagram"||plats.includes("instagram"))setMChan("Instagram");
     else if(ad._source==="facebook"||plats.includes("facebook"))setMChan("Facebook");
+    else if(ad._source==="tiktok"||plats.includes("tiktok"))setMChan("TikTok");
     else if(ad._source==="google")setMChan("Google");
   },[]);
 
@@ -1364,12 +1365,13 @@ export default function CreativeOS(){
                   <Btn ch={T("Google","Google")} xs onClick={()=>loadLiveAds("google")} dis={liveAdsLd||!mComp}/>
                   <Btn ch={T("IG","IG")} xs onClick={()=>loadLiveAds("instagram")} dis={liveAdsLd||!mComp}/>
                   <Btn ch={T("YouTube","YouTube")} xs onClick={()=>loadLiveAds("youtube")} dis={liveAdsLd||!mComp}/>
+                  <Btn ch={T("TikTok","TikTok")} xs onClick={()=>loadLiveAds("tiktok")} dis={liveAdsLd||!mComp}/>
                 </div>
               </div>
               <div style={cBody}>
                 {liveAdsLd&&<div style={{padding:"10px",fontSize:10.5,color:"#17a3a3",direction:"rtl",textAlign:"right"}}>{T("⏳ يجلب الإعلانات من Apify... قد يستغرق 30-60 ثانية","⏳ Fetching ads via Apify... may take 30-60 seconds")}</div>}
                 {liveAdsErr&&<div style={{padding:"6px 10px",borderRadius:5,background:"rgba(245,166,35,.06)",border:"1px solid rgba(245,166,35,.25)",fontSize:10.5,color:"#f5a623",direction:"rtl",textAlign:"right",marginBottom:8}}>{liveAdsErr}</div>}
-                {!liveAdsLd&&liveAds.length===0&&!liveAdsErr&&<p style={{fontSize:10.5,color:"#6a96aa",direction:"rtl",textAlign:"right"}}>{T("اختر منافساً ثم اضغط Meta أو Google أو IG لتحميل إعلاناتهم/منشوراتهم النشطة","Pick a competitor, then click Meta, Google, or IG to load their live ads/posts")}</p>}
+                {!liveAdsLd&&liveAds.length===0&&!liveAdsErr&&<p style={{fontSize:10.5,color:"#6a96aa",direction:"rtl",textAlign:"right"}}>{T("اختر منافساً ثم اضغط Meta أو Google أو IG أو TikTok لتحميل إعلاناتهم/منشوراتهم النشطة","Pick a competitor, then click Meta, Google, IG, or TikTok to load their live ads/posts")}</p>}
                 {liveAds.length>0&&(
                   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:8}}>
                     {liveAds.map((ad,i)=>(
