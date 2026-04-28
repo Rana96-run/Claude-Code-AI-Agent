@@ -26,6 +26,57 @@
 
 4. **Never mix** `railway up` + GitHub deploys in the same session — Railway will serve whichever built last, making it impossible to know what's live.
 
+## REVIEW & TEST: enforced after every edit (CRITICAL)
+
+This is a live production tool used daily by the marketing team. A single broken
+deploy hits real users. Never push code that hasn't been verified locally.
+
+### Before commit — mandatory checklist
+
+1. **Build the client every time** — even for "tiny" changes:
+   ```
+   npm --prefix client run build
+   ```
+   If it errors, fix before staging. If you used Bash/Python to delete or
+   restructure JSX/JS by line numbers, the build is the only thing that catches
+   over-deletion or broken closing braces.
+
+2. **Typecheck the server** when touching files in `server/src/`:
+   ```
+   cd server && npm run typecheck
+   ```
+   Pre-existing errors elsewhere are OK; new errors in your edited file are not.
+
+3. **Read what you wrote** — when editing more than ~20 lines:
+   - Re-read the file with the Read tool around the edit zone
+   - Check that imports, brackets, and component structure are intact
+   - For JSX deletes: confirm tab order is preserved by grepping `tab===.X.`
+     and listing every tab in TABS — they must match.
+
+4. **Test the actual change path** before pushing:
+   - Server route changes → curl the endpoint with a real payload
+   - Client UI → if you cannot exercise it, at least verify build size is
+     reasonable (a 30%+ unexpected drop = something is missing)
+
+### After deploy — mandatory verification
+
+5. **Wait for Railway to flip to SUCCESS** (not just push):
+   ```
+   until [ "$(railway status --json | python3 -c "...status...")" = "SUCCESS" ]; do sleep 10; done
+   ```
+6. **Hit the affected endpoint live** — for AI features, curl `/api/ai-health`
+   and `/api/generate` with a tiny payload. Confirm the response is sane.
+
+7. **Tell the user EXACTLY which screens to test and how to refresh.** They
+   cannot see what you saw locally — assume the browser cache is stale.
+
+### Failure mode to avoid
+
+If you deleted code by line range with `sed`, `python`, or any non-Edit tool,
+you MUST re-grep for symbols that should still exist (tab names, function
+names, callback names) before pushing. Over-deletion is silent — it builds
+fine and only shows up as black screens to the user.
+
 ## Stack
 
 - **Server**: `server/` — Express + TypeScript, port 8080
