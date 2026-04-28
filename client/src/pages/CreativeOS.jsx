@@ -870,8 +870,10 @@ export default function CreativeOS(){
         setLiveAdsErr(j.error||T("فشل تحميل الإعلانات","Failed to load ads"));
         return;
       }
-      setLiveAds((j.ads||[]).map(a=>({...a,_source:source})));
-      if((j.ads||[]).length===0)setLiveAdsErr(T(`لا توجد إعلانات لـ ${mComp} على ${source}`,`No ads found for ${mComp} on ${source}`));
+      const newAds=(j.ads||[]).map(a=>({...a,_source:source}));
+      // Accumulate results — each button ADDS to the list (filtered by source to avoid dupes on re-click)
+      setLiveAds(prev=>[...prev.filter(a=>a._source!==source),...newAds]);
+      if(newAds.length===0)setLiveAdsErr(T(`لا توجد نتائج لـ ${mComp} على ${source}`,`No results found for ${mComp} on ${source}`));
     }catch(e){setLiveAdsErr(e.message);}finally{setLiveAdsLd(false);}
   },[mComp,lang]);
 
@@ -884,6 +886,7 @@ export default function CreativeOS(){
     if(ad._source==="instagram"||plats.includes("instagram"))setMChan("Instagram");
     else if(ad._source==="facebook"||plats.includes("facebook"))setMChan("Facebook");
     else if(ad._source==="tiktok"||plats.includes("tiktok"))setMChan("TikTok");
+    else if(ad._source==="snapchat"||plats.includes("snapchat"))setMChan("Snapchat");
     else if(ad._source==="google")setMChan("Google");
   },[]);
 
@@ -1359,25 +1362,30 @@ export default function CreativeOS(){
             {/* Live ads loader (Apify-powered: Meta + Google + Instagram organic) */}
             <div style={{...card,marginTop:10}}>
               <div style={cHead}>
-                <span style={{fontSize:11,fontWeight:600,color:"#6a96aa"}}>{T("إعلانات ومنشورات المنافس","Competitor Ads & Posts")}</span>
-                <div style={{display:"flex",gap:4}}>
+                <span style={{fontSize:11,fontWeight:600,color:"#6a96aa"}}>{T("إعلانات ومنشورات المنافس","Competitor Ads & Posts")}{liveAds.length>0&&<span style={{fontSize:9,color:"#6a96aa",marginRight:6}}>({liveAds.length})</span>}</span>
+                <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                  {liveAds.length>0&&<Btn ch={T("مسح","Clear")} xs onClick={()=>{setLiveAds([]);setLiveAdsErr(null);}}/>}
                   <Btn ch={T("Meta","Meta")} xs onClick={()=>loadLiveAds("facebook")} dis={liveAdsLd||!mComp}/>
                   <Btn ch={T("Google","Google")} xs onClick={()=>loadLiveAds("google")} dis={liveAdsLd||!mComp}/>
                   <Btn ch={T("IG","IG")} xs onClick={()=>loadLiveAds("instagram")} dis={liveAdsLd||!mComp}/>
                   <Btn ch={T("YouTube","YouTube")} xs onClick={()=>loadLiveAds("youtube")} dis={liveAdsLd||!mComp}/>
                   <Btn ch={T("TikTok","TikTok")} xs onClick={()=>loadLiveAds("tiktok")} dis={liveAdsLd||!mComp}/>
+                  <Btn ch={T("Snap","Snap")} xs onClick={()=>loadLiveAds("snapchat")} dis={liveAdsLd||!mComp}/>
                 </div>
               </div>
               <div style={cBody}>
                 {liveAdsLd&&<div style={{padding:"10px",fontSize:10.5,color:"#17a3a3",direction:"rtl",textAlign:"right"}}>{T("⏳ يجلب الإعلانات من Apify... قد يستغرق 30-60 ثانية","⏳ Fetching ads via Apify... may take 30-60 seconds")}</div>}
                 {liveAdsErr&&<div style={{padding:"6px 10px",borderRadius:5,background:"rgba(245,166,35,.06)",border:"1px solid rgba(245,166,35,.25)",fontSize:10.5,color:"#f5a623",direction:"rtl",textAlign:"right",marginBottom:8}}>{liveAdsErr}</div>}
-                {!liveAdsLd&&liveAds.length===0&&!liveAdsErr&&<p style={{fontSize:10.5,color:"#6a96aa",direction:"rtl",textAlign:"right"}}>{T("اختر منافساً ثم اضغط Meta أو Google أو IG أو TikTok لتحميل إعلاناتهم/منشوراتهم النشطة","Pick a competitor, then click Meta, Google, IG, or TikTok to load their live ads/posts")}</p>}
+                {!liveAdsLd&&liveAds.length===0&&!liveAdsErr&&<p style={{fontSize:10.5,color:"#6a96aa",direction:"rtl",textAlign:"right"}}>{T("اختر منافساً ثم اضغط أي قناة — Meta وGoogle (مدفوع) · IG وTikTok وSnap وYouTube (عضوي)","Pick a competitor then tap a channel — Meta & Google (paid) · IG, TikTok, Snap & YouTube (organic)")}</p>}
                 {liveAds.length>0&&(
                   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:8}}>
-                    {liveAds.map((ad,i)=>(
-                      <div key={ad.id||i} style={{padding:"10px 12px",borderRadius:7,border:"1px solid rgba(1,53,90,.45)",background:"#0a1f3d"}}>
+                    {liveAds.map((ad,i)=>{const isPaid=["facebook","google"].includes(ad._source);return(
+                      <div key={(ad._source||"")+"|"+(ad.id||i)} style={{padding:"10px 12px",borderRadius:7,border:`1px solid ${isPaid?"rgba(245,166,35,.3)":"rgba(93,200,122,.25)"}`,background:"#0a1f3d"}}>
                         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
-                          <span style={{fontSize:10,fontWeight:700,color:"#17a3a3"}}>{ad.page_name}</span>
+                          <div style={{display:"flex",alignItems:"center",gap:5}}>
+                            <span style={{fontSize:10,fontWeight:700,color:"#17a3a3"}}>{ad.page_name}</span>
+                            <span style={{fontSize:8,fontWeight:700,padding:"1px 5px",borderRadius:3,...(isPaid?{background:"rgba(245,166,35,.12)",color:"#f5a623"}:{background:"rgba(93,200,122,.1)",color:"#5dc87a"})}}>{isPaid?T("مدفوع","PAID"):T("عضوي","ORGANIC")}</span>
+                          </div>
                           <div style={{display:"flex",gap:3}}>{(ad.platforms||[]).slice(0,3).map(p=><Tag key={p} ch={p.slice(0,3)} style={{fontSize:8.5}}/>)}</div>
                         </div>
                         {ad.hook&&<p style={{fontSize:11,fontWeight:600,color:"#ddeef4",direction:"rtl",textAlign:"right",marginBottom:4}}>{ad.hook.slice(0,80)}</p>}
@@ -1387,7 +1395,7 @@ export default function CreativeOS(){
                           {ad.snapshot_url&&<a href={ad.snapshot_url} target="_blank" rel="noreferrer" style={{padding:"3px 8px",borderRadius:4,fontSize:9,color:"#6a96aa",textDecoration:"none",border:"1px solid rgba(106,150,170,.3)"}}>{T("معاينة","Preview")}↗</a>}
                         </div>
                       </div>
-                    ))}
+                    );})}
                   </div>
                 )}
               </div>

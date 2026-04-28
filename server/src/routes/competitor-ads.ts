@@ -26,15 +26,15 @@ const APIFY_TIMEOUT_MS = 90_000;
    IG handle). IG handles verified manually — null = no public IG. */
 const COMPETITORS: Record<
   string,
-  { domain: string; ig: string | null; fb_query: string; tiktok: string | null; aliases: string[] }
+  { domain: string; ig: string | null; fb_query: string; tiktok: string | null; snapchat: string | null; aliases: string[] }
 > = {
-  daftra:  { domain: "daftra.com",     ig: "daftraonline", fb_query: "daftra",      tiktok: "daftra",      aliases: ["دفترة", "daftra"] },
-  dafater: { domain: "dafater.com",    ig: null,           fb_query: "dafater",     tiktok: null,          aliases: ["دفاتر", "dafater"] },
-  foodics: { domain: "foodics.com",    ig: "foodics",      fb_query: "foodics",     tiktok: "foodics",     aliases: ["فودكس", "foodics"] },
-  rewaa:   { domain: "rewaatech.com",  ig: "rewaatech",    fb_query: "rewaa",       tiktok: "rewaatech",   aliases: ["رواء", "rewaa"] },
-  wafeq:   { domain: "wafeq.com",      ig: "wafeq.app",    fb_query: "wafeq",       tiktok: "wafeqapp",    aliases: ["وافق", "wafeq"] },
-  smacc:   { domain: "smacc.com",      ig: null,           fb_query: "smacc",       tiktok: null,          aliases: ["smacc"] },
-  zoho:    { domain: "zoho.com",       ig: "zoho",         fb_query: "zoho books",  tiktok: "zoho",        aliases: ["zoho", "zoho books"] },
+  daftra:  { domain: "daftra.com",     ig: "daftraonline", fb_query: "daftra",      tiktok: "daftra",      snapchat: "daftra",    aliases: ["دفترة", "daftra"] },
+  dafater: { domain: "dafater.com",    ig: null,           fb_query: "dafater",     tiktok: null,          snapchat: null,        aliases: ["دفاتر", "dafater"] },
+  foodics: { domain: "foodics.com",    ig: "foodics",      fb_query: "foodics",     tiktok: "foodics",     snapchat: "foodics",   aliases: ["فودكس", "foodics"] },
+  rewaa:   { domain: "rewaatech.com",  ig: "rewaatech",    fb_query: "rewaa",       tiktok: "rewaatech",   snapchat: "rewaatech", aliases: ["رواء", "rewaa"] },
+  wafeq:   { domain: "wafeq.com",      ig: "wafeq.app",    fb_query: "wafeq",       tiktok: "wafeqapp",    snapchat: null,        aliases: ["وافق", "wafeq"] },
+  smacc:   { domain: "smacc.com",      ig: null,           fb_query: "smacc",       tiktok: null,          snapchat: null,        aliases: ["smacc"] },
+  zoho:    { domain: "zoho.com",       ig: "zoho",         fb_query: "zoho books",  tiktok: "zoho",        snapchat: "zoho",      aliases: ["zoho", "zoho books"] },
 };
 
 function resolve(input: string) {
@@ -163,8 +163,8 @@ router.post("/competitor-ads", async (req, res) => {
     res.status(400).json({ error: "Missing competitor" });
     return;
   }
-  if (!source || !["facebook", "google", "instagram", "youtube", "tiktok"].includes(source)) {
-    res.status(400).json({ error: 'source must be "facebook", "google", "instagram", "youtube", or "tiktok"' });
+  if (!source || !["facebook", "google", "instagram", "youtube", "tiktok", "snapchat"].includes(source)) {
+    res.status(400).json({ error: 'source must be "facebook", "google", "instagram", "youtube", "tiktok", or "snapchat"' });
     return;
   }
 
@@ -241,6 +241,17 @@ router.post("/competitor-ads", async (req, res) => {
       resultsPerPage: apifyMinCount,
       shouldDownloadVideos: false,
       shouldDownloadCovers: false,
+    };
+  } else if (source === "snapchat") {
+    if (!c.snapchat) {
+      res.status(400).json({ error: `No Snapchat handle known for ${competitor}` });
+      return;
+    }
+    // apify/snapchat-scraper: scrapes public Snapchat story/spotlight pages
+    actor = "apify~snapchat-scraper";
+    input = {
+      usernames: [c.snapchat],
+      resultsLimit: apifyMinCount,
     };
   }
 
@@ -430,6 +441,20 @@ function normalize(item: any, source: string) {
       detail_url: item.creativeUrl || item.url || null,
       platforms: ["Google " + (item.format || "Ad")],
       started: item.firstShown || item.lastShown,
+    };
+  }
+  if (source === "snapchat") {
+    const views = item.viewCount || item.views || 0;
+    const caption = item.caption || item.description || item.title || "";
+    return {
+      page_name: item.username || item.displayName || "",
+      hook:      caption.split("\n")[0]?.slice(0, 80) || "",
+      body:      caption,
+      caption:   views ? `${Number(views).toLocaleString()} views` : "Snapchat post",
+      image_url: item.thumbnailUrl || item.imageUrl || null,
+      detail_url: item.url || (item.username ? `https://www.snapchat.com/add/${item.username}` : null),
+      platforms:  ["Snapchat"],
+      started:    item.timestamp || item.createdAt || "",
     };
   }
   if (source === "tiktok") {
