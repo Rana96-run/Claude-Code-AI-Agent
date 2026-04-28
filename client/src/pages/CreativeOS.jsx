@@ -447,6 +447,15 @@ function SBar({v}){
 function Loader({msg}){return<div style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"44px 20px",gap:12}}><div style={{width:26,height:26,borderRadius:"50%",border:"2px solid rgba(1,53,90,.45)",borderTopColor:"#17a3a3",animation:"qspin .7s linear infinite"}}/><p style={{fontSize:11.5,color:"#2e5468"}}>{msg}</p></div>;}
 function Hook({text}){return<div style={{padding:"10px 12px",background:"rgba(245,166,35,.05)",borderRight:"3px solid #f5a623",borderRadius:"0 7px 7px 0",marginBottom:10}}><p style={{fontSize:13,fontWeight:600,color:"#f5a623",lineHeight:1.6,direction:"rtl",margin:0}}>{text}</p></div>;}
 function ErrBox({msg}){if(!msg)return null;return<div style={{padding:"8px 12px",borderRadius:7,background:"rgba(255,100,100,.06)",border:"1px solid rgba(255,100,100,.2)",color:"#f07070",fontSize:11,marginBottom:10}}>{msg}</div>;}
+function DateLabel({started,isPaid}){
+  if(!started)return<span style={{fontSize:9,color:"#2e5468"}}>No date</span>;
+  const d=new Date(typeof started==="number"?started*1000:started);
+  if(isNaN(d.getTime()))return<span style={{fontSize:9,color:"#2e5468"}}>No date</span>;
+  const daysAgo=Math.floor((Date.now()-d.getTime())/86400000);
+  const label=daysAgo===0?"Today":daysAgo===1?"Yesterday":`${daysAgo}d ago`;
+  const dateStr=d.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"2-digit"});
+  return<span style={{fontSize:9,color:"#6a96aa",whiteSpace:"nowrap"}}>📅 {dateStr} · {label}{isPaid&&daysAgo>0?<span style={{color:"#f5a623"}}> ({daysAgo}d running)</span>:null}</span>;
+}
 function Hr(){return<hr style={{border:"none",borderTop:"1px solid rgba(1,53,90,.45)",margin:"12px 0"}}/>;}
 function Row({label,val}){if(val===undefined||val===null||val==="")return null;return<div style={{marginBottom:7,direction:"rtl",textAlign:"right"}}><p style={{fontSize:9.5,color:"#2e5468",marginBottom:2,textTransform:"uppercase",letterSpacing:".04em"}}>{label}</p><p style={{fontSize:12,color:"#ddeef4",lineHeight:1.6}}>{val}</p></div>;}
 
@@ -1381,7 +1390,7 @@ export default function CreativeOS(){
                 {!liveAdsLd&&liveAds.length===0&&!liveAdsErr&&<p style={{fontSize:10.5,color:"#6a96aa",direction:"rtl",textAlign:"right"}}>{T("اختر منافساً ثم اضغط أي قناة — Ads = مدفوع · Organic/IG/TikTok/Snap/YT = Organic","Pick a competitor then tap a channel — Ads = Paid · Organic/IG/TikTok/Snap/YT = Organic")}</p>}
                 {liveAds.length>0&&(
                   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:8}}>
-                    {liveAds.map((ad,i)=>{const isPaid=["facebook","google","tiktok_ads"].includes(ad._source);return(
+                    {[...liveAds].sort((a,b)=>{const ta=a.started?new Date(typeof a.started==="number"?a.started*1000:a.started).getTime():0;const tb=b.started?new Date(typeof b.started==="number"?b.started*1000:b.started).getTime():0;return tb-ta;}).map((ad,i)=>{const isPaid=["facebook","google","tiktok_ads"].includes(ad._source);return(
                       <div key={(ad._source||"")+"|"+(ad.id||i)} style={{padding:"10px 12px",borderRadius:7,border:`1px solid ${isPaid?"rgba(245,166,35,.3)":"rgba(93,200,122,.25)"}`,background:"#0a1f3d"}}>
                         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
                           <div style={{display:"flex",alignItems:"center",gap:5}}>
@@ -1394,16 +1403,8 @@ export default function CreativeOS(){
                         {ad.body&&<p style={{fontSize:10,color:"#bbd4e0",direction:"rtl",textAlign:"right",lineHeight:1.5,marginBottom:6,maxHeight:60,overflow:"hidden"}}>{ad.body.slice(0,140)}{ad.body.length>140?"…":""}</p>}
                         {/* Date + engagement row */}
                         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6,flexWrap:"wrap",gap:4}}>
-                          {ad.started&&(()=>{
-                            const d=new Date(typeof ad.started==="number"?ad.started*1000:ad.started);
-                            const valid=!isNaN(d.getTime());
-                            if(!valid)return null;
-                            const daysAgo=Math.floor((Date.now()-d.getTime())/(86400000));
-                            const label=daysAgo===0?"Today":daysAgo===1?"Yesterday":`${daysAgo}d ago`;
-                            const dateStr=d.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"2-digit"});
-                            return <span style={{fontSize:9,color:"#6a96aa"}}>📅 {dateStr} · {label}{isPaid&&daysAgo>0?` (${daysAgo}d running)`:""}</span>;
-                          })()}
-                          {ad.caption&&<span style={{fontSize:9,color:"#8aafc4",textAlign:"right"}}>{ad.caption}</span>}
+                          <DateLabel started={ad.started} isPaid={isPaid}/>
+                          {ad.caption?<span style={{fontSize:9,color:"#8aafc4",textAlign:"right",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ad.caption}</span>:<span style={{fontSize:9,color:"#2e5468"}}>—</span>}
                         </div>
                         <div style={{display:"flex",gap:4}}>
                           <Btn ch={T("استخدم للتحليل","Use for Analysis")} xs onClick={()=>useLiveAdAsInput(ad)}/>

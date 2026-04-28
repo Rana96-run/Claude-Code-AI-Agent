@@ -512,32 +512,48 @@ function normalize(item: any, source: string) {
     };
   }
   if (source === "tiktok") {
-    const plays  = item.playCount  || item.stats?.playCount  || 0;
-    const likes  = item.diggCount  || item.stats?.diggCount  || 0;
-    const shares = item.shareCount || item.stats?.shareCount || 0;
-    const text   = item.text || item.desc || "";
+    const plays    = item.playCount    || item.stats?.playCount    || 0;
+    const likes    = item.diggCount    || item.stats?.diggCount    || 0;
+    const shares   = item.shareCount   || item.stats?.shareCount   || 0;
+    const comments = item.commentCount || item.stats?.commentCount || 0;
+    const text     = item.text || item.desc || "";
+    const parts: string[] = [];
+    if (plays)    parts.push(`${Number(plays).toLocaleString()} views`);
+    if (likes)    parts.push(`${Number(likes).toLocaleString()} likes`);
+    if (comments) parts.push(`${Number(comments).toLocaleString()} comments`);
+    if (shares)   parts.push(`${Number(shares).toLocaleString()} shares`);
     return {
       page_name:  item.authorMeta?.name || item.author?.uniqueId || "",
       hook:       text.split("\n")[0]?.slice(0, 80) || "",
       body:       text,
-      caption:    `${Number(plays).toLocaleString()} views, ${Number(likes).toLocaleString()} likes, ${Number(shares).toLocaleString()} shares`,
-      image_url:  item.covers?.[0] || item.cover || null,
-      detail_url: item.webVideoUrl || (item.authorMeta?.name ? `https://www.tiktok.com/@${item.authorMeta.name}` : null),
+      caption:    parts.length ? parts.join(" · ") : "",
+      image_url:  item.mediaUrls?.[0] || item.covers?.[0] || item.cover || null,
+      detail_url: item.webVideoUrl || null,
       platforms:  ["TikTok"],
-      started:    item.createTime ? new Date(item.createTime * 1000).toISOString() : "",
+      // createTimeISO is the direct ISO string — prefer it over multiplying createTime
+      started:    item.createTimeISO || (item.createTime ? new Date(item.createTime * 1000).toISOString() : ""),
     };
   }
   // instagram
-  return {
-    page_name: item.ownerUsername || item.owner_username || "",
-    hook: (item.caption || "").split("\n")[0]?.slice(0, 80) || "",
-    body: item.caption || "",
-    caption: `${item.likesCount || 0} likes, ${item.commentsCount || 0} comments`,
-    image_url: item.displayUrl || item.thumbnailUrl || null,
-    detail_url: item.url || null,
-    platforms: ["Instagram"],
-    started: item.timestamp,
-  };
+  {
+    const views    = item.videoViewCount || item.videoPlayCount || 0;
+    const likes    = item.likesCount     || 0;
+    const comments = item.commentsCount  || 0;
+    const parts: string[] = [];
+    if (views)    parts.push(`${Number(views).toLocaleString()} views`);
+    if (likes)    parts.push(`${Number(likes).toLocaleString()} likes`);
+    if (comments) parts.push(`${Number(comments).toLocaleString()} comments`);
+    return {
+      page_name:  item.ownerUsername || item.owner_username || "",
+      hook:       (item.caption || "").split("\n")[0]?.slice(0, 80) || "",
+      body:       item.caption || "",
+      caption:    parts.length ? parts.join(" · ") : "",
+      image_url:  item.displayUrl || item.thumbnailUrl || null,
+      detail_url: item.url || null,
+      platforms:  ["Instagram"],
+      started:    item.timestamp || "",
+    };
+  }
 }
 
 export default router;
