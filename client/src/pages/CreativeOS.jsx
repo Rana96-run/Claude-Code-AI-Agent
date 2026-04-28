@@ -557,14 +557,40 @@ function extractFirstJsonObject(text){
   return null;
 }
 
+// Fetch with timeout via AbortController. Throws "Request timed out" on timeout
+// instead of leaving the UI hung forever.
+async function fetchWithTimeout(url,opts={},timeoutMs=180000){
+  const ctrl=new AbortController();
+  const id=setTimeout(()=>ctrl.abort(),timeoutMs);
+  try{
+    return await fetch(url,{...opts,signal:ctrl.signal});
+  }catch(e){
+    if(e.name==="AbortError")throw new Error(`Request timed out after ${Math.round(timeoutMs/1000)}s`);
+    throw e;
+  }finally{clearTimeout(id);}
+}
+
+// Reliable AI call. The server already retries Anthropic 429/529/5xx with
+// exponential backoff, so the client only needs to handle:
+//   - JSON truncation (auto-retry with +50% tokens)
+//   - Network failures (one retry after 1s)
+//   - Timeouts (180s hard cap)
 async function callAI(sys,usr,max_tokens=1400,raw_text=false,_retrying=false){
-  const res=await fetch("/api/generate",{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    // json_mode: true forces assistant prefill with "{" on the server,
-    // guaranteeing Claude starts the response as a JSON object.
-    body:JSON.stringify({system:sys,user:usr,max_tokens,json_mode:!raw_text})
-  });
+  let res;
+  try{
+    res=await fetchWithTimeout("/api/generate",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({system:sys,user:usr,max_tokens,json_mode:!raw_text})
+    },180000);
+  }catch(networkErr){
+    // One retry on network failure (server restart, brief connectivity loss)
+    if(!_retrying){
+      await new Promise(r=>setTimeout(r,1000));
+      return callAI(sys,usr,max_tokens,raw_text,true);
+    }
+    throw networkErr;
+  }
   if(!res.ok){
     const e=await res.json().catch(()=>({}));
     throw new Error(e?.error||`Error ${res.status}`);
@@ -911,7 +937,7 @@ export default function CreativeOS(){
     setDesignProviders(p=>({...p,[variantNum]:null}));
     setDesignPrompts(p=>({...p,[variantNum]:null}));
     try{
-      const r=await fetch(`/api/generate-design`,{
+      const r=await fetchWithTimeout(`/api/generate-design`,{
         method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
           product:bProd,
@@ -929,8 +955,8 @@ export default function CreativeOS(){
           sector:bSector,
           visual_style:bStyle,
         }),
-      });
-      const json=await r.json();
+      },240000);
+      const json=await r.json().catch(()=>({error:"Server returned malformed response"}));
       if(!r.ok||json.error)throw new Error(json.error||"Generation failed");
       setDesignPngs(p=>({...p,[variantNum]:json.png}));
       setDesignProviders(p=>({...p,[variantNum]:json.provider}));
@@ -1197,13 +1223,13 @@ CSS RULES:
         a.click();URL.revokeObjectURL(url);
       }else if(dest==="wp"){
         if(!wpConfigured&&(!wpUrl||!wpUser||!wpPass)){setWpShowSettings(true);setLd(false);return;}
-        const r=await fetch(`/api/wp-draft`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({siteUrl:wpUrl,username:wpUser,appPassword:wpPass,content:html,title:`Qoyod Landing Page — ${lpProd}`,slug:`qoyod-lp-${lpProd.toLowerCase().replace(/\s+/g,"-")}`})});
-        const json=await r.json();
+        const r=await fetchWithTimeout(`/api/wp-draft`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({siteUrl:wpUrl,username:wpUser,appPassword:wpPass,content:html,title:`Qoyod Landing Page — ${lpProd}`,slug:`qoyod-lp-${lpProd.toLowerCase().replace(/\s+/g,"-")}`})},60000);
+        const json=await r.json().catch(()=>({error:"WordPress server returned malformed response"}));
         if(!r.ok||json.error)throw new Error(json.error||"WordPress upload failed");
         setWpResA(json);
       }else if(dest==="hs"){
-        const r=await fetch(`/api/hs-draft`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({content:html,title:`Qoyod Landing Page — ${lpProd}`,slug:`qoyod-lp-${lpProd.toLowerCase().replace(/\s+/g,"-")}-${Date.now()}`})});
-        const json=await r.json();
+        const r=await fetchWithTimeout(`/api/hs-draft`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({content:html,title:`Qoyod Landing Page — ${lpProd}`,slug:`qoyod-lp-${lpProd.toLowerCase().replace(/\s+/g,"-")}-${Date.now()}`})},60000);
+        const json=await r.json().catch(()=>({error:"HubSpot server returned malformed response"}));
         if(!r.ok||json.error)throw new Error(json.error||"HubSpot upload failed");
         setHsResA(json);
       }
@@ -1294,7 +1320,7 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
     const setErr=variant==="B"?setWpErrB:setWpErrA;
     setUpl(true);setRes(null);setErr("");
     try{
-      const r=await fetch(`/api/wp-draft`,{
+      const r=await fetchWithTimeout(`/api/wp-draft`,{
         method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
           siteUrl:wpUrl,username:wpUser,appPassword:wpPass,
@@ -1302,8 +1328,8 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
           title:`Qoyod Landing Page — Variant ${variant}`,
           slug:`qoyod-lp-variant-${variant.toLowerCase()}`,
         }),
-      });
-      const json=await r.json();
+      },60000);
+      const json=await r.json().catch(()=>({error:"Server returned malformed response"}));
       if(!r.ok||json.error)throw new Error(json.error||"Upload failed");
       setRes(json);
     }catch(e){setErr(e.message);}finally{setUpl(false);}
@@ -1315,15 +1341,15 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
     const setErr=variant==="B"?setHsErrB:setHsErrA;
     setUpl(true);setRes(null);setErr("");
     try{
-      const r=await fetch(`/api/hs-draft`,{
+      const r=await fetchWithTimeout(`/api/hs-draft`,{
         method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
           content:html,
           title:`Qoyod Landing Page — Variant ${variant}`,
           slug:`qoyod-lp-variant-${variant.toLowerCase()}-${Date.now()}`,
         }),
-      });
-      const json=await r.json();
+      },60000);
+      const json=await r.json().catch(()=>({error:"Server returned malformed response"}));
       if(!r.ok||json.error)throw new Error(json.error||"Upload failed");
       setRes(json);
     }catch(e){setErr(e.message);}finally{setUpl(false);}
