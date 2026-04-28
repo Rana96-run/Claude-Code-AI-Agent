@@ -121,11 +121,14 @@ router.post("/competitor-ads", async (req, res) => {
     input = { urls: [{ url: fbUrl }], count: apifyMinCount };
   } else if (source === "google") {
     // fortuitous_pirate's Google Ads Transparency scraper (8K+ runs, 200+ users).
-    // Uses simpler input shape: query (advertiser/domain) + region.
+    // NOTE: this actor's allowed regions are US/GB/DE/FR/CA/AU only — Saudi
+    // Arabia is not on the list. We pass empty region (any) so it returns
+    // all ads for the advertiser globally; you can filter for SA-relevance
+    // visually since most local advertisers run SA-targeted ads.
     actor = "fortuitous_pirate~google-ads-transparency-scraper";
     input = {
       query: c.domain,
-      region: country,
+      region: "", // empty = any country (SA not officially supported)
       maxItems: apifyMinCount,
     };
   } else if (source === "instagram") {
