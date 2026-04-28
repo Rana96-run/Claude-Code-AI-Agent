@@ -874,21 +874,53 @@ export default function CreativeOS(){
     if(!mComp){setMErr(T("اختر المنافس أولاً","Select a competitor first"));return;}
     if(!mDesc){setMErr(T("صف الإعلان أو الصق رابط البوست","Describe the ad or paste the post URL"));return;}
     const ol=lang==="en"?"English":"Saudi Arabic dialect";
-    // If input looks like a URL, prepend a hint so the AI knows it can't fetch it directly
-    const isUrl=/^https?:\/\//i.test(mDesc.trim());
-    const urlHint=isUrl?`The user provided a URL only (${mDesc.trim()}). You CANNOT fetch external pages. Use the URL to identify the platform/competitor only. If no description is given, infer the most likely angle based on what this competitor (${mComp}) typically posts on ${mChan}, and clearly mark "inferred" in why_works.`:"";
-    const sys=`Qoyod creative strategist. Analyze ONE specific competitor ad and produce ONE Qoyod counter-creative. Counter in ${ol}.\n${QOYOD_VOICE}\n${urlHint}\nReturn ONLY valid JSON with EXACTLY ONE card matching the competitor selected:\n{"cards":[{"competitor":"${mComp}","platform":"${mChan}","hook":"...","message":"...","why_works":"...","weakness":"...","counter":{"hook_ar":"...","body_ar":"...","trust":"...","cta_ar":"...","funnel":"TOF/MOF/BOF"}}]}`;
-    const usr=`Competitor:${mComp}\nChannel:${mChan}\nInput:${mDesc}`;
+    const trimmed=mDesc.trim();
+    const isUrl=/^https?:\/\//i.test(trimmed);
     setMLd(true);setMErr("");setMRes(null);
+
+    // If input looks like a URL, try to fetch the actual page content first
+    let realContent="";
+    let fetchedFrom=null;
+    let blockedNote="";
+    if(isUrl){
+      try{
+        const fr=await fetchWithTimeout("/api/fetch-url",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:trimmed})},20000);
+        const fj=await fr.json().catch(()=>({}));
+        if(fj.ok&&fj.content){
+          realContent=fj.content;
+          fetchedFrom=fj.host;
+        }else if(fj.blocked){
+          blockedNote=fj.message||`${fj.platform||"Site"} blocks bots — paste the caption directly.`;
+          setMErr(T(`⚠ ${blockedNote} — لكن سنحاول التحليل بناءً على ${mComp} و${mChan}.`,`⚠ ${blockedNote} — analyzing inferred angle for ${mComp} on ${mChan}.`));
+          // Don't return — continue with inferred analysis
+        }
+      }catch(e){
+        // Fetcher failed — fall through to inferred analysis
+        // eslint-disable-next-line no-console
+        console.warn("[market] URL fetch failed, falling back to inferred analysis:",e.message);
+      }
+    }
+
+    const inputCtx=realContent
+      ?`ACTUAL AD CONTENT (fetched from ${fetchedFrom}):\n---\n${realContent}\n---\nAnalyze the REAL ad above. Quote the actual hook/message in your analysis.`
+      :isUrl
+      ?`The user provided a URL only (${trimmed}) but it could not be fetched (login wall or blocked). Infer the most likely angle based on what ${mComp} typically posts on ${mChan}. Mark "(inferred)" in why_works.`
+      :`The user described the ad in their own words.`;
+    const sys=`Qoyod creative strategist. Analyze ONE specific competitor ad and produce ONE Qoyod counter-creative. Counter in ${ol}.\n${QOYOD_VOICE}\n${inputCtx}\nReturn ONLY valid JSON with EXACTLY ONE card matching the competitor selected:\n{"cards":[{"competitor":"${mComp}","platform":"${mChan}","hook":"...","message":"...","why_works":"...","weakness":"...","counter":{"hook_ar":"...","body_ar":"...","trust":"...","cta_ar":"...","funnel":"TOF/MOF/BOF"}}]}`;
+    const usr=`Competitor:${mComp}\nChannel:${mChan}\nUserInput:${trimmed}`;
+
     try{
       const r=await callAI(sys,usr,2500);
-      // Force-filter to only the selected competitor card to prevent multi-card responses
       if(Array.isArray(r.cards)){
         const matched=r.cards.filter(c=>(c.competitor||"").toLowerCase().includes(mComp.toLowerCase()));
         r.cards=matched.length?matched:r.cards.slice(0,1);
       }
+      // Tag the result so UI can show the fetch source
+      if(realContent)r._source=`fetched from ${fetchedFrom}`;
+      else if(isUrl)r._source="inferred (URL not fetchable)";
+      else r._source="user description";
       setMRes(r);
-      if(r.cards?.[0])setIlog(p=>[{date:new Date().toLocaleDateString(),comp:mComp,ch:mChan,desc:mDesc.slice(0,48)},...p]);
+      if(r.cards?.[0])setIlog(p=>[{date:new Date().toLocaleDateString(),comp:mComp,ch:mChan,desc:trimmed.slice(0,48)},...p]);
     }catch(e){setMErr(e.message);}finally{setMLd(false);}
   },[lang,mComp,mChan,mDesc]);
 
@@ -1558,6 +1590,11 @@ export default function CreativeOS(){
             {mLd&&<Loader msg={T("يحلل...","Analyzing...")}/>}
             {mRes&&!mLd&&(
               <div className="qa">
+                {mRes._source&&(
+                  <div style={{padding:"6px 12px",marginBottom:8,borderRadius:6,fontSize:10.5,direction:"rtl",textAlign:"right",background:mRes._source.startsWith("fetched")?"rgba(93,200,122,.06)":"rgba(245,166,35,.06)",border:`1px solid ${mRes._source.startsWith("fetched")?"rgba(93,200,122,.25)":"rgba(245,166,35,.25)"}`,color:mRes._source.startsWith("fetched")?"#5dc87a":"#f5a623"}}>
+                    {mRes._source.startsWith("fetched")?T("✓ تم تحليل المحتوى الحقيقي من الرابط","✓ Analyzed real content from URL"):mRes._source.startsWith("inferred")?T("⚠ الرابط محظور — التحليل مبني على افتراضات","⚠ URL blocked — analysis based on inference"):T("✓ تحليل مبني على وصفك","✓ Based on your description")}
+                  </div>
+                )}
                 {(mRes.cards||[]).map((c,i)=>(
                   <div key={i} style={{...card}}>
                     <div style={cHead}><Tag ch={c.competitor} style={{fontWeight:700}}/><Tag ch={c.platform||mChan} style={{fontSize:10}}/></div>
