@@ -1392,9 +1392,23 @@ export default function CreativeOS(){
                         </div>
                         {ad.hook&&<p style={{fontSize:11,fontWeight:600,color:"#ddeef4",direction:"rtl",textAlign:"right",marginBottom:4}}>{ad.hook.slice(0,80)}</p>}
                         {ad.body&&<p style={{fontSize:10,color:"#bbd4e0",direction:"rtl",textAlign:"right",lineHeight:1.5,marginBottom:6,maxHeight:60,overflow:"hidden"}}>{ad.body.slice(0,140)}{ad.body.length>140?"…":""}</p>}
+                        {/* Date + engagement row */}
+                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6,flexWrap:"wrap",gap:4}}>
+                          {ad.started&&(()=>{
+                            const d=new Date(typeof ad.started==="number"?ad.started*1000:ad.started);
+                            const valid=!isNaN(d.getTime());
+                            if(!valid)return null;
+                            const daysAgo=Math.floor((Date.now()-d.getTime())/(86400000));
+                            const label=daysAgo===0?"Today":daysAgo===1?"Yesterday":`${daysAgo}d ago`;
+                            const dateStr=d.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"2-digit"});
+                            return <span style={{fontSize:9,color:"#6a96aa"}}>📅 {dateStr} · {label}{isPaid&&daysAgo>0?` (${daysAgo}d running)`:""}</span>;
+                          })()}
+                          {ad.caption&&<span style={{fontSize:9,color:"#8aafc4",textAlign:"right"}}>{ad.caption}</span>}
+                        </div>
                         <div style={{display:"flex",gap:4}}>
                           <Btn ch={T("استخدم للتحليل","Use for Analysis")} xs onClick={()=>useLiveAdAsInput(ad)}/>
                           {ad.snapshot_url&&<a href={ad.snapshot_url} target="_blank" rel="noreferrer" style={{padding:"3px 8px",borderRadius:4,fontSize:9,color:"#6a96aa",textDecoration:"none",border:"1px solid rgba(106,150,170,.3)"}}>{T("معاينة","Preview")}↗</a>}
+                          {ad.detail_url&&!ad.snapshot_url&&<a href={ad.detail_url} target="_blank" rel="noreferrer" style={{padding:"3px 8px",borderRadius:4,fontSize:9,color:"#6a96aa",textDecoration:"none",border:"1px solid rgba(106,150,170,.3)"}}>View↗</a>}
                         </div>
                       </div>
                     );})}
