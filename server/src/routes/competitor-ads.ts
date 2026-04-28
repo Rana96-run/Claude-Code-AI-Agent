@@ -29,6 +29,55 @@ function resolve(input: string) {
   return null;
 }
 
+/* ─── Free Google Ads scraper via r.jina.ai ───────────────────────────────
+   Apify actors for Google Ads Transparency Center either don't support SA
+   or return zero results. The page itself IS scrapeable via jina reader,
+   which we already use for the URL fetcher. Parses the markdown response
+   for ad image URLs + creative IDs. Returns image-only ad cards (no copy
+   text — Google Ads Transparency doesn't show text in the listing view). */
+async function scrapeGoogleAdsViaJina(domain: string, country: string): Promise<Array<{ page_name: string; hook: string; body: string; caption: string; image_url: string | null; detail_url: string | null; platforms: string[]; started: string }>> {
+  const target = `https://adstransparency.google.com/?region=${country}&domain=${domain}`;
+  const url = `https://r.jina.ai/${target}`;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 18_000);
+
+  try {
+    const r = await fetch(url, { headers: { Accept: "text/plain" }, signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (!r.ok) return [];
+    const text = await r.text();
+
+    // Pull total ad count if present
+    const countMatch = /~?(\d{1,4}(?:,\d{3})*)\s*ads/i.exec(text);
+    const totalAds = countMatch ? countMatch[1] : null;
+
+    // Extract advertiser display name (appears before "Verified")
+    const nameMatch = /([A-Za-z0-9 ,.&'-]+)\s*\n\s*Verified/i.exec(text);
+    const advertiserName = nameMatch ? nameMatch[1].trim() : domain;
+
+    // Pattern: ![Image N](IMG_URL)](https://adstransparency.google.com/advertiser/AR.../creative/CR...)
+    const pattern = /!\[Image \d+\]\(([^)]+)\)\]\((https:\/\/adstransparency\.google\.com\/advertiser\/(AR\d+)\/creative\/(CR\d+)[^)]*)\)/g;
+    const ads: any[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = pattern.exec(text)) !== null) {
+      ads.push({
+        page_name: advertiserName,
+        hook: `Google ad ${m[4].slice(2, 8)}`,
+        body: totalAds ? `Part of ~${totalAds} active Google ads` : "Active Google ad",
+        caption: "Click 'Preview' to view full creative on Google",
+        image_url: m[1],
+        detail_url: m[2],
+        platforms: ["Google Ads"],
+        started: "",
+      });
+    }
+    return ads.slice(0, 10);
+  } catch {
+    clearTimeout(timeoutId);
+    return [];
+  }
+}
+
 /* ─── Apify runner ────────────────────────────────────────────────────────
    Calls run-sync-get-dataset-items: starts the actor and returns the dataset
    contents in a single HTTP call (vs async runs that need polling). */
@@ -120,16 +169,21 @@ router.post("/competitor-ads", async (req, res) => {
     const fbUrl = `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=${country}&q=${encodeURIComponent(c.fb_query)}&search_type=keyword_unordered`;
     input = { urls: [{ url: fbUrl }], count: apifyMinCount };
   } else if (source === "google") {
-    // fortuitous_pirate's Google Ads Transparency scraper (8K+ runs, 200+ users).
-    // NOTE: this actor's allowed regions are US/GB/DE/FR/CA/AU only — Saudi
-    // Arabia is not on the list. We pass empty region (any) and brand name
-    // (not domain) since the search index is by advertiser name.
-    actor = "fortuitous_pirate~google-ads-transparency-scraper";
-    input = {
-      query: c.fb_query, // brand name like "Daftra", not "daftra.com"
-      region: "",
-      maxItems: apifyMinCount,
-    };
+    // Google Ads doesn't go through Apify — we use the FREE r.jina.ai
+    // reader proxy directly against Google Ads Transparency Center.
+    // Apify actors for Google ads either don't support SA region or
+    // returned 0 results across multiple actor variants. Jina works.
+    const ads = await scrapeGoogleAdsViaJina(c.domain, country);
+    res.status(200).json({
+      ok: true,
+      source: "google",
+      competitor: c.domain,
+      country,
+      actor: "r.jina.ai (free)",
+      count: ads.length,
+      ads,
+    });
+    return;
   } else if (source === "instagram") {
     if (!c.ig) {
       res.status(400).json({ error: `No Instagram handle known for ${competitor}` });
