@@ -144,6 +144,26 @@ router.post("/update-board", async (req, res) => {
   }
 });
 
+/* Draw the CURRENT v2 system architecture onto an existing board.
+   Replaces the legacy drawWorkflow which still shows deleted Designer/LP tabs.
+   Layout: 7 horizontal layers from top to bottom — Brand Law, Inputs,
+   AI Engine, Tabs, Personas, Competitor Pipeline, Self-Learning, Outputs. */
+router.post("/draw-system-architecture", async (req, res) => {
+  if (!miroToken) return res.status(401).json({ error: "Not connected to Miro" });
+  const boardId =
+    (req.body as { board_id?: string }).board_id ?? process.env.MIRO_BOARD_ID;
+  if (!boardId) return res.status(400).json({ error: "board_id required or set MIRO_BOARD_ID" });
+  const clear = (req.body as { clear?: boolean }).clear !== false;
+  try {
+    if (clear) await clearBoard(miroToken.access_token, boardId);
+    await drawSystemArchitecture(miroToken.access_token, boardId);
+    res.json({ ok: true, view_link: `https://miro.com/app/board/${boardId}/` });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    res.status(500).json({ error: msg });
+  }
+});
+
 /* Draw سمعه agent-specific workflow onto an existing board */
 router.post("/draw-agent-flow", async (req, res) => {
   if (!miroToken) return res.status(401).json({ error: "Not connected to Miro" });
@@ -739,5 +759,237 @@ router.post("/draw-designer-pipeline", async (req, res) => {
     res.status(500).json({ error: msg });
   }
 });
+
+/* ─── v2 System Architecture (current state, post-Designer-removal) ──────
+   Renders the closed-loop creative operator on a Miro board.
+   Layers from top to bottom:
+     1. BRAND LAW (always-on, prepends every prompt)
+     2. INPUTS (Quick Agent, Master Prompt, Competitor Context)
+     3. AI ENGINE (3-provider fallback)
+     4. TABS (7 active production surfaces)
+     5. PERSONAS (6 roles)
+     6. COMPETITOR INTEL PIPELINE (4 sources → analysis)
+     7. SELF-LEARNING LOOP (hypothesis ledger, weekly review)
+     8. OUTPUTS (Slack, Sheet, Doc, Asana)
+   Connectors show data flow. */
+async function drawSystemArchitecture(token: string, boardId: string) {
+  const BASE = `${MIRO_API}/boards/${boardId}`;
+  const hdrs = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+  const post = async (path: string, body: object) => {
+    const r = await fetch(`${BASE}${path}`, {
+      method: "POST",
+      headers: hdrs,
+      body: JSON.stringify(body),
+    });
+    const d = (await r.json()) as { message?: string; description?: string; id?: string };
+    if (!r.ok) throw new Error(`${path}: ${d.message || d.description || JSON.stringify(d)}`);
+    return d as { id: string };
+  };
+
+  // Palette
+  const NAVY = "#021544",
+    TEAL = "#17A3A4",
+    GOLD = "#F5A623",
+    PURPLE = "#7D2AE8",
+    GREEN = "#22C55E",
+    BLUE = "#0F76C9",
+    ORANGE = "#FF7A2A",
+    RED = "#DC2626",
+    DARK = "#0f2744",
+    WHITE = "#FFFFFF";
+
+  // Layout
+  const W = 1500;
+  const COL_W = 200;
+  const COL_H = 60;
+  const BANNER_H = 55;
+  const Y_BRAND = -800;
+  const Y_INPUTS = -650;
+  const Y_AI_BAR = -510;
+  const Y_AI = -440;
+  const Y_TABS = -270;
+  const Y_PERS = -130;
+  const Y_INTEL_BAR = 30;
+  const Y_INTEL = 110;
+  const Y_LOOP = 270;
+  const Y_OUT_BAR = 410;
+  const Y_OUT = 480;
+
+  const cols = (n: number, span = W) => {
+    const step = span / (n + 1);
+    return Array.from({ length: n }, (_, i) => -span / 2 + step * (i + 1));
+  };
+
+  type N = { id: string; x: number; y: number; w: number; h: number; label: string; fill: string; text: string };
+  const nodes: N[] = [];
+
+  // Layer 0 — title
+  nodes.push({
+    id: "title",
+    x: 0,
+    y: Y_BRAND - 90,
+    w: W,
+    h: BANNER_H,
+    label: "Qoyod Creative OS v2  |  Self-Learning Closed-Loop Operator",
+    fill: NAVY,
+    text: WHITE,
+  });
+
+  // Layer 1 — BRAND LAW (single golden bar)
+  nodes.push({
+    id: "law",
+    x: 0,
+    y: Y_BRAND,
+    w: W,
+    h: BANNER_H,
+    label: "BRAND LAW (auto-injected) · Saudi dialect · ONE message=ONE CTA=ONE trust · Hard stops · No design exec, no LP",
+    fill: GOLD,
+    text: NAVY,
+  });
+
+  // Layer 2 — INPUTS (3 nodes)
+  const xIn = cols(3);
+  nodes.push({ id: "qa", x: xIn[0], y: Y_INPUTS, w: COL_W + 60, h: COL_H, label: "Quick Agent Terminal\nfree-form prompt", fill: TEAL, text: WHITE });
+  nodes.push({ id: "master", x: xIn[1], y: Y_INPUTS, w: COL_W + 60, h: COL_H, label: "Master Prompt v1.1\nbrand law · checklists", fill: TEAL, text: WHITE });
+  nodes.push({ id: "ctx", x: xIn[2], y: Y_INPUTS, w: COL_W + 60, h: COL_H, label: "Competitor Context\nweekly auto-injected", fill: TEAL, text: WHITE });
+
+  // Layer 3 — AI ENGINE (header bar + 3 providers + reliability stack)
+  nodes.push({ id: "ai_bar", x: 0, y: Y_AI_BAR, w: W, h: BANNER_H, label: "AI ENGINE  ·  3-Provider Fallback  +  Retry  +  Dedup  +  Health Probe", fill: NAVY, text: WHITE });
+  const xAi = cols(3);
+  nodes.push({ id: "anth", x: xAi[0], y: Y_AI, w: COL_W + 60, h: COL_H, label: "Anthropic Sonnet 4.5\nprimary · 3 retries", fill: PURPLE, text: WHITE });
+  nodes.push({ id: "oai", x: xAi[1], y: Y_AI, w: COL_W + 60, h: COL_H, label: "OpenAI gpt-4o-mini\nfallback 1", fill: GREEN, text: WHITE });
+  nodes.push({ id: "gem", x: xAi[2], y: Y_AI, w: COL_W + 60, h: COL_H, label: "Gemini 2.5 Flash\nfallback 2", fill: BLUE, text: WHITE });
+
+  // Layer 4 — TABS (7 active)
+  const tabs = [
+    { id: "tab_content", label: "Content\n1-5 variants" },
+    { id: "tab_camp", label: "Campaign\nmulti-channel" },
+    { id: "tab_cal", label: "Calendar\nmonthly plan" },
+    { id: "tab_email", label: "Email & WA\nsequences" },
+    { id: "tab_market", label: "Market Watch\ncounter-creative" },
+    { id: "tab_lib", label: "Ad Library\nswipe file" },
+    { id: "tab_icp", label: "ICP\npersonas" },
+  ];
+  const xT = cols(tabs.length);
+  tabs.forEach((t, i) => nodes.push({ id: t.id, x: xT[i], y: Y_TABS, w: 175, h: COL_H, label: t.label, fill: DARK, text: WHITE }));
+
+  // Layer 5 — PERSONAS (6 roles)
+  const personas = [
+    { id: "p_social", label: "Social Media\nanalysis+monitor" },
+    { id: "p_content", label: "Content Creator\ncopy+captions" },
+    { id: "p_cro", label: "Paid Media\nfunnel doctor" },
+    { id: "p_email", label: "Email Lifecycle\nsequences" },
+    { id: "p_qa", label: "Editor QA\nchecklist" },
+    { id: "p_orch", label: "Orchestrator\nrouter" },
+  ];
+  const xP = cols(personas.length);
+  personas.forEach((p, i) => nodes.push({ id: p.id, x: xP[i], y: Y_PERS, w: COL_W, h: COL_H, label: p.label, fill: TEAL, text: WHITE }));
+
+  // Layer 6 — COMPETITOR INTEL (header bar + 4 sources + 1 synthesizer)
+  nodes.push({ id: "intel_bar", x: 0, y: Y_INTEL_BAR, w: W, h: BANNER_H, label: "COMPETITOR INTELLIGENCE PIPELINE  ·  Sunday 09:00 UTC", fill: NAVY, text: WHITE });
+  const sources = [
+    { id: "s_fb", label: "Facebook Ads\nApify Library" },
+    { id: "s_ig", label: "Instagram\norganic posts" },
+    { id: "s_g", label: "Google Ads\nTransparency" },
+    { id: "s_yt", label: "YouTube\nData API v3" },
+    { id: "s_synth", label: "Context Synth\n→ inject in prompts" },
+  ];
+  const xS = cols(sources.length);
+  sources.forEach((s, i) =>
+    nodes.push({ id: s.id, x: xS[i], y: Y_INTEL, w: COL_W + 30, h: COL_H, label: s.label, fill: ORANGE, text: WHITE }),
+  );
+
+  // Layer 7 — SELF-LEARNING LOOP
+  const loop = [
+    { id: "l_hyp", label: "Hypothesis Ledger\nevery creative logged" },
+    { id: "l_pattern", label: "Pattern Library\nwins → templates" },
+    { id: "l_anti", label: "Anti-Pattern Lib\nlosses → guardrails" },
+    { id: "l_review", label: "Weekly Self-Review\nMon AM" },
+  ];
+  const xL = cols(loop.length);
+  loop.forEach((l, i) => nodes.push({ id: l.id, x: xL[i], y: Y_LOOP, w: COL_W + 60, h: COL_H, label: l.label, fill: PURPLE, text: WHITE }));
+
+  // Layer 8 — OUTPUTS
+  nodes.push({ id: "out_bar", x: 0, y: Y_OUT_BAR, w: W, h: BANNER_H, label: "OUTPUTS  ·  Reports + Records + Hand-offs", fill: NAVY, text: WHITE });
+  const outs = [
+    { id: "o_slack", label: "Slack\nweekly + alerts" },
+    { id: "o_sheet", label: "Google Sheet\nposts + ledger" },
+    { id: "o_doc", label: "Google Doc\nweekly visual" },
+    { id: "o_asana", label: "Asana\ntask creation" },
+  ];
+  const xO = cols(outs.length);
+  outs.forEach((o, i) => nodes.push({ id: o.id, x: xO[i], y: Y_OUT, w: COL_W + 60, h: COL_H, label: o.label, fill: RED, text: WHITE }));
+
+  // Render shapes
+  const idMap: Record<string, string> = {};
+  for (const n of nodes) {
+    const isBanner = ["title", "law", "ai_bar", "intel_bar", "out_bar"].includes(n.id);
+    const item = await post("/shapes", {
+      data: {
+        shape: isBanner ? "rectangle" : "round_rectangle",
+        content: `<p style="text-align:center"><strong>${n.label.replace(/\n/g, "</strong><br><strong>")}</strong></p>`,
+      },
+      style: {
+        fillColor: n.fill,
+        color: n.text,
+        borderColor: n.fill,
+        borderWidth: "2",
+        fontSize: isBanner ? "16" : "12",
+      },
+      geometry: { width: n.w, height: n.h },
+      position: { x: n.x, y: n.y },
+    });
+    idMap[n.id] = item.id;
+  }
+
+  // Connectors — show data flow (subset, key arrows only)
+  const conns: Array<[string, string]> = [
+    // Inputs converge into AI engine
+    ["qa", "ai_bar"],
+    ["master", "ai_bar"],
+    ["ctx", "ai_bar"],
+    // AI engine fans out to tabs
+    ["anth", "tab_content"],
+    ["anth", "tab_camp"],
+    ["anth", "tab_cal"],
+    ["anth", "tab_email"],
+    // Personas serve tabs (one representative arrow)
+    ["p_content", "tab_content"],
+    ["p_social", "tab_market"],
+    ["p_cro", "tab_market"],
+    ["p_email", "tab_email"],
+    // Intel pipeline → context synth → context node
+    ["s_fb", "s_synth"],
+    ["s_ig", "s_synth"],
+    ["s_g", "s_synth"],
+    ["s_yt", "s_synth"],
+    ["s_synth", "ctx"],
+    // Self-learning loop feeds back into personas
+    ["l_hyp", "p_content"],
+    ["l_pattern", "p_content"],
+    ["l_review", "l_pattern"],
+    ["l_review", "l_anti"],
+    // Outputs from intel pipeline
+    ["s_synth", "o_slack"],
+    ["s_synth", "o_doc"],
+    ["s_synth", "o_sheet"],
+    // Hypothesis logged to sheet
+    ["l_hyp", "o_sheet"],
+  ];
+
+  for (const [from, to] of conns) {
+    if (!idMap[from] || !idMap[to]) continue;
+    await post("/connectors", {
+      startItem: { id: idMap[from] },
+      endItem: { id: idMap[to] },
+      style: {
+        strokeColor: TEAL,
+        strokeWidth: "2",
+        startStrokeCap: "none",
+        endStrokeCap: "arrow",
+      },
+    }).catch(() => {});
+  }
+}
 
 export default router;
