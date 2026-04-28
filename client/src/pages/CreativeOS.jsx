@@ -557,7 +557,7 @@ function extractFirstJsonObject(text){
   return null;
 }
 
-async function callAI(sys,usr,max_tokens=1400,raw_text=false){
+async function callAI(sys,usr,max_tokens=1400,raw_text=false,_retrying=false){
   const res=await fetch("/api/generate",{
     method:"POST",
     headers:{"Content-Type":"application/json"},
@@ -570,22 +570,24 @@ async function callAI(sys,usr,max_tokens=1400,raw_text=false){
     throw new Error(e?.error||`Error ${res.status}`);
   }
   const d=await res.json();
+  if(d.error)throw new Error(d.error);
   const text=(d.content||[]).map(b=>b.text||"").join("").trim();
   if(raw_text)return text;
-  // With json_mode the response already starts with "{" — clean up just in case
   const clean=text.replace(/```json\n?|\n?```/g,"").trim();
-  try{return JSON.parse(clean);}
-  catch{
-    // Fallback: extract first balanced JSON object
-    const block=extractFirstJsonObject(clean);
-    if(!block)throw new Error("AI did not return valid JSON");
-    try{return JSON.parse(block);}
-    catch(e){
-      const fi=clean.indexOf("{"),li=clean.lastIndexOf("}");
-      if(fi!==-1&&li>fi)return JSON.parse(clean.slice(fi,li+1));
-      throw e;
-    }
+  // 1st: direct parse
+  try{return JSON.parse(clean);}catch{}
+  // 2nd: extract first balanced {…} block
+  const block=extractFirstJsonObject(clean);
+  if(block){try{return JSON.parse(block);}catch{}}
+  // 3rd: slice first { to last } (handles truncation)
+  const fi=clean.indexOf("{"),li=clean.lastIndexOf("}");
+  if(fi!==-1&&li>fi){try{return JSON.parse(clean.slice(fi,li+1));}catch{}}
+  // 4th: auto-retry with 50% more tokens (once)
+  if(!_retrying){
+    const boosted=Math.min(Math.round(max_tokens*1.5),8000);
+    return callAI(sys,usr,boosted,false,true);
   }
+  throw new Error(`AI did not return valid JSON (${max_tokens} tokens, len=${clean.length})`);
 }
 
 /* ─── APP ─── */
