@@ -285,8 +285,8 @@ export default function AgentPanel() {
         onClick={() => setOpen((o) => !o)}
         style={{
           position: "fixed",
-          top: 12,
-          right: 12,
+          bottom: 18,
+          right: 18,
           zIndex: 1000,
           padding: "7px 13px",
           borderRadius: 20,
