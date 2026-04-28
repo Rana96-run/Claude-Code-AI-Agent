@@ -228,3 +228,39 @@ export async function driveUploadText(
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
+
+/* Upload HTML and have Drive auto-convert it to a native Google Doc.
+   Returns the Doc's edit URL. Used for the weekly visual competitor report. */
+export async function driveUploadAsGoogleDoc(
+  filename: string,
+  htmlContent: string
+): Promise<{ ok: boolean; link?: string; error?: string }> {
+  try {
+    if (!FOLDER_ID) return { ok: false, error: "GOOGLE_DRIVE_FOLDER_ID not configured" };
+    const drive = getDriveClient();
+    const buf = Buffer.from(htmlContent, "utf-8");
+    const body = Readable.from(buf);
+
+    // Always create a new doc per week (not update — we want history)
+    const { data } = await drive.files.create({
+      requestBody: {
+        name: filename,
+        parents: [FOLDER_ID],
+        mimeType: "application/vnd.google-apps.document", // target: Google Doc
+      },
+      media: {
+        mimeType: "text/html", // source: HTML, Drive auto-converts
+        body,
+      },
+      fields: "id,webViewLink",
+      supportsAllDrives: true,
+    });
+
+    return {
+      ok: true,
+      link: data.webViewLink ?? `https://docs.google.com/document/d/${data.id}/edit`,
+    };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}

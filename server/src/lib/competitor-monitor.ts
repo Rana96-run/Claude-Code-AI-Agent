@@ -23,6 +23,9 @@ import {
 } from "./competitor-weekly-report.js";
 import { sheetsAppendCompetitorPosts, sheetsHealthCheck } from "./sheets-client.js";
 import type { CompetitorPost } from "./content-library.js";
+import { buildContextPrompt, renderContextMarkdown, saveContext } from "./competitor-context.js";
+import { renderWeeklyDocHtml } from "./competitor-doc-renderer.js";
+import { driveUploadAsGoogleDoc } from "../routes/drive.js";
 import { logger } from "./logger.js";
 
 // Tracked competitors — each entry is the COMPETITORS key from competitor-ads.ts
@@ -182,6 +185,8 @@ export async function runMonitorOnce(opts: { competitors?: string[]; postToSlack
   diffs: any[];
   ai: any;
   slack_posted: boolean;
+  report_doc_url?: string;
+  sheet_url?: string;
 }> {
   const competitors = opts.competitors || TRACKED;
   const today = dayKey();
@@ -254,6 +259,28 @@ export async function runMonitorOnce(opts: { competitors?: string[]; postToSlack
     ai = { headline: "AI summary unavailable", competitors: [], recommended_actions: [] };
   }
 
+  // 4b. Synthesize a SHORT competitive context doc that gets injected into
+  //     content/campaign/calendar prompts. This is the "build on, don't dump"
+  //     transformation the user asked for.
+  try {
+    const ctxPrompt = buildContextPrompt(diffs, weekLabel);
+    const ctxAi = await callClaude(ctxPrompt.system, ctxPrompt.user, 1200);
+    const md = renderContextMarkdown(ctxAi, weekLabel);
+    saveContext({
+      generated_at: new Date().toISOString(),
+      week: weekLabel,
+      summary: ctxAi.summary || "",
+      themes: ctxAi.themes || [],
+      qoyod_positioning: ctxAi.qoyod_positioning || "",
+      raw_markdown: md,
+    });
+  } catch (err) {
+    logger.warn(
+      { err: err instanceof Error ? err.message : String(err) },
+      "monitor: context synthesis failed (non-fatal)",
+    );
+  }
+
   // 5. Resolve the Google Sheet URL so the Slack message can link to full data
   let sheetUrl: string | undefined;
   try {
@@ -263,8 +290,27 @@ export async function runMonitorOnce(opts: { competitors?: string[]; postToSlack
     // non-fatal — message just won't include the sheet link
   }
 
-  // 6. Slack — narrative, human-readable format
-  const blocks = formatSlackBlocks(diffs, ai, weekLabel, sheetUrl);
+  // 6. Generate the visual Google Doc report (full HTML with embedded images)
+  let reportDocUrl: string | undefined;
+  try {
+    const html = renderWeeklyDocHtml(diffs, ai, weekLabel, sheetUrl);
+    const filename = `Competitor Intel — ${weekLabel}`;
+    const upload = await driveUploadAsGoogleDoc(filename, html);
+    if (upload.ok && upload.link) {
+      reportDocUrl = upload.link;
+      logger.info({ url: reportDocUrl }, "monitor: weekly doc generated");
+    } else {
+      logger.warn({ error: upload.error }, "monitor: doc upload failed (non-fatal)");
+    }
+  } catch (err) {
+    logger.warn(
+      { err: err instanceof Error ? err.message : String(err) },
+      "monitor: doc generation failed (non-fatal)",
+    );
+  }
+
+  // 7. Slack — narrative, human-readable format with link to Doc + Sheet
+  const blocks = formatSlackBlocks(diffs, ai, weekLabel, sheetUrl, reportDocUrl);
   let slackPosted = false;
   if (opts.postToSlack !== false) {
     await postToSlack(blocks, ai.headline || `Competitor Intel — ${weekLabel}`);
@@ -278,6 +324,8 @@ export async function runMonitorOnce(opts: { competitors?: string[]; postToSlack
     diffs,
     ai,
     slack_posted: slackPosted,
+    report_doc_url: reportDocUrl,
+    sheet_url: sheetUrl,
   };
 }
 
