@@ -601,6 +601,7 @@ export default function CreativeOS(){
   const[sector,setSector]=useState("General");
   const[hookType,setHookType]=useState("Fear");
   const[featFocus,setFeatFocus]=useState("");
+  const[contentICP,setContentICP]=useState("");
   const[campRef,setCampRef]=useState("");
   const[extraNote,setExtraNote]=useState("");
   const[cr,setCr]=useState(null);
@@ -793,6 +794,8 @@ export default function CreativeOS(){
   const genContent=useCallback(async()=>{
     const ff=FEATURES.find(f=>f.v===featFocus);
     const fctx=ff?(lang==="en"?ff.desc_en:ff.desc_ar):"";
+    const icpP=ICP_PERSONAS.find(p=>p.id===contentICP);
+    const icpCtx=icpP?`Target ICP: ${icpP.title} — Pain: ${icpP.pain_ar} — Hook angle: ${icpP.hook_ar}`:"";
     const{names:prodNames,desc:prodDesc}=buildProdCtx(prod,prodExtras,lang);
     const ol=lang==="en"?"Write ALL copy in English. Professional, concise.":"Write ALL copy in Saudi dialect ONLY (مو/وش/ليش/يكلفك). NEVER Egyptian (مش/ايه/بتاعك).";
     // Build channel-specific output spec
@@ -825,21 +828,23 @@ export default function CreativeOS(){
       chanSpec=`Instagram post caption. Engaging, 80-150 words. 4-5 targeted ${lang==="ar"?"Arabic + English":"relevant"} hashtags. Ready to post.`;
       outFmt=`{"ad_copy":{"hook":"...","body":"...","cta":"..."},"caption":"Instagram caption 80-150 words with 4-5 hashtags"}`;
     }
-    const sys=`Senior performance copywriter for Qoyod — Saudi cloud accounting SaaS, ZATCA-accredited.\n${ol}\n${QOYOD_VOICE}\nProduct: ${prodDesc}\n${fctx?"Feature: "+fctx:""}\nChannel: ${chan}. ${chanSpec}\nRule: ONE clear message per output. No emojis. Generate ONLY for ${chan} — do not include other channels.\nReturn ONLY valid JSON (no markdown):\n${outFmt}`;
-    const usr=`Products:${prodNames} Channel:${chan} Audience:${funnel} Sector:${sector} Feature:${ff?.ar||"general"} Note:${extraNote||"none"}`;
+    const sys=`Senior performance copywriter for Qoyod — Saudi cloud accounting SaaS, ZATCA-accredited.\n${ol}\n${QOYOD_VOICE}\nProduct: ${prodDesc}\n${fctx?"Feature: "+fctx:""}\n${icpCtx?"ICP: "+icpCtx:""}\nChannel: ${chan}. ${chanSpec}\nRule: ONE clear message per output. No emojis. Generate ONLY for ${chan} — do not include other channels.\nReturn ONLY valid JSON (no markdown):\n${outFmt}`;
+    const usr=`Products:${prodNames} Channel:${chan} Audience:${funnel} Sector:${sector} Feature:${ff?.ar||"general"} ICP:${icpP?.title||"general"} Note:${extraNote||"none"}`;
     setCl(true);setCe("");setCr(null);
     try{setCr(await callAI(sys,usr,chan==="Google Ads"?1800:1200));}catch(e){setCe(e.message);}finally{setCl(false);}
-  },[lang,prod,prodExtras,chan,funnel,sector,featFocus,extraNote,buildProdCtx]);
+  },[lang,prod,prodExtras,chan,funnel,sector,featFocus,contentICP,extraNote,buildProdCtx]);
 
   const genContentAB=useCallback(async()=>{
     if(!abConceptCt.trim()){setCe(T("اكتب الفكرة أو الرسالة لتوليد نسختين","Enter a concept or message to generate A/B variants"));return;}
     const{names:prodNames,desc:prodDesc}=buildProdCtx(prod,prodExtras,lang);
+    const icpP=ICP_PERSONAS.find(p=>p.id===contentICP);
+    const icpCtx=icpP?`Target ICP: ${icpP.title} — Pain: ${icpP.pain_ar} — Hook: ${icpP.hook_ar}`:"";
     const ol=lang==="en"?"Write all copy in English.":"Write all Arabic copy in Saudi dialect (مو/وش/ليش). NEVER Egyptian.";
-    const sys=`Senior CRO copywriter for Qoyod (Saudi cloud accounting SaaS). ${ol}\n${QOYOD_VOICE}\nTwo genuinely different A/B variants — different angle, different hook, different trigger.\nReturn ONLY valid JSON:\n{"variant_a":{"label":"A — [angle name]","ad_copy":{"hook":"...","body":"...","cta":"..."},"google_headlines":["≤30 chars","≤30 chars","≤30 chars"],"captions":{"instagram":"...with hashtags","linkedin":"..."},"predicted_ctr":"high/med/low","why":"..."},"variant_b":{"label":"B — [angle name]","ad_copy":{"hook":"...","body":"...","cta":"..."},"google_headlines":["≤30 chars","≤30 chars","≤30 chars"],"captions":{"instagram":"...with hashtags","linkedin":"..."},"predicted_ctr":"high/med/low","why":"..."},"recommendation":"..."}`;
-    const usr=`Products:${prodNames} Desc:${prodDesc} Channel:${chan} Audience:${funnel} Sector:${sector} Concept:"${abConceptCt}"`;
+    const sys=`Senior CRO copywriter for Qoyod (Saudi cloud accounting SaaS). ${ol}\n${QOYOD_VOICE}\n${icpCtx?"ICP: "+icpCtx:""}\nTwo genuinely different A/B variants — different angle, different hook, different trigger.\nReturn ONLY valid JSON:\n{"variant_a":{"label":"A — [angle name]","ad_copy":{"hook":"...","body":"...","cta":"..."},"google_headlines":["≤30 chars","≤30 chars","≤30 chars"],"captions":{"instagram":"...with hashtags","linkedin":"..."},"predicted_ctr":"high/med/low","why":"..."},"variant_b":{"label":"B — [angle name]","ad_copy":{"hook":"...","body":"...","cta":"..."},"google_headlines":["≤30 chars","≤30 chars","≤30 chars"],"captions":{"instagram":"...with hashtags","linkedin":"..."},"predicted_ctr":"high/med/low","why":"..."},"recommendation":"..."}`;
+    const usr=`Products:${prodNames} Desc:${prodDesc} Channel:${chan} Audience:${funnel} Sector:${sector} ICP:${icpP?.title||"general"} Concept:"${abConceptCt}"`;
     setCl(true);setCe("");setCr(null);setAbRes(null);
     try{setAbRes(await callAI(sys,usr,3000));}catch(e){setCe(e.message);}finally{setCl(false);}
-  },[lang,prod,prodExtras,chan,funnel,sector,abConceptCt,buildProdCtx]);
+  },[lang,prod,prodExtras,chan,funnel,sector,contentICP,abConceptCt,buildProdCtx]);
 
   const genCampaign=useCallback(async()=>{
     if(!campTheme){setCampErr(T("اكتب موضوع الحملة","Enter a campaign theme"));return;}
@@ -1468,6 +1473,12 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
                       <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
                         <Seg ch={T("بدون","None")} on={featFocus===""} onClick={()=>setFeatFocus("")}/>
                         {FEATURES.map(f=><Seg key={f.v} ch={lang==="ar"?f.ar:f.v} on={featFocus===f.v} onClick={()=>setFeatFocus(f.v)}/>)}
+                      </div>
+                    </Fld>
+                    <Fld label={T("شريحة العميل (ICP)","Target ICP")}>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                        <Seg ch={T("عام","Any")} on={contentICP===""} onClick={()=>setContentICP("")}/>
+                        {ICP_PERSONAS.map(p=><Seg key={p.id} ch={`${p.icon} ${p.title}`} on={contentICP===p.id} onClick={()=>setContentICP(p.id)}/>)}
                       </div>
                     </Fld>
                     <div style={row2}>
@@ -2371,7 +2382,7 @@ DESIGN SYSTEM — follow EXACTLY (same design system as Variant A, different con
                 </div>
                 <Fld label={T("تكرار النشر","Posting Frequency")}>
                   <select value={calFreq} onChange={e=>setCalFreq(e.target.value)}>
-                    {["daily","5 posts/week","3 posts/week","2 posts/week"].map(f=><option key={f}>{f}</option>)}
+                    {["daily","5 posts/week","4 posts/week","3 posts/week","2 posts/week","1 post/week"].map(f=><option key={f}>{f}</option>)}
                   </select>
                 </Fld>
                 <Fld label={T("المنصات","Platforms")}>
