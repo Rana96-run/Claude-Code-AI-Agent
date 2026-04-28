@@ -884,8 +884,8 @@ export default function CreativeOS(){
     // Switch the channel select based on detected platform
     const plats=(ad.platforms||[]).join(" ").toLowerCase();
     if(ad._source==="instagram"||plats.includes("instagram"))setMChan("Instagram");
-    else if(ad._source==="facebook"||plats.includes("facebook"))setMChan("Facebook");
-    else if(ad._source==="tiktok"||plats.includes("tiktok"))setMChan("TikTok");
+    else if(ad._source==="facebook"||ad._source==="facebook_organic"||plats.includes("facebook"))setMChan("Facebook");
+    else if(ad._source==="tiktok"||ad._source==="tiktok_ads"||plats.includes("tiktok"))setMChan("TikTok");
     else if(ad._source==="snapchat"||plats.includes("snapchat"))setMChan("Snapchat");
     else if(ad._source==="google")setMChan("Google");
   },[]);
@@ -1365,26 +1365,28 @@ export default function CreativeOS(){
                 <span style={{fontSize:11,fontWeight:600,color:"#6a96aa"}}>{T("إعلانات ومنشورات المنافس","Competitor Ads & Posts")}{liveAds.length>0&&<span style={{fontSize:9,color:"#6a96aa",marginRight:6}}>({liveAds.length})</span>}</span>
                 <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
                   {liveAds.length>0&&<Btn ch={T("مسح","Clear")} xs onClick={()=>{setLiveAds([]);setLiveAdsErr(null);}}/>}
-                  <Btn ch={T("Meta","Meta")} xs onClick={()=>loadLiveAds("facebook")} dis={liveAdsLd||!mComp}/>
-                  <Btn ch={T("Google","Google")} xs onClick={()=>loadLiveAds("google")} dis={liveAdsLd||!mComp}/>
-                  <Btn ch={T("IG","IG")} xs onClick={()=>loadLiveAds("instagram")} dis={liveAdsLd||!mComp}/>
-                  <Btn ch={T("YouTube","YouTube")} xs onClick={()=>loadLiveAds("youtube")} dis={liveAdsLd||!mComp}/>
-                  <Btn ch={T("TikTok","TikTok")} xs onClick={()=>loadLiveAds("tiktok")} dis={liveAdsLd||!mComp}/>
-                  <Btn ch={T("Snap","Snap")} xs onClick={()=>loadLiveAds("snapchat")} dis={liveAdsLd||!mComp}/>
+                  <Btn ch="Meta Ads" xs onClick={()=>loadLiveAds("facebook")} dis={liveAdsLd||!mComp}/>
+                  <Btn ch="FB Organic" xs onClick={()=>loadLiveAds("facebook_organic")} dis={liveAdsLd||!mComp}/>
+                  <Btn ch="Google" xs onClick={()=>loadLiveAds("google")} dis={liveAdsLd||!mComp}/>
+                  <Btn ch="IG" xs onClick={()=>loadLiveAds("instagram")} dis={liveAdsLd||!mComp}/>
+                  <Btn ch="TikTok Ads" xs onClick={()=>loadLiveAds("tiktok_ads")} dis={liveAdsLd||!mComp}/>
+                  <Btn ch="TikTok" xs onClick={()=>loadLiveAds("tiktok")} dis={liveAdsLd||!mComp}/>
+                  <Btn ch="Snap" xs onClick={()=>loadLiveAds("snapchat")} dis={liveAdsLd||!mComp}/>
+                  <Btn ch="YouTube" xs onClick={()=>loadLiveAds("youtube")} dis={liveAdsLd||!mComp}/>
                 </div>
               </div>
               <div style={cBody}>
                 {liveAdsLd&&<div style={{padding:"10px",fontSize:10.5,color:"#17a3a3",direction:"rtl",textAlign:"right"}}>{T("⏳ يجلب الإعلانات من Apify... قد يستغرق 30-60 ثانية","⏳ Fetching ads via Apify... may take 30-60 seconds")}</div>}
                 {liveAdsErr&&<div style={{padding:"6px 10px",borderRadius:5,background:"rgba(245,166,35,.06)",border:"1px solid rgba(245,166,35,.25)",fontSize:10.5,color:"#f5a623",direction:"rtl",textAlign:"right",marginBottom:8}}>{liveAdsErr}</div>}
-                {!liveAdsLd&&liveAds.length===0&&!liveAdsErr&&<p style={{fontSize:10.5,color:"#6a96aa",direction:"rtl",textAlign:"right"}}>{T("اختر منافساً ثم اضغط أي قناة — Meta وGoogle (مدفوع) · IG وTikTok وSnap وYouTube (عضوي)","Pick a competitor then tap a channel — Meta & Google (paid) · IG, TikTok, Snap & YouTube (organic)")}</p>}
+                {!liveAdsLd&&liveAds.length===0&&!liveAdsErr&&<p style={{fontSize:10.5,color:"#6a96aa",direction:"rtl",textAlign:"right"}}>{T("اختر منافساً ثم اضغط أي قناة — Ads = مدفوع · Organic/IG/TikTok/Snap/YT = Organic","Pick a competitor then tap a channel — Ads = Paid · Organic/IG/TikTok/Snap/YT = Organic")}</p>}
                 {liveAds.length>0&&(
                   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:8}}>
-                    {liveAds.map((ad,i)=>{const isPaid=["facebook","google"].includes(ad._source);return(
+                    {liveAds.map((ad,i)=>{const isPaid=["facebook","google","tiktok_ads"].includes(ad._source);return(
                       <div key={(ad._source||"")+"|"+(ad.id||i)} style={{padding:"10px 12px",borderRadius:7,border:`1px solid ${isPaid?"rgba(245,166,35,.3)":"rgba(93,200,122,.25)"}`,background:"#0a1f3d"}}>
                         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
                           <div style={{display:"flex",alignItems:"center",gap:5}}>
                             <span style={{fontSize:10,fontWeight:700,color:"#17a3a3"}}>{ad.page_name}</span>
-                            <span style={{fontSize:8,fontWeight:700,padding:"1px 5px",borderRadius:3,...(isPaid?{background:"rgba(245,166,35,.12)",color:"#f5a623"}:{background:"rgba(93,200,122,.1)",color:"#5dc87a"})}}>{isPaid?T("مدفوع","PAID"):T("عضوي","ORGANIC")}</span>
+                            <span style={{fontSize:8,fontWeight:700,padding:"1px 5px",borderRadius:3,...(isPaid?{background:"rgba(245,166,35,.12)",color:"#f5a623"}:{background:"rgba(93,200,122,.1)",color:"#5dc87a"})}}>{isPaid?T("مدفوع","PAID"):"Organic"}</span>
                           </div>
                           <div style={{display:"flex",gap:3}}>{(ad.platforms||[]).slice(0,3).map(p=><Tag key={p} ch={p.slice(0,3)} style={{fontSize:8.5}}/>)}</div>
                         </div>

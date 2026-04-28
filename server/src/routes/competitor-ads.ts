@@ -26,15 +26,15 @@ const APIFY_TIMEOUT_MS = 90_000;
    IG handle). IG handles verified manually — null = no public IG. */
 const COMPETITORS: Record<
   string,
-  { domain: string; ig: string | null; fb_query: string; tiktok: string | null; snapchat: string | null; aliases: string[] }
+  { domain: string; ig: string | null; fb_query: string; fb_page: string | null; tiktok: string | null; snapchat: string | null; aliases: string[] }
 > = {
-  daftra:  { domain: "daftra.com",     ig: "daftraonline", fb_query: "daftra",      tiktok: "daftra",      snapchat: "daftra",    aliases: ["دفترة", "daftra"] },
-  dafater: { domain: "dafater.com",    ig: null,           fb_query: "dafater",     tiktok: null,          snapchat: null,        aliases: ["دفاتر", "dafater"] },
-  foodics: { domain: "foodics.com",    ig: "foodics",      fb_query: "foodics",     tiktok: "foodics",     snapchat: "foodics",   aliases: ["فودكس", "foodics"] },
-  rewaa:   { domain: "rewaatech.com",  ig: "rewaatech",    fb_query: "rewaa",       tiktok: "rewaatech",   snapchat: "rewaatech", aliases: ["رواء", "rewaa"] },
-  wafeq:   { domain: "wafeq.com",      ig: "wafeq.app",    fb_query: "wafeq",       tiktok: "wafeqapp",    snapchat: null,        aliases: ["وافق", "wafeq"] },
-  smacc:   { domain: "smacc.com",      ig: null,           fb_query: "smacc",       tiktok: null,          snapchat: null,        aliases: ["smacc"] },
-  zoho:    { domain: "zoho.com",       ig: "zoho",         fb_query: "zoho books",  tiktok: "zoho",        snapchat: "zoho",      aliases: ["zoho", "zoho books"] },
+  daftra:  { domain: "daftra.com",    ig: "daftraonline", fb_query: "daftra",     fb_page: "daftra",      tiktok: "daftra",      snapchat: "daftra",    aliases: ["دفترة", "daftra"] },
+  dafater: { domain: "dafater.com",   ig: null,           fb_query: "dafater",    fb_page: "dafater",     tiktok: null,          snapchat: null,        aliases: ["دفاتر", "dafater"] },
+  foodics: { domain: "foodics.com",   ig: "foodics",      fb_query: "foodics",    fb_page: "foodics",     tiktok: "foodics",     snapchat: "foodics",   aliases: ["فودكس", "foodics"] },
+  rewaa:   { domain: "rewaatech.com", ig: "rewaatech",    fb_query: "rewaa",      fb_page: "rewaatech",   tiktok: "rewaatech",   snapchat: "rewaatech", aliases: ["رواء", "rewaa"] },
+  wafeq:   { domain: "wafeq.com",     ig: "wafeq.app",    fb_query: "wafeq",      fb_page: "wafeq",       tiktok: "wafeqapp",    snapchat: null,        aliases: ["وافق", "wafeq"] },
+  smacc:   { domain: "smacc.com",     ig: null,           fb_query: "smacc",      fb_page: "smacc.erp",   tiktok: null,          snapchat: null,        aliases: ["smacc"] },
+  zoho:    { domain: "zoho.com",      ig: "zoho",         fb_query: "zoho books", fb_page: "zoho",        tiktok: "zoho",        snapchat: "zoho",      aliases: ["zoho", "zoho books"] },
 };
 
 function resolve(input: string) {
@@ -163,8 +163,8 @@ router.post("/competitor-ads", async (req, res) => {
     res.status(400).json({ error: "Missing competitor" });
     return;
   }
-  if (!source || !["facebook", "google", "instagram", "youtube", "tiktok", "snapchat"].includes(source)) {
-    res.status(400).json({ error: 'source must be "facebook", "google", "instagram", "youtube", "tiktok", or "snapchat"' });
+  if (!source || !["facebook", "facebook_organic", "google", "instagram", "youtube", "tiktok", "tiktok_ads", "snapchat"].includes(source)) {
+    res.status(400).json({ error: 'source must be one of: facebook, facebook_organic, google, instagram, youtube, tiktok, tiktok_ads, snapchat' });
     return;
   }
 
@@ -184,6 +184,21 @@ router.post("/competitor-ads", async (req, res) => {
     actor = "curious_coder~facebook-ads-library-scraper";
     const fbUrl = `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=${country}&q=${encodeURIComponent(c.fb_query)}&search_type=keyword_unordered`;
     input = { urls: [{ url: fbUrl }], count: apifyMinCount };
+  } else if (source === "facebook_organic") {
+    if (!c.fb_page) {
+      res.status(400).json({ error: `No Facebook page handle known for ${competitor}` });
+      return;
+    }
+    // apify/facebook-pages-scraper: scrapes organic posts from a public Facebook page
+    actor = "apify~facebook-pages-scraper";
+    input = {
+      startUrls: [{ url: `https://www.facebook.com/${c.fb_page}/` }],
+      maxPosts: apifyMinCount,
+      maxPostComments: 0,
+      maxReviews: 0,
+      scrapeAbout: false,
+      scrapePosts: true,
+    };
   } else if (source === "google") {
     // Google Ads doesn't go through Apify — we use the FREE r.jina.ai
     // reader proxy directly against Google Ads Transparency Center.
@@ -241,6 +256,15 @@ router.post("/competitor-ads", async (req, res) => {
       resultsPerPage: apifyMinCount,
       shouldDownloadVideos: false,
       shouldDownloadCovers: false,
+    };
+  } else if (source === "tiktok_ads") {
+    // TikTok Ad Library: scrapes paid ads by advertiser name/keyword
+    // apify/tiktok-ads-library-scraper searches library.tiktok.com/ads
+    actor = "apify~tiktok-ads-library-scraper";
+    input = {
+      searchKeyword: c.tiktok || c.fb_query,
+      countryCode: country,
+      limit: apifyMinCount,
     };
   } else if (source === "snapchat") {
     if (!c.snapchat) {
@@ -441,6 +465,36 @@ function normalize(item: any, source: string) {
       detail_url: item.creativeUrl || item.url || null,
       platforms: ["Google " + (item.format || "Ad")],
       started: item.firstShown || item.lastShown,
+    };
+  }
+  if (source === "facebook_organic") {
+    // apify/facebook-pages-scraper post shape
+    const likes  = item.likes  || item.likesCount  || 0;
+    const shares = item.shares || item.sharesCount || 0;
+    const text   = item.text   || item.message     || "";
+    return {
+      page_name:  item.pageName || item.name || "",
+      hook:       text.split("\n")[0]?.slice(0, 80) || "",
+      body:       text,
+      caption:    `${Number(likes).toLocaleString()} likes, ${Number(shares).toLocaleString()} shares`,
+      image_url:  item.media?.[0]?.url || item.topImage || null,
+      detail_url: item.url || null,
+      platforms:  ["Facebook"],
+      started:    item.time || item.date || "",
+    };
+  }
+  if (source === "tiktok_ads") {
+    // apify/tiktok-ads-library-scraper ad shape
+    const text = item.ad_text || item.description || item.caption || "";
+    return {
+      page_name:  item.advertiser_name || item.brand_name || "",
+      hook:       text.split("\n")[0]?.slice(0, 80) || item.ad_id || "",
+      body:       text,
+      caption:    item.cta_text || item.call_to_action || "",
+      image_url:  item.image_url || item.cover_image || item.thumbnail || null,
+      detail_url: item.ad_url || null,
+      platforms:  ["TikTok Ads"],
+      started:    item.first_shown || item.create_time || "",
     };
   }
   if (source === "snapchat") {
