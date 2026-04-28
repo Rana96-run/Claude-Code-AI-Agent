@@ -1111,15 +1111,22 @@ export default function CreativeOS(){
 
   /* ── Content Calendar ── */
   const genCalendar=useCallback(async()=>{
+    if(!calPlatforms.length){setCalErr(T("اختر منصة واحدة على الأقل","Select at least one platform"));return;}
     const px=PRODUCTS.find(p=>p.v===calProd)||PRODUCTS[0];
     const ol=lang==="en"?"All captions in English.":"All captions in Saudi Arabic dialect (مو/وش/ليش). NEVER Egyptian.";
-    const refCopy=`Reference captions from real Qoyod campaigns:\n- "سهل إدارة أعمالك بنظام فواتير ذكي وأصدر فواتيرك الإلكترونية من جوالك مع قيود"\n- "ركّز على نمو مشروعك واترك تعقيد الحسابات علينا — SOCPA certified"\n- "آلاف التجار دخلوا المرحلة الثانية للفوترة الإلكترونية مع قيود، أنت جاهز؟"\n- "لاتدير مصاريفك يدويًا واستخدم قيود — كل التزاماتك الضريبية أسهل"\nUse these as tone/style benchmark.`;
-    const sys=`You are a social media content strategist for Qoyod (Saudi cloud accounting SaaS, ZATCA-certified). ${ol}\n${QOYOD_VOICE}\n${refCopy}\nReturn ONLY valid JSON:\n{"month":"...","goal":"...","total_posts":${calFreq==="daily"?30:calFreq==="5 posts/week"?20:calFreq==="3 posts/week"?12:8},"weeks":[{"week":1,"posts":[{"day":"...","platform":"...","format":"Static/Reel/Story/Carousel","topic":"...","design_text":"...","caption":"...","hashtags":"...","cta":"...","funnel_stage":"TOF/MOF/BOF"}]}],"themes":["..."],"hashtag_sets":{"main":"...","secondary":"..."}}`;
+    const refCopy=`Reference captions from real Qoyod campaigns:\n- "سهل إدارة أعمالك بنظام فواتير ذكي وأصدر فواتيرك الإلكترونية من جوالك مع قيود"\n- "ركّز على نمو مشروعك واترك تعقيد الحسابات علينا — SOCPA certified"\n- "آلاف التجار دخلوا المرحلة الثانية للفوترة الإلكترونية مع قيود، أنت جاهز؟"\nUse these as tone/style benchmark.`;
+    // Map every supported frequency to actual post count
+    const postsPerMonth=({"daily":30,"5 posts/week":20,"4 posts/week":16,"3 posts/week":12,"2 posts/week":8,"1 post/week":4})[calFreq]||12;
+    // Distribution: each post goes to ONE primary platform (not duplicated across all platforms).
+    // Platforms rotate through the schedule. This keeps the response compact.
+    const sys=`You are a social media content strategist for Qoyod (Saudi cloud accounting SaaS, ZATCA-certified). ${ol}\n${QOYOD_VOICE}\n${refCopy}\nIMPORTANT: Each post is on ONE platform only. Distribute the ${postsPerMonth} posts across the selected platforms (rotate them — do NOT generate the same post on every platform). Captions ≤80 words each. Themes ≤5 words each.\nReturn ONLY valid JSON:\n{"month":"...","goal":"...","total_posts":${postsPerMonth},"weeks":[{"week":1,"posts":[{"day":"...","platform":"...","format":"Static/Reel/Story/Carousel","topic":"...","design_text":"...","caption":"...","hashtags":"...","cta":"...","funnel_stage":"TOF/MOF/BOF"}]}],"themes":["..."],"hashtag_sets":{"main":"...","secondary":"..."}}`;
     const extraProds=calExtras.map(v=>PRODUCTS.find(p=>p.v===v)).filter(Boolean);
     const extraCtx=extraProds.length?` | Also highlight: ${extraProds.map(p=>lang==="en"?p.v:p.ar).join(", ")}`:"";
-    const usr=`Product:${calProd} Desc:${lang==="en"?px.desc_en:px.desc_ar}${extraCtx} Month:${calMonth} Platforms:${calPlatforms.join(",")} Frequency:${calFreq} Goal:${calGoal}`;
+    const usr=`Product:${calProd} Desc:${lang==="en"?px.desc_en:px.desc_ar}${extraCtx} Month:${calMonth} Platforms:${calPlatforms.join(",")} (${calPlatforms.length} platforms — rotate posts across them) Frequency:${calFreq} (${postsPerMonth} posts total) Goal:${calGoal}`;
+    // Token budget scales with post count. Each entry ~100 tokens in Arabic + structure overhead.
+    const budget=Math.min(Math.max(2000,postsPerMonth*180+1500),8000);
     setCalLd(true);setCalErr("");setCalRes(null);
-    try{setCalRes(await callAI(sys,usr,5000));}catch(e){setCalErr(e.message);}finally{setCalLd(false);}
+    try{setCalRes(await callAI(sys,usr,budget));}catch(e){setCalErr(e.message);}finally{setCalLd(false);}
   },[lang,calProd,calExtras,calMonth,calPlatforms,calFreq,calGoal]);
 
   /* ── A/B Variants ── */
