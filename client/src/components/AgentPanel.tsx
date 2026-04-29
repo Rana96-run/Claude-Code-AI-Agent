@@ -265,6 +265,19 @@ export default function AgentPanel() {
   const [qfBrief, setQfBrief] = useState<string>("");
 
   const pollRef = useRef<number | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  /* ── Panel size (resizable) ── */
+  const [panelSize, setPanelSize] = useState({ w: 420, h: Math.min(600, window.innerHeight - 100) });
+  const resizeRef = useRef<{ active: boolean; startX: number; startY: number; startW: number; startH: number }>({
+    active: false, startX: 0, startY: 0, startW: 0, startH: 0,
+  });
+
+  function onResizeStart(e: React.MouseEvent) {
+    resizeRef.current = { active: true, startX: e.clientX, startY: e.clientY, startW: panelSize.w, startH: panelSize.h };
+    e.preventDefault();
+    e.stopPropagation();
+  }
 
   /* ── Drag logic ── */
   const dragRef = useRef<{ active: boolean; startX: number; startY: number; originX: number; originY: number }>({
@@ -278,15 +291,25 @@ export default function AgentPanel() {
 
   useEffect(() => {
     function onMouseMove(e: MouseEvent) {
+      if (resizeRef.current.active) {
+        const dx = e.clientX - resizeRef.current.startX;
+        const dy = e.clientY - resizeRef.current.startY;
+        setPanelSize({
+          w: Math.max(320, Math.min(window.innerWidth - 40, resizeRef.current.startW + dx)),
+          h: Math.max(300, Math.min(window.innerHeight - 80, resizeRef.current.startH + dy)),
+        });
+        return;
+      }
       if (!dragRef.current.active) return;
       const dx = e.clientX - dragRef.current.startX;
       const dy = e.clientY - dragRef.current.startY;
-      const newX = Math.max(0, Math.min(window.innerWidth - 440, dragRef.current.originX + dx));
+      const newX = Math.max(0, Math.min(window.innerWidth - panelSize.w, dragRef.current.originX + dx));
       const newY = Math.max(0, Math.min(window.innerHeight - 60, dragRef.current.originY + dy));
       setPos({ x: newX, y: newY });
     }
     function onMouseUp() {
       dragRef.current.active = false;
+      resizeRef.current.active = false;
     }
     document.addEventListener("mousemove", onMouseMove);
     document.addEventListener("mouseup", onMouseUp);
@@ -294,7 +317,12 @@ export default function AgentPanel() {
       document.removeEventListener("mousemove", onMouseMove);
       document.removeEventListener("mouseup", onMouseUp);
     };
-  }, []);
+  }, [panelSize.w]);
+
+  /* ── Scroll to top when switching tasks ── */
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+  }, [activeId]);
 
   /* ── Data fetching ── */
   async function refreshList() {
@@ -431,9 +459,10 @@ export default function AgentPanel() {
             position: "fixed",
             top: pos.y,
             left: pos.x,
-            width: 420,
+            width: panelSize.w,
+            height: panelSize.h,
             maxWidth: "calc(100vw - 20px)",
-            maxHeight: "calc(100vh - 70px)",
+            maxHeight: "calc(100vh - 20px)",
             background: "#071630",
             border: "1px solid rgba(1,53,90,0.6)",
             borderRadius: 12,
@@ -652,7 +681,7 @@ export default function AgentPanel() {
 
           {/* ── Task detail view ── */}
           {activeId && task && (
-            <div style={{ flex: 1, overflowY: "auto", padding: 14 }}>
+            <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: 14 }}>
               <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
                 <span
                   style={{
@@ -778,6 +807,29 @@ export default function AgentPanel() {
               ))}
             </div>
           )}
+
+          {/* ── Resize handle (bottom-right corner) ── */}
+          <div
+            onMouseDown={onResizeStart}
+            style={{
+              position: "absolute",
+              bottom: 0,
+              left: 0,
+              width: 18,
+              height: 18,
+              cursor: "sw-resize",
+              display: "flex",
+              alignItems: "flex-end",
+              justifyContent: "flex-start",
+              padding: "0 0 3px 3px",
+              opacity: 0.4,
+            }}
+            title="اسحب لتغيير الحجم"
+          >
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <path d="M1 9L9 1M5 9L9 5" stroke="#17a3a3" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+          </div>
         </div>
       )}
     </>
