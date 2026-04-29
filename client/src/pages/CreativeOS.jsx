@@ -953,6 +953,33 @@ export default function CreativeOS(){
     }catch(e){setMErr(e.message);}finally{setMLd(false);}
   },[lang,mComp,mChan,mDesc]);
 
+  const genAnalysis=useCallback(async()=>{
+    if(!mComp){setMErr(T("اختر المنافس أولاً","Select a competitor first"));return;}
+    if(!mDesc){setMErr(T("صف الإعلان أو الصق رابط","Paste a URL or describe the content"));return;}
+    const trimmed=mDesc.trim();
+    const isUrl=/^https?:\/\//i.test(trimmed);
+    setMLd(true);setMErr("");setMRes(null);
+    let realContent="";let fetchedFrom=null;
+    if(isUrl){
+      try{
+        const fr=await fetchWithTimeout("/api/fetch-url",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:trimmed})},20000);
+        const fj=await fr.json().catch(()=>({}));
+        if(fj.ok&&fj.content){realContent=fj.content;fetchedFrom=fj.host;}
+      }catch(e){console.warn("[analysis] fetch failed:",e.message);}
+    }
+    const inputCtx=realContent
+      ?`ACTUAL CONTENT (fetched from ${fetchedFrom}):\n---\n${realContent.slice(0,4000)}\n---`
+      :`Input: ${trimmed}`;
+    const sys=`You are a competitive intelligence analyst for Qoyod (Saudi cloud accounting SaaS).\n${inputCtx}\nAnalyze the competitor's content or website DEEPLY. Write in Saudi Arabic dialect.\nReturn ONLY valid JSON:\n{"_mode":"analyze","competitor":"${mComp}","platform":"${mChan}","summary":"2-sentence summary of what they're doing","hook":"their main hook or headline","angle":"fear|authority|social_proof|offer|aspiration|comparison","target_audience":"who they're targeting","strengths":["strength 1","strength 2"],"gaps":["gap Qoyod can exploit 1","gap 2"],"keywords":["key terms they use"],"funnel_stage":"TOF/MOF/BOF","qoyod_angle":"how Qoyod should position against this specifically"}`;
+    const usr=`Competitor:${mComp} Channel:${mChan} URL/Input:${trimmed}`;
+    try{
+      const r=await callAI(sys,usr,2000);
+      r._mode="analyze";
+      r._source=realContent?`fetched from ${fetchedFrom}`:isUrl?"inferred":"user input";
+      setMRes(r);
+    }catch(e){setMErr(e.message);}finally{setMLd(false);}
+  },[lang,mComp,mChan,mDesc]);
+
   /* ── Content Calendar ── */
   const genCalendar=useCallback(async()=>{
     if(!calPlatforms.length){setCalErr(T("اختر منصة واحدة على الأقل","Select at least one platform"));return;}
@@ -1422,7 +1449,7 @@ export default function CreativeOS(){
               <div style={cBody}>
                 <div style={row2}>
                   <Fld label={T("المنافس","Competitor")}><select value={mComp} onChange={e=>setMComp(e.target.value)}><option value="">{T("— اختر —","— Select —")}</option>{COMPS.map(c=><option key={c.id} value={lang==="en"?c.en:c.n}>{lang==="en"?c.en:c.n}</option>)}</select></Fld>
-                  <Fld label={T("القناة","Channel")}><select value={mChan} onChange={e=>setMChan(e.target.value)}>{["Instagram","Facebook","TikTok","Snapchat","LinkedIn","Twitter/X","Website","Pricing Page","Google Search"].map(v=><option key={v}>{v}</option>)}</select></Fld>
+                  <Fld label={T("القناة","Channel")}><select value={mChan} onChange={e=>setMChan(e.target.value)}>{["Instagram","Facebook","TikTok","Snapchat","LinkedIn","Twitter/X","Website","Google Search"].map(v=><option key={v}>{v}</option>)}</select></Fld>
                 </div>
                 {/* Quick-fill links for selected competitor */}
                 {(()=>{const comp=COMPS.find(c=>(lang==="en"?c.en:c.n)===mComp||c.en===mComp||c.n===mComp);if(!comp)return null;const chip=(label,url,icon)=>(<button key={label} onClick={()=>setMDesc(url)} style={{padding:"3px 9px",borderRadius:4,fontSize:9.5,fontWeight:600,background:"rgba(1,53,90,.5)",border:"1px solid rgba(106,150,170,.25)",color:"#8aafc4",cursor:"pointer",fontFamily:"inherit"}}>{icon} {label}</button>);return(<div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:10}}>{chip(`${comp.domain}`,`https://www.${comp.domain}`,"🌐")}{comp.pricing&&chip("Pricing",comp.pricing,"💰")}{chip("Google Search",`https://www.google.com/search?q=${encodeURIComponent((lang==="en"?comp.en:comp.n)+" "+comp.domain)}`,"🔍")}{chip("Google Ads",`https://adstransparency.google.com/?region=SA&domain=${comp.domain}`,"📢")}</div>);})()}
@@ -1436,7 +1463,10 @@ export default function CreativeOS(){
                   />
                   <p style={{fontSize:9.5,color:"#6a96aa",marginTop:4,direction:"rtl"}}>{T("يجلب المحتوى الحقيقي من الرابط تلقائياً — يعمل مع المواقع والبوستات والإعلانات","Auto-fetches real content from any URL — websites, posts, ads, pricing pages")}</p>
                 </Fld>
-                <Btn ch={T("أنشئ النسخة المضادة","Create Counter-Creative")} onClick={genCounter} dis={mLd} full/>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  <Btn ch={T("حلّل المحتوى","Analyze Content")} onClick={genAnalysis} dis={mLd} full/>
+                  <Btn ch={T("أنشئ نسخة مضادة","Counter-Creative")} onClick={genCounter} dis={mLd} full/>
+                </div>
               </div>
             </div>
             {mLd&&<Loader msg={T("يحلل...","Analyzing...")}/>}
@@ -1447,6 +1477,45 @@ export default function CreativeOS(){
                     {mRes._source.startsWith("fetched")?T("✓ تم تحليل المحتوى الحقيقي من الرابط","✓ Analyzed real content from URL"):mRes._source.startsWith("inferred")?T("⚠ الرابط محظور — التحليل مبني على افتراضات","⚠ URL blocked — analysis based on inference"):T("✓ تحليل مبني على وصفك","✓ Based on your description")}
                   </div>
                 )}
+                {/* ── Analysis-only mode ── */}
+                {mRes._mode==="analyze"&&(
+                  <div style={{...card}}>
+                    <div style={{height:3,background:"linear-gradient(90deg,#17a3a3,#f5a623)"}}/>
+                    <div style={{padding:"12px 14px"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                        <span style={{fontSize:11,fontWeight:700,color:"#17a3a3"}}>{mRes.competitor}</span>
+                        <Tag ch={mRes.platform}/>
+                        {mRes.funnel_stage&&<Tag ch={mRes.funnel_stage}/>}
+                        {mRes.angle&&<Tag ch={mRes.angle} t/>}
+                      </div>
+                      {mRes.summary&&<p style={{fontSize:11.5,color:"#ddeef4",direction:"rtl",textAlign:"right",lineHeight:1.7,marginBottom:10}}>{mRes.summary}</p>}
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+                        <div>
+                          <p style={{fontSize:9,fontWeight:700,color:"#2e5468",marginBottom:6,textTransform:"uppercase"}}>Hook / Headline</p>
+                          {mRes.hook&&<p style={{fontSize:11,color:"#f5a623",fontWeight:600,direction:"rtl",textAlign:"right",marginBottom:6}}>{mRes.hook}</p>}
+                          <p style={{fontSize:9,fontWeight:700,color:"#2e5468",marginBottom:4,textTransform:"uppercase"}}>Target Audience</p>
+                          <p style={{fontSize:10.5,color:"#bbd4e0",direction:"rtl",textAlign:"right",marginBottom:6}}>{mRes.target_audience||"—"}</p>
+                          {(mRes.keywords||[]).length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:3}}>{(mRes.keywords||[]).slice(0,6).map(k=><Tag key={k} ch={k} style={{fontSize:9}}/>)}</div>}
+                        </div>
+                        <div>
+                          <p style={{fontSize:9,fontWeight:700,color:"#5dc87a",marginBottom:4,textTransform:"uppercase"}}>Strengths</p>
+                          {(mRes.strengths||[]).map((s,i)=><p key={i} style={{fontSize:10.5,color:"#5dc87a",direction:"rtl",textAlign:"right",marginBottom:3}}>✓ {s}</p>)}
+                          <p style={{fontSize:9,fontWeight:700,color:"#f07070",marginBottom:4,marginTop:8,textTransform:"uppercase"}}>Gaps to Exploit</p>
+                          {(mRes.gaps||[]).map((g,i)=><p key={i} style={{fontSize:10.5,color:"#f07070",direction:"rtl",textAlign:"right",marginBottom:3}}>✗ {g}</p>)}
+                        </div>
+                      </div>
+                      {mRes.qoyod_angle&&<div style={{padding:"10px 12px",borderRadius:6,background:"rgba(23,163,164,.07)",border:"1px solid rgba(23,163,164,.2)",direction:"rtl",textAlign:"right"}}>
+                        <p style={{fontSize:9,fontWeight:700,color:"#17a3a3",marginBottom:4}}>QOYOD ANGLE</p>
+                        <p style={{fontSize:11,color:"#ddeef4",lineHeight:1.6}}>{mRes.qoyod_angle}</p>
+                      </div>}
+                      <div style={{marginTop:8,display:"flex",gap:6}}>
+                        <Btn ch={T("أنشئ نسخة مضادة","Turn Into Counter-Creative")} xs onClick={genCounter}/>
+                        <Btn ch={T("نسخ التحليل","Copy Analysis")} xs onClick={()=>copyText(`${mRes.competitor} | ${mRes.platform}\n\nHook: ${mRes.hook}\nAngle: ${mRes.angle}\nAudience: ${mRes.target_audience}\n\nStrengths:\n${(mRes.strengths||[]).map(s=>`• ${s}`).join("\n")}\n\nGaps:\n${(mRes.gaps||[]).map(g=>`• ${g}`).join("\n")}\n\nQoyod Angle: ${mRes.qoyod_angle}`)}/>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {/* ── Counter-creative mode ── */}
                 {(mRes.cards||[]).map((c,i)=>(
                   <div key={i} style={{...card}}>
                     <div style={cHead}><Tag ch={c.competitor} style={{fontWeight:700}}/><Tag ch={c.platform||mChan} style={{fontSize:10}}/></div>
