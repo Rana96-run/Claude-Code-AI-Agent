@@ -48,3 +48,67 @@ button {
 .qa {
   animation: qrise 0.25s ease both;
 }
+
+/* ── Global typography baseline ──────────────────────────────── */
+
+/* Consistent RTL body text: readable size, generous Arabic line-height */
+[dir="rtl"], .rtl {
+  line-height: 1.85;
+  letter-spacing: 0.01em;
+}
+
+/* AI-generated body text — structural only: pre-wrap, breathing room, RTL.
+   Does NOT force color or font-size — those stay on the element for hierarchy. */
+.ai-body {
+  white-space: pre-wrap;
+  line-height: 1.85;
+  direction: rtl;
+  text-align: right;
+  word-break: break-word;
+  margin: 0;
+}
+
+/* Section labels / field labels */
+.label {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #2e5468;
+  margin-bottom: 5px;
+}
+
+/* Scrollable AI output blocks — prevents infinite vertical expansion */
+.ai-scroll {
+  max-height: 180px;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(23,163,164,.3) transparent;
+}
+
+/* Tag pill */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 9.5px;
+  font-weight: 600;
+  background: rgba(1,53,90,.5);
+  color: #6a96aa;
+  border: 1px solid rgba(106,150,170,.2);
+}
+
+/* Result card section divider */
+.result-section + .result-section {
+  border-top: 1px solid rgba(1,53,90,.4);
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+/* Scrollbar styling for webkit */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(23,163,164,.25); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(23,163,164,.5); }

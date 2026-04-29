@@ -1291,7 +1291,7 @@ export default function CreativeOS(){
                                 <Btn ch={T("نسخ","Copy")} xs onClick={()=>copyText(r.caption||r.captions?.instagram||"")}/>
                               </div>
                               <div style={{padding:"10px 12px",background:"rgba(7,22,48,.7)",borderRadius:8}}>
-                                <p className="ai-body" style={{margin:0}}>{r.caption||r.captions?.instagram}</p>
+                                <p className="ai-body" style={{fontSize:11,color:"#ddeef4"}}>{r.caption||r.captions?.instagram}</p>
                               </div>
                             </div>
                           )}
@@ -1361,7 +1361,7 @@ export default function CreativeOS(){
                   {(campRes.ad_copies||[]).map((ad,i)=>(
                     <div key={i} style={{padding:"10px",borderRadius:7,background:"#0a1f3d",border:"1px solid rgba(1,53,90,.45)",marginBottom:7}}>
                       <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:8}}><Tag ch={ad.channel} t style={{fontSize:10.5}}/><Tag ch={ad.format} style={{fontSize:10.5}}/><Btn ch={T("نسخ","Copy")} xs style={{marginLeft:"auto"}} onClick={()=>copyText(`${ad.hook}\n\n${ad.body}\nCTA: ${ad.cta}`)}/></div>
-                      <Hook text={ad.hook}/><p className="ai-body" style={{marginBottom:7}}>{ad.body}</p>
+                      <Hook text={ad.hook}/><p className="ai-body" style={{fontSize:11.5,color:"#ddeef4",marginBottom:7}}>{ad.body}</p>
                       <div style={{display:"flex",gap:4}}><Tag ch={ad.cta} green style={{fontSize:10.5}}/><Tag ch={ad.trust} t style={{fontSize:10.5}}/></div>
                     </div>
                   ))}
@@ -1488,7 +1488,7 @@ export default function CreativeOS(){
                         {mRes.funnel_stage&&<Tag ch={mRes.funnel_stage}/>}
                         {mRes.angle&&<Tag ch={mRes.angle} t/>}
                       </div>
-                      {mRes.summary&&<p className="ai-body" style={{marginBottom:10}}>{mRes.summary}</p>}
+                      {mRes.summary&&<p className="ai-body" style={{fontSize:11.5,color:"#ddeef4",marginBottom:10}}>{mRes.summary}</p>}
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
                         <div>
                           <p className="label">Hook / Headline</p>
@@ -1506,7 +1506,7 @@ export default function CreativeOS(){
                       </div>
                       {mRes.qoyod_angle&&<div style={{padding:"10px 12px",borderRadius:6,background:"rgba(23,163,164,.07)",border:"1px solid rgba(23,163,164,.2)"}}>
                         <p className="label" style={{color:"#17a3a3"}}>QOYOD ANGLE</p>
-                        <p className="ai-body" style={{margin:0}}>{mRes.qoyod_angle}</p>
+                        <p className="ai-body" style={{fontSize:11.5,color:"#ddeef4"}}>{mRes.qoyod_angle}</p>
                       </div>}
                       <div style={{marginTop:8,display:"flex",gap:6}}>
                         <Btn ch={T("أنشئ نسخة مضادة","Turn Into Counter-Creative")} xs onClick={genCounter}/>
@@ -1775,7 +1775,7 @@ export default function CreativeOS(){
                             <Tag ch={post.funnel_stage} style={{background:post.funnel_stage==="TOF"?"rgba(96,165,250,.1)":post.funnel_stage==="MOF"?"rgba(245,158,11,.1)":"rgba(16,185,129,.1)",color:post.funnel_stage==="TOF"?"#60a5fa":post.funnel_stage==="MOF"?"#f59e0b":"#10b981"}}/>
                           </div>
                           <p style={{fontSize:12.5,fontWeight:700,color:"#ddeef4",direction:"rtl",marginBottom:4}}>{post.design_text}</p>
-                          <p className="ai-body" style={{marginBottom:6,fontSize:11}}>{post.caption}</p>
+                          <p className="ai-body" style={{fontSize:11,color:"#8aafc4",marginBottom:6}}>{post.caption}</p>
                           <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
                             <span style={{fontSize:9.5,color:"#2e5468"}}>{post.hashtags}</span>
                             <Tag ch={`CTA: ${post.cta}`} style={{fontSize:9.5,color:"#f59e0b",background:"rgba(245,158,11,.08)"}}/>
@@ -1858,7 +1858,7 @@ export default function CreativeOS(){
                       {msg.subject&&<Row label={T("الموضوع","Subject")} val={msg.subject}/>}
                       {msg.preview_text&&<Row label={T("نص المعاينة","Preview Text")} val={msg.preview_text}/>}
                       <div style={{padding:"10px 12px",background:"rgba(7,22,48,.6)",borderRadius:6}}>
-                        <p className="ai-body" style={{margin:0}}>{msg.body}</p>
+                        <p className="ai-body" style={{fontSize:12,color:"#ddeef4"}}>{msg.body}</p>
                       </div>
                       {msg.cta&&<Row label="CTA" val={msg.cta}/>}
                       {msg.goal&&<p style={{fontSize:10,color:"#5dc87a",direction:"rtl"}}>{T("الهدف: ","Goal: ")}{msg.goal}</p>}
