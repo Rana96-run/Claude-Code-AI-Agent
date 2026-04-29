@@ -785,6 +785,7 @@ export default function AgentPanel() {
 }
 
 function StepRow({ step }: { step: TaskStep }) {
+  const [expanded, setExpanded] = useState(false);
   const bg = {
     think: "#02102a", tool_use: "rgba(245,166,35,0.07)",
     tool_result: "rgba(23,163,163,0.07)", error: "rgba(240,112,112,0.08)", finish: "rgba(93,200,122,0.07)",
@@ -793,15 +794,39 @@ function StepRow({ step }: { step: TaskStep }) {
     think: "#aac5d5", tool_use: "#f5a623",
     tool_result: "#17a3a3", error: "#f07070", finish: "#5dc87a",
   }[step.kind];
+
+  /* think + finish: render markdown with expand/collapse */
+  const isNarrative = step.kind === "think" || step.kind === "finish";
+  const COLLAPSE_LIMIT = 300;
+  const msgText = step.message ?? "";
+  const isLong = isNarrative && msgText.length > COLLAPSE_LIMIT;
+  const visibleText = isNarrative
+    ? (isLong && !expanded ? msgText.slice(0, COLLAPSE_LIMIT) : msgText)
+    : msgText;
+
   return (
     <div style={{ padding: "6px 8px", background: bg, borderRadius: 5, borderRight: `2px solid ${color}`, fontSize: 10.5, lineHeight: 1.6 }}>
       <div style={{ fontSize: 9, color, fontWeight: 700, marginBottom: 2 }}>
         {step.kind}{step.tool ? ` · ${step.tool}` : ""}
       </div>
       {step.message && (
-        <div style={{ color: "#ddeef4", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-          {step.message.length > 400 ? step.message.slice(0, 400) + "…" : step.message}
-        </div>
+        isNarrative ? (
+          <div style={{ direction: "rtl", textAlign: "right" }}>
+            {renderMd(visibleText)}
+            {isLong && (
+              <button
+                onClick={() => setExpanded(e => !e)}
+                style={{ fontSize: 9.5, color: "#17a3a3", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", padding: "2px 0", marginTop: 2 }}
+              >
+                {expanded ? "▲ طيّ" : "▼ عرض المزيد"}
+              </button>
+            )}
+          </div>
+        ) : (
+          <div style={{ color: "#ddeef4", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+            {msgText.length > 400 ? msgText.slice(0, 400) + "…" : msgText}
+          </div>
+        )
       )}
       {step.input !== undefined && (
         <div style={{ color: "#6a96aa", fontSize: 9.5, marginTop: 2 }}>
