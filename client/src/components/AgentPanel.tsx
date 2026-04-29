@@ -117,17 +117,17 @@ function renderMd(text: string): React.ReactNode[] {
     }
     // H1
     if (line.startsWith("# ")) {
-      nodes.push(<p key={key++} style={{ fontSize: 14, fontWeight: 700, color: "#17a3a3", margin: "10px 0 4px" }}>{inlineMd(line.slice(2))}</p>);
+      nodes.push(<p key={key++} style={{ fontWeight: 700, color: "#17a3a3", margin: "10px 0 4px", fontSize: "1.15em" }}>{inlineMd(line.slice(2))}</p>);
       i++; continue;
     }
     // H2
     if (line.startsWith("## ")) {
-      nodes.push(<p key={key++} style={{ fontSize: 13, fontWeight: 700, color: "#ddeef4", margin: "8px 0 3px" }}>{inlineMd(line.slice(3))}</p>);
+      nodes.push(<p key={key++} style={{ fontWeight: 700, color: "#ddeef4", margin: "8px 0 3px", fontSize: "1.05em" }}>{inlineMd(line.slice(3))}</p>);
       i++; continue;
     }
     // H3
     if (line.startsWith("### ")) {
-      nodes.push(<p key={key++} style={{ fontSize: 12, fontWeight: 700, color: "#8aafc4", margin: "6px 0 2px" }}>{inlineMd(line.slice(4))}</p>);
+      nodes.push(<p key={key++} style={{ fontWeight: 700, color: "#8aafc4", margin: "6px 0 2px" }}>{inlineMd(line.slice(4))}</p>);
       i++; continue;
     }
     // Bullet list — collect consecutive items
@@ -140,7 +140,7 @@ function renderMd(text: string): React.ReactNode[] {
       nodes.push(
         <ul key={key++} style={{ margin: "4px 0 4px 0", paddingRight: 18, listStyle: "none" }}>
           {items.map((it, j) => (
-            <li key={j} style={{ fontSize: 13, color: "#bbd4e0", lineHeight: 1.7, marginBottom: 2, display: "flex", gap: 6 }}>
+            <li key={j} style={{ lineHeight: 1.75, marginBottom: 3, display: "flex", gap: 6 }}>
               <span style={{ color: "#17a3a3", flexShrink: 0 }}>·</span>
               <span>{inlineMd(it)}</span>
             </li>
@@ -159,7 +159,7 @@ function renderMd(text: string): React.ReactNode[] {
       nodes.push(
         <ol key={key++} style={{ margin: "4px 0 4px 0", paddingRight: 18, listStyle: "none", counterReset: "li" }}>
           {items.map((it, j) => (
-            <li key={j} style={{ fontSize: 13, color: "#bbd4e0", lineHeight: 1.7, marginBottom: 2, display: "flex", gap: 6 }}>
+            <li key={j} style={{ lineHeight: 1.75, marginBottom: 3, display: "flex", gap: 6 }}>
               <span style={{ color: "#17a3a3", flexShrink: 0, minWidth: 16 }}>{j + 1}.</span>
               <span>{inlineMd(it)}</span>
             </li>
@@ -170,11 +170,11 @@ function renderMd(text: string): React.ReactNode[] {
     }
     // Empty line → spacer
     if (line.trim() === "") {
-      nodes.push(<div key={key++} style={{ height: 6 }} />);
+      nodes.push(<div key={key++} style={{ height: 5 }} />);
       i++; continue;
     }
     // Normal paragraph
-    nodes.push(<p key={key++} style={{ fontSize: 13, color: "#ddeef4", lineHeight: 1.75, margin: "2px 0" }}>{inlineMd(line)}</p>);
+    nodes.push(<p key={key++} style={{ lineHeight: 1.75, margin: "2px 0" }}>{inlineMd(line)}</p>);
     i++;
   }
   return nodes;
@@ -709,15 +709,11 @@ export default function AgentPanel() {
                 </div>
               )}
 
-              <div style={{ fontSize: 11, color: "#2e5468", marginBottom: 6, fontWeight: 700 }}>خطوات التنفيذ</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
-                {task.steps.filter(s => s.kind !== "think").map((s, i) => <StepRow key={i} step={s} />)}
-                {task.status !== "done" && task.status !== "error" && (
-                  <div style={{ fontSize: 12, color: "#f5a623", padding: "4px 0" }}>
-                    <Spinner /> سمعه تعمل على المهمة...
-                  </div>
-                )}
-              </div>
+              {task.status !== "done" && task.status !== "error" && (
+                <div style={{ fontSize: 13, color: "#f5a623", padding: "6px 0 10px" }}>
+                  <Spinner /> سمعه تعمل على المهمة...
+                </div>
+              )}
 
               {Object.keys(task.outputs).length > 0 && (
                 <div style={{ marginTop: 10 }}>
@@ -736,6 +732,7 @@ export default function AgentPanel() {
                       padding: "12px 14px", background: "rgba(23,163,163,0.07)",
                       borderRadius: 7, border: "1px solid rgba(23,163,163,0.25)",
                       direction: "rtl", textAlign: "right",
+                      fontSize: 14, color: "#ddeef4", lineHeight: 1.8,
                     }}>
                       {renderMd(pageText)}
                     </div>
