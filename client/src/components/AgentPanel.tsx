@@ -236,9 +236,10 @@ type Persona = {
   tools: string[];
 };
 
-/* Default position: top-right corner */
+/* Default position: top-right corner. Width is the same default as panelSize. */
+const DEFAULT_PANEL_W = 420;
 const DEFAULT_POS = () => ({
-  x: window.innerWidth - 440,
+  x: Math.max(20, window.innerWidth - DEFAULT_PANEL_W - 20),
   y: 52,
 });
 
@@ -267,7 +268,7 @@ export default function AgentPanel() {
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   /* ── Panel size (resizable) ── */
-  const [panelSize, setPanelSize] = useState({ w: 420, h: Math.min(600, window.innerHeight - 100) });
+  const [panelSize, setPanelSize] = useState({ w: DEFAULT_PANEL_W, h: Math.min(600, window.innerHeight - 100) });
   const resizeRef = useRef<{ active: boolean; startX: number; startY: number; startW: number; startH: number }>({
     active: false, startX: 0, startY: 0, startW: 0, startH: 0,
   });
@@ -322,6 +323,28 @@ export default function AgentPanel() {
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
   }, [activeId]);
+
+  /* ── Re-anchor panel to top-right whenever opened, so it can't be lost ── */
+  useEffect(() => {
+    if (!open) return;
+    setPos({
+      x: Math.max(20, window.innerWidth - panelSize.w - 20),
+      y: 52,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  /* ── Window resize: keep panel in-bounds ── */
+  useEffect(() => {
+    function onWinResize() {
+      setPos((p) => ({
+        x: Math.max(0, Math.min(window.innerWidth - panelSize.w, p.x)),
+        y: Math.max(0, Math.min(window.innerHeight - 60, p.y)),
+      }));
+    }
+    window.addEventListener("resize", onWinResize);
+    return () => window.removeEventListener("resize", onWinResize);
+  }, [panelSize.w]);
 
   /* ── Data fetching ── */
   async function refreshList() {
@@ -540,7 +563,7 @@ export default function AgentPanel() {
                       color: composerTab === tab ? "#17a3a3" : "#6a96aa",
                     }}
                   >
-                    {tab === "quick" ? "🚀 منشئ سريع" : "✏️ أمر حر"}
+                    {tab === "quick" ? "منشئ سريع" : "أمر حر"}
                   </button>
                 ))}
               </div>
