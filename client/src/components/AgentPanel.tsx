@@ -101,6 +101,125 @@ const QUICK_ACTIONS: { label: string; title: string; body: string }[] = [
   },
 ];
 
+/* ── Lightweight markdown → JSX renderer ─────────────────────────────────
+   Handles: **bold**, # headings, - bullet lists, --- dividers, newlines   */
+function renderMd(text: string): React.ReactNode[] {
+  const nodes: React.ReactNode[] = [];
+  const lines = text.split("\n");
+  let key = 0;
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    // Divider
+    if (/^---+$/.test(line.trim())) {
+      nodes.push(<hr key={key++} style={{ border: "none", borderTop: "1px solid rgba(1,53,90,.4)", margin: "10px 0" }} />);
+      i++; continue;
+    }
+    // H1
+    if (line.startsWith("# ")) {
+      nodes.push(<p key={key++} style={{ fontSize: 14, fontWeight: 700, color: "#17a3a3", margin: "10px 0 4px" }}>{inlineMd(line.slice(2))}</p>);
+      i++; continue;
+    }
+    // H2
+    if (line.startsWith("## ")) {
+      nodes.push(<p key={key++} style={{ fontSize: 13, fontWeight: 700, color: "#ddeef4", margin: "8px 0 3px" }}>{inlineMd(line.slice(3))}</p>);
+      i++; continue;
+    }
+    // H3
+    if (line.startsWith("### ")) {
+      nodes.push(<p key={key++} style={{ fontSize: 12, fontWeight: 700, color: "#8aafc4", margin: "6px 0 2px" }}>{inlineMd(line.slice(4))}</p>);
+      i++; continue;
+    }
+    // Bullet list — collect consecutive items
+    if (/^[-*] /.test(line)) {
+      const items: string[] = [];
+      while (i < lines.length && /^[-*] /.test(lines[i])) {
+        items.push(lines[i].slice(2));
+        i++;
+      }
+      nodes.push(
+        <ul key={key++} style={{ margin: "4px 0 4px 0", paddingRight: 18, listStyle: "none" }}>
+          {items.map((it, j) => (
+            <li key={j} style={{ fontSize: 13, color: "#bbd4e0", lineHeight: 1.7, marginBottom: 2, display: "flex", gap: 6 }}>
+              <span style={{ color: "#17a3a3", flexShrink: 0 }}>·</span>
+              <span>{inlineMd(it)}</span>
+            </li>
+          ))}
+        </ul>
+      );
+      continue;
+    }
+    // Numbered list
+    if (/^\d+\. /.test(line)) {
+      const items: string[] = [];
+      while (i < lines.length && /^\d+\. /.test(lines[i])) {
+        items.push(lines[i].replace(/^\d+\. /, ""));
+        i++;
+      }
+      nodes.push(
+        <ol key={key++} style={{ margin: "4px 0 4px 0", paddingRight: 18, listStyle: "none", counterReset: "li" }}>
+          {items.map((it, j) => (
+            <li key={j} style={{ fontSize: 13, color: "#bbd4e0", lineHeight: 1.7, marginBottom: 2, display: "flex", gap: 6 }}>
+              <span style={{ color: "#17a3a3", flexShrink: 0, minWidth: 16 }}>{j + 1}.</span>
+              <span>{inlineMd(it)}</span>
+            </li>
+          ))}
+        </ol>
+      );
+      continue;
+    }
+    // Empty line → spacer
+    if (line.trim() === "") {
+      nodes.push(<div key={key++} style={{ height: 6 }} />);
+      i++; continue;
+    }
+    // Normal paragraph
+    nodes.push(<p key={key++} style={{ fontSize: 13, color: "#ddeef4", lineHeight: 1.75, margin: "2px 0" }}>{inlineMd(line)}</p>);
+    i++;
+  }
+  return nodes;
+}
+
+/* Inline markdown: **bold**, *italic*, `code` */
+function inlineMd(text: string): React.ReactNode {
+  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g);
+  return parts.map((p, i) => {
+    if (p.startsWith("**") && p.endsWith("**")) return <strong key={i} style={{ color: "#fff", fontWeight: 700 }}>{p.slice(2, -2)}</strong>;
+    if (p.startsWith("*") && p.endsWith("*")) return <em key={i} style={{ color: "#17a3a3", fontStyle: "normal" }}>{p.slice(1, -1)}</em>;
+    if (p.startsWith("`") && p.endsWith("`")) return <code key={i} style={{ background: "rgba(23,163,164,.15)", color: "#17a3a3", borderRadius: 3, padding: "0 4px", fontSize: 11 }}>{p.slice(1, -1)}</code>;
+    return p;
+  });
+}
+
+/* Split long summary into pages by --- dividers or every ~600 chars */
+function paginateSummary(text: string, pageSize = 600): string[] {
+  // First try splitting by --- section dividers
+  const sections = text.split(/\n---+\n/);
+  if (sections.length > 2) {
+    // Group sections into pages of ~2 sections each
+    const pages: string[] = [];
+    for (let i = 0; i < sections.length; i += 2) {
+      pages.push(sections.slice(i, i + 2).join("\n---\n"));
+    }
+    return pages;
+  }
+  // Fallback: split by paragraph breaks every ~600 chars
+  if (text.length <= pageSize) return [text];
+  const pages: string[] = [];
+  let start = 0;
+  while (start < text.length) {
+    let end = start + pageSize;
+    if (end < text.length) {
+      // Find nearest paragraph break
+      const breakAt = text.lastIndexOf("\n\n", end);
+      if (breakAt > start + 200) end = breakAt;
+    }
+    pages.push(text.slice(start, Math.min(end, text.length)));
+    start = end;
+  }
+  return pages;
+}
+
 const statusColor: Record<Task["status"], string> = {
   queued: "#6a96aa",
   thinking: "#f5a623",
@@ -136,6 +255,7 @@ export default function AgentPanel() {
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [persona, setPersona] = useState<string>("");
   const [composerTab, setComposerTab] = useState<"quick" | "free">("quick");
+  const [summaryPage, setSummaryPage] = useState(0);
   /* Quick-form state */
   const [qfProduct, setQfProduct] = useState<string>(PRODUCTS[0]);
   const [qfChannel, setQfChannel] = useState<string>(CHANNELS[0]);
@@ -239,6 +359,7 @@ export default function AgentPanel() {
       const d = await r.json();
       if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
       setActiveId(d.task_id);
+      setSummaryPage(0);
       setPrompt("");
       setTitle("");
       refreshList();
@@ -576,15 +697,37 @@ export default function AgentPanel() {
                 </div>
               )}
 
-              {task.summary && (
-                <div style={{
-                  marginTop: 10, padding: 10, background: "rgba(23,163,163,0.08)",
-                  borderRadius: 7, border: "1px solid rgba(23,163,163,0.3)",
-                  fontSize: 12, lineHeight: 1.7, color: "#ddeef4", whiteSpace: "pre-wrap",
-                }}>
-                  {task.summary}
-                </div>
-              )}
+              {task.summary && (()=>{
+                const pages = paginateSummary(task.summary);
+                const pg = Math.min(summaryPage, pages.length - 1);
+                const pageText = pages[pg] || "";
+                return (
+                  <div style={{ marginTop: 10 }}>
+                    <div style={{
+                      padding: "12px 14px", background: "rgba(23,163,163,0.07)",
+                      borderRadius: 7, border: "1px solid rgba(23,163,163,0.25)",
+                      direction: "rtl", textAlign: "right",
+                    }}>
+                      {renderMd(pageText)}
+                    </div>
+                    {pages.length > 1 && (
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8, padding: "4px 2px" }}>
+                        <button
+                          onClick={() => setSummaryPage(p => Math.max(0, p - 1))}
+                          disabled={pg === 0}
+                          style={{ padding: "4px 12px", borderRadius: 4, border: "1px solid rgba(23,163,164,.3)", background: pg===0?"rgba(1,53,90,.2)":"rgba(23,163,164,.1)", color: pg===0?"#2e5468":"#17a3a3", fontSize: 11, cursor: pg===0?"default":"pointer", fontFamily: "inherit" }}
+                        >→ السابق</button>
+                        <span style={{ fontSize: 11, color: "#6a96aa" }}>{pg + 1} / {pages.length}</span>
+                        <button
+                          onClick={() => setSummaryPage(p => Math.min(pages.length - 1, p + 1))}
+                          disabled={pg === pages.length - 1}
+                          style={{ padding: "4px 12px", borderRadius: 4, border: "1px solid rgba(23,163,164,.3)", background: pg===pages.length-1?"rgba(1,53,90,.2)":"rgba(23,163,164,.1)", color: pg===pages.length-1?"#2e5468":"#17a3a3", fontSize: 11, cursor: pg===pages.length-1?"default":"pointer", fontFamily: "inherit" }}
+                        >التالي ←</button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {task.error && (
                 <div style={{
