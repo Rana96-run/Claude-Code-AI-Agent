@@ -905,13 +905,15 @@ export default function CreativeOS(){
     const ol=lang==="en"?"English":"Saudi Arabic dialect";
     const trimmed=mDesc.trim();
     const isUrl=/^https?:\/\//i.test(trimmed);
+    const isLinkedIn=mChan==="LinkedIn";
     setMLd(true);setMErr("");setMRes(null);
 
     // If input looks like a URL, try to fetch the actual page content first
+    // Skip entirely for LinkedIn — always hits login wall
     let realContent="";
     let fetchedFrom=null;
     let blockedNote="";
-    if(isUrl){
+    if(isUrl&&!isLinkedIn){
       try{
         const fr=await fetchWithTimeout("/api/fetch-url",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:trimmed})},20000);
         const fj=await fr.json().catch(()=>({}));
@@ -921,17 +923,16 @@ export default function CreativeOS(){
         }else if(fj.blocked){
           blockedNote=fj.message||`${fj.platform||"Site"} blocks bots — paste the caption directly.`;
           setMErr(T(`⚠ ${blockedNote} — لكن سنحاول التحليل بناءً على ${mComp} و${mChan}.`,`⚠ ${blockedNote} — analyzing inferred angle for ${mComp} on ${mChan}.`));
-          // Don't return — continue with inferred analysis
         }
       }catch(e){
-        // Fetcher failed — fall through to inferred analysis
-        // eslint-disable-next-line no-console
         console.warn("[market] URL fetch failed, falling back to inferred analysis:",e.message);
       }
     }
 
     const inputCtx=realContent
       ?`ACTUAL AD CONTENT (fetched from ${fetchedFrom}):\n---\n${realContent}\n---\nAnalyze the REAL ad above. Quote the actual hook/message in your analysis.`
+      :isLinkedIn&&!isUrl
+      ?`LINKEDIN POST (pasted by analyst):\n---\n${trimmed}\n---\nAnalyze this real LinkedIn post. Quote the actual text in your analysis.`
       :isUrl
       ?`The user provided a URL only (${trimmed}) but it could not be fetched (login wall or blocked). Infer the most likely angle based on what ${mComp} typically posts on ${mChan}. Mark "(inferred)" in why_works.`
       :`The user described the ad in their own words.`;
@@ -944,8 +945,8 @@ export default function CreativeOS(){
         const matched=r.cards.filter(c=>(c.competitor||"").toLowerCase().includes(mComp.toLowerCase()));
         r.cards=matched.length?matched:r.cards.slice(0,1);
       }
-      // Tag the result so UI can show the fetch source
       if(realContent)r._source=`fetched from ${fetchedFrom}`;
+      else if(isLinkedIn&&!isUrl)r._source="LinkedIn post (pasted)";
       else if(isUrl)r._source="inferred (URL not fetchable)";
       else r._source="user description";
       setMRes(r);
@@ -958,9 +959,11 @@ export default function CreativeOS(){
     if(!mDesc){setMErr(T("صف الإعلان أو الصق رابط","Paste a URL or describe the content"));return;}
     const trimmed=mDesc.trim();
     const isUrl=/^https?:\/\//i.test(trimmed);
+    const isLinkedIn=mChan==="LinkedIn";
     setMLd(true);setMErr("");setMRes(null);
     let realContent="";let fetchedFrom=null;
-    if(isUrl){
+    // Skip URL fetch for LinkedIn — always hits login wall
+    if(isUrl&&!isLinkedIn){
       try{
         const fr=await fetchWithTimeout("/api/fetch-url",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:trimmed})},20000);
         const fj=await fr.json().catch(()=>({}));
@@ -969,13 +972,15 @@ export default function CreativeOS(){
     }
     const inputCtx=realContent
       ?`ACTUAL CONTENT (fetched from ${fetchedFrom}):\n---\n${realContent.slice(0,4000)}\n---`
+      :isLinkedIn&&!isUrl
+      ?`LINKEDIN POST TEXT (pasted by analyst):\n---\n${trimmed}\n---\nAnalyze this real LinkedIn post content.`
       :`Input: ${trimmed}`;
     const sys=`You are a competitive intelligence analyst for Qoyod (Saudi cloud accounting SaaS).\n${inputCtx}\nAnalyze the competitor's content or website DEEPLY. Write in Saudi Arabic dialect.\nReturn ONLY valid JSON:\n{"_mode":"analyze","competitor":"${mComp}","platform":"${mChan}","summary":"2-sentence summary of what they're doing","hook":"their main hook or headline","angle":"fear|authority|social_proof|offer|aspiration|comparison","target_audience":"who they're targeting","strengths":["strength 1","strength 2"],"gaps":["gap Qoyod can exploit 1","gap 2"],"keywords":["key terms they use"],"funnel_stage":"TOF/MOF/BOF","qoyod_angle":"how Qoyod should position against this specifically"}`;
     const usr=`Competitor:${mComp} Channel:${mChan} URL/Input:${trimmed}`;
     try{
       const r=await callAI(sys,usr,2000);
       r._mode="analyze";
-      r._source=realContent?`fetched from ${fetchedFrom}`:isUrl?"inferred":"user input";
+      r._source=realContent?`fetched from ${fetchedFrom}`:isLinkedIn?"LinkedIn post (pasted)":isUrl?"inferred":"user input";
       setMRes(r);
     }catch(e){setMErr(e.message);}finally{setMLd(false);}
   },[lang,mComp,mChan,mDesc]);
@@ -1456,13 +1461,18 @@ export default function CreativeOS(){
                 {(()=>{const comp=COMPS.find(c=>(lang==="en"?c.en:c.n)===mComp||c.en===mComp||c.n===mComp);if(!comp)return null;const chip=(label,url,icon)=>(<button key={label} onClick={()=>setMDesc(url)} style={{padding:"3px 9px",borderRadius:4,fontSize:9.5,fontWeight:600,background:"rgba(1,53,90,.5)",border:"1px solid rgba(106,150,170,.25)",color:"#8aafc4",cursor:"pointer",fontFamily:"inherit"}}>{icon} {label}</button>);return(<div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:10}}>{chip(`${comp.domain}`,`https://www.${comp.domain}`,"🌐")}{comp.pricing&&chip("Pricing",comp.pricing,"💰")}{chip("Google Search",`https://www.google.com/search?q=${encodeURIComponent((lang==="en"?comp.en:comp.n)+" "+comp.domain)}`,"🔍")}{chip("Google Ads",`https://adstransparency.google.com/?region=SA&domain=${comp.domain}`,"📢")}</div>);})()}
                 <Fld label={T("رابط البوست / الإعلان أو وصفه","Post / Ad URL or Description")}>
                   <textarea value={mDesc} onChange={e=>setMDesc(e.target.value)} rows={3}
-                    placeholder={T(
-                      "الصق أي رابط — موقع المنافس · صفحة الأسعار · بوست IG/FB · إعلان · نتائج Google — أو اكتب وصفاً يدوياً",
-                      "Paste any URL — competitor website · pricing page · IG/FB post · ad · Google search results — or describe manually"
-                    )}
+                    placeholder={mChan==="LinkedIn"
+                      ? T("الصق نص البوست من LinkedIn هنا مباشرةً — افتح الصفحة بزر 🔗 LinkedIn أعلاه، انسخ نص البوست، والصقه هنا","Open LinkedIn via 🔗 above → copy the post text → paste it here")
+                      : T("الصق أي رابط — موقع المنافس · صفحة الأسعار · بوست IG/FB · إعلان · نتائج Google — أو اكتب وصفاً يدوياً","Paste any URL — competitor website · pricing page · IG/FB post · ad · Google results — or describe manually")
+                    }
                     dir="rtl" style={{textAlign:"right"}}
                   />
-                  <p style={{fontSize:9.5,color:"#6a96aa",marginTop:4,direction:"rtl"}}>{T("يجلب المحتوى الحقيقي من الرابط تلقائياً — يعمل مع المواقع والبوستات والإعلانات","Auto-fetches real content from any URL — websites, posts, ads, pricing pages")}</p>
+                  <p style={{fontSize:9.5,color:mChan==="LinkedIn"?"#f5a623":"#6a96aa",marginTop:4,direction:"rtl"}}>
+                    {mChan==="LinkedIn"
+                      ? T("⚠ LinkedIn يحجب الروابط — الصق نص البوست مباشرةً للتحليل","⚠ LinkedIn blocks URL fetching — paste post text directly to analyze")
+                      : T("يجلب المحتوى الحقيقي من الرابط تلقائياً — يعمل مع المواقع والبوستات والإعلانات","Auto-fetches real content from any URL — websites, posts, ads, pricing pages")
+                    }
+                  </p>
                 </Fld>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                   <Btn ch={T("حلّل المحتوى","Analyze Content")} onClick={genAnalysis} dis={mLd} full/>
