@@ -563,7 +563,7 @@ export default function AgentPanel() {
                       color: composerTab === tab ? "#17a3a3" : "#6a96aa",
                     }}
                   >
-                    {tab === "quick" ? "منشئ سريع" : "أمر حر"}
+                    {tab === "quick" ? "نموذج" : "محادثة"}
                   </button>
                 ))}
               </div>
