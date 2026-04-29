@@ -261,7 +261,6 @@ export default function AgentPanel() {
   const [qfChannel, setQfChannel] = useState<string>(CHANNELS[0]);
   const [qfFormat, setQfFormat] = useState<string>("post");
   const [qfSize, setQfSize] = useState<string>("1:1");
-  const [qfScheme, setQfScheme] = useState<string>("auto");
   const [qfBrief, setQfBrief] = useState<string>("");
 
   const pollRef = useRef<number | null>(null);
@@ -399,13 +398,12 @@ export default function AgentPanel() {
   }
 
   async function runQuickForm() {
-    const isDesign = qfFormat === "ad";
-    const schemeNote = isDesign && qfScheme !== "auto" ? ` استخدم color_scheme="${qfScheme}".` : isDesign ? " استخدم color_scheme=auto." : "";
-    const body = isDesign
-      ? `اعمل تصميم إعلان ${qfSize} لمنتج ${qfProduct} على ${qfChannel}.${qfBrief ? ` ملاحظات: ${qfBrief}.` : ""} أنتج حجم ${qfSize} فقط.${schemeNote}`
+    const isAd = qfFormat === "ad";
+    const body = isAd
+      ? `اكتب نسخة إعلان مدفوع بحجم ${qfSize} لمنتج ${qfProduct} على ${qfChannel}.${qfBrief ? ` تفاصيل: ${qfBrief}.` : ""}`
       : `اكتب ${FORMATS[qfFormat] ?? qfFormat} لمنتج ${qfProduct} على ${qfChannel} فقط — لا تكتب لقنوات أخرى.${qfBrief ? ` تفاصيل: ${qfBrief}.` : ""}`;
-    const t = isDesign
-      ? `تصميم إعلان ${qfSize} — ${qfProduct} على ${qfChannel}`
+    const t = isAd
+      ? `إعلان مدفوع ${qfSize} — ${qfProduct} على ${qfChannel}`
       : `${FORMATS[qfFormat]} — ${qfProduct} على ${qfChannel}`;
     setSending(true);
     setErr("");
@@ -573,51 +571,17 @@ export default function AgentPanel() {
                   </div>
 
                   {qfFormat === "ad" && (
-                    <>
-                      {/* Size picker */}
-                      <div style={{ display: "flex", gap: 5, marginBottom: 6 }}>
-                        {AD_SIZES.map((s) => (
-                          <button key={s} onClick={() => setQfSize(s)} style={{
-                            flex: 1, padding: "4px 0", fontSize: 11, borderRadius: 6, cursor: "pointer",
-                            fontFamily: "inherit", fontWeight: qfSize === s ? 700 : 400,
-                            background: qfSize === s ? "rgba(245,166,35,0.18)" : "transparent",
-                            border: `1px solid ${qfSize === s ? "rgba(245,166,35,0.5)" : "rgba(1,53,90,0.5)"}`,
-                            color: qfSize === s ? "#f5a623" : "#6a96aa",
-                          }}>{s}</button>
-                        ))}
-                      </div>
-                      {/* Color scheme picker */}
-                      <div style={{ marginBottom: 8 }}>
-                        <div style={{ fontSize: 9.5, color: "#2e5468", marginBottom: 4, fontWeight: 700 }}>اللون</div>
-                        <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-                          {[
-                            { id: "auto",     label: "تلقائي", bg: "linear-gradient(135deg,#021544,#17A3A4,#01355A,#F4FBFB)", border: "#17A3A4" },
-                            { id: "navy",     label: "نيفي",   bg: "#021544",  border: "#17A3A4" },
-                            { id: "teal",     label: "تيل",    bg: "#17A3A4",  border: "#021544" },
-                            { id: "ocean",    label: "أوشن",   bg: "#01355A",  border: "#17A3A4" },
-                            { id: "light",    label: "فاتح",   bg: "#F4FBFB",  border: "#17A3A4" },
-                            { id: "midnight", label: "ليلي",   bg: "#050E24",  border: "#17A3A4" },
-                            { id: "slate",    label: "سليت",   bg: "#1A2B4A",  border: "#17A3A4" },
-                          ].map((sc) => (
-                            <button key={sc.id} onClick={() => setQfScheme(sc.id)} title={sc.label} style={{
-                              display: "flex", alignItems: "center", gap: 4,
-                              padding: "3px 7px", borderRadius: 8, cursor: "pointer",
-                              border: `2px solid ${qfScheme === sc.id ? sc.border : "rgba(1,53,90,0.4)"}`,
-                              background: "transparent", fontFamily: "inherit",
-                              outline: qfScheme === sc.id ? `1px solid ${sc.border}` : "none",
-                            }}>
-                              <span style={{
-                                display: "inline-block", width: 14, height: 14, borderRadius: 3,
-                                background: sc.bg, border: "1px solid rgba(255,255,255,0.15)", flexShrink: 0,
-                              }} />
-                              <span style={{ fontSize: 9.5, color: qfScheme === sc.id ? "#ddeef4" : "#6a96aa", fontWeight: qfScheme === sc.id ? 700 : 400 }}>
-                                {sc.label}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </>
+                    <div style={{ display: "flex", gap: 5, marginBottom: 6 }}>
+                      {AD_SIZES.map((s) => (
+                        <button key={s} onClick={() => setQfSize(s)} style={{
+                          flex: 1, padding: "4px 0", fontSize: 11, borderRadius: 6, cursor: "pointer",
+                          fontFamily: "inherit", fontWeight: qfSize === s ? 700 : 400,
+                          background: qfSize === s ? "rgba(245,166,35,0.18)" : "transparent",
+                          border: `1px solid ${qfSize === s ? "rgba(245,166,35,0.5)" : "rgba(1,53,90,0.5)"}`,
+                          color: qfSize === s ? "#f5a623" : "#6a96aa",
+                        }}>{s}</button>
+                      ))}
+                    </div>
                   )}
 
                   <input
