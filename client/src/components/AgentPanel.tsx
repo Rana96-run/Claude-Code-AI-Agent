@@ -448,7 +448,7 @@ export default function AgentPanel() {
         }}
         title="Soma'a Agent — Your Content Maestro"
       >
-        {open ? "× Close" : "✦ Soma'a Agent · Your Content Maestro"}
+        {open ? "× Close" : "Soma'a Agent · Your Content Maestro"}
       </button>
 
       {open && (
@@ -489,8 +489,7 @@ export default function AgentPanel() {
           >
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ fontSize: 14 }}>🤖</span>
-                <span style={{ fontSize: 14, fontWeight: 700, color: "#17a3a3" }}>سمعه</span>
+                <span style={{ fontSize: 16, fontWeight: 700, color: "#17a3a3" }}>سمعه</span>
                 <span style={{
                   fontSize: 9,
                   padding: "1px 6px",
@@ -638,7 +637,7 @@ export default function AgentPanel() {
                   cursor: sending ? "default" : "pointer", fontFamily: "inherit",
                 }}
               >
-                {sending ? "جارٍ التشغيل..." : "شغّل سمعه ▶"}
+                {sending ? "جارٍ التشغيل..." : "شغّل سمعه"}
               </button>
             </div>
           )}
@@ -647,26 +646,26 @@ export default function AgentPanel() {
           {activeId && task && (
             <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: 14 }}>
               {task.trigger.title && (
-                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>{task.trigger.title}</div>
+                <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8, color: "#ddeef4" }}>{task.trigger.title}</div>
               )}
               {task.trigger.body && (
                 <div style={{
-                  fontSize: 11, color: "#aac5d5", lineHeight: 1.6, marginBottom: 10,
-                  padding: 8, background: "#02102a", borderRadius: 6, border: "1px solid rgba(1,53,90,0.4)",
+                  fontSize: 13, color: "#aac5d5", lineHeight: 1.7, marginBottom: 12,
+                  padding: 10, background: "#02102a", borderRadius: 6, border: "1px solid rgba(1,53,90,0.4)",
                 }}>
                   {task.trigger.body}
                 </div>
               )}
 
               {task.status !== "done" && task.status !== "error" && (
-                <div style={{ fontSize: 13, color: "#f5a623", padding: "6px 0 10px" }}>
+                <div style={{ fontSize: 14, color: "#f5a623", padding: "6px 0 10px" }}>
                   <Spinner /> سمعه يعمل على المهمة...
                 </div>
               )}
 
               {Object.keys(task.outputs).length > 0 && (
                 <div style={{ marginTop: 10 }}>
-                  <div style={{ fontSize: 11, color: "#2e5468", marginBottom: 6, fontWeight: 700 }}>المخرجات</div>
+                  <div style={{ fontSize: 12, color: "#2e5468", marginBottom: 6, fontWeight: 700 }}>المخرجات</div>
                   <OutputsBlock outputs={task.outputs} />
                 </div>
               )}
@@ -678,10 +677,10 @@ export default function AgentPanel() {
                 return (
                   <div style={{ marginTop: 10 }}>
                     <div style={{
-                      padding: "12px 14px", background: "rgba(23,163,163,0.07)",
+                      padding: "14px 16px", background: "rgba(23,163,163,0.07)",
                       borderRadius: 7, border: "1px solid rgba(23,163,163,0.25)",
                       direction: "rtl", textAlign: "right",
-                      fontSize: 14, color: "#ddeef4", lineHeight: 1.8,
+                      fontSize: 16, color: "#ddeef4", lineHeight: 1.85,
                     }}>
                       {renderMd(pageText)}
                     </div>
@@ -690,14 +689,14 @@ export default function AgentPanel() {
                         <button
                           onClick={() => setSummaryPage(p => Math.max(0, p - 1))}
                           disabled={pg === 0}
-                          style={{ padding: "4px 12px", borderRadius: 4, border: "1px solid rgba(23,163,164,.3)", background: pg===0?"rgba(1,53,90,.2)":"rgba(23,163,164,.1)", color: pg===0?"#2e5468":"#17a3a3", fontSize: 11, cursor: pg===0?"default":"pointer", fontFamily: "inherit" }}
-                        >→ السابق</button>
-                        <span style={{ fontSize: 11, color: "#6a96aa" }}>{pg + 1} / {pages.length}</span>
+                          style={{ padding: "6px 14px", borderRadius: 5, border: "1px solid rgba(23,163,164,.3)", background: pg===0?"rgba(1,53,90,.2)":"rgba(23,163,164,.1)", color: pg===0?"#2e5468":"#17a3a3", fontSize: 13, cursor: pg===0?"default":"pointer", fontFamily: "inherit" }}
+                        >السابق</button>
+                        <span style={{ fontSize: 13, color: "#6a96aa", fontWeight: 600 }}>{pg + 1} / {pages.length}</span>
                         <button
                           onClick={() => setSummaryPage(p => Math.min(pages.length - 1, p + 1))}
                           disabled={pg === pages.length - 1}
-                          style={{ padding: "4px 12px", borderRadius: 4, border: "1px solid rgba(23,163,164,.3)", background: pg===pages.length-1?"rgba(1,53,90,.2)":"rgba(23,163,164,.1)", color: pg===pages.length-1?"#2e5468":"#17a3a3", fontSize: 11, cursor: pg===pages.length-1?"default":"pointer", fontFamily: "inherit" }}
-                        >التالي ←</button>
+                          style={{ padding: "6px 14px", borderRadius: 5, border: "1px solid rgba(23,163,164,.3)", background: pg===pages.length-1?"rgba(1,53,90,.2)":"rgba(23,163,164,.1)", color: pg===pages.length-1?"#2e5468":"#17a3a3", fontSize: 13, cursor: pg===pages.length-1?"default":"pointer", fontFamily: "inherit" }}
+                        >التالي</button>
                       </div>
                     )}
                   </div>
@@ -709,15 +708,15 @@ export default function AgentPanel() {
                 const ctx = task.trigger.title || task.trigger.body || "";
                 const actions: { label: string; body: string }[] = [
                   {
-                    label: "✦ جهّز 3 كابشنات",
+                    label: "جهّز 3 كابشنات",
                     body: `بناءً على المهمة السابقة: "${ctx.slice(0, 120)}" — اكتب 3 نسخ مختلفة (تنوّع في الهوك والنبرة). كل نسخة مستقلة وجاهزة للنشر.`,
                   },
                   {
-                    label: "↺ نسخة مختلفة",
+                    label: "نسخة مختلفة",
                     body: `أعد كتابة نفس المحتوى بنبرة مختلفة: "${ctx.slice(0, 120)}"`,
                   },
                   {
-                    label: "⬆ احفظ في Drive",
+                    label: "احفظ في Drive",
                     body: "احفظ هذا المحتوى في Google Drive كـ Doc",
                   },
                 ];
@@ -730,7 +729,7 @@ export default function AgentPanel() {
                         setActiveId(null);
                         setTask(null);
                       }} style={{
-                        padding: "5px 12px", fontSize: 11.5, borderRadius: 10, cursor: "pointer",
+                        padding: "7px 14px", fontSize: 13, borderRadius: 10, cursor: "pointer",
                         fontFamily: "inherit", background: "rgba(23,163,163,0.08)",
                         border: "1px solid rgba(23,163,163,0.3)", color: "#17a3a3", fontWeight: 600,
                       }}>{a.label}</button>
