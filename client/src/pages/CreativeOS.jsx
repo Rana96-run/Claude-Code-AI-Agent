@@ -1486,9 +1486,9 @@ export default function CreativeOS(){
                 const fCol=ad.funnel==="TOF"?"#f5a623":ad.funnel==="MOF"?"#17a3a3":"#5dc87a";
                 const cCol=ad.category.includes("ZATCA")?"#f07070":ad.category.includes("فاتورة")?"#17a3a3":"#6a96aa";
                 return(
-                  <div key={ad.id} style={{...card,marginBottom:0,cursor:"pointer",transition:"border-color .15s"}} onMouseEnter={e=>e.currentTarget.style.borderColor="rgba(23,163,164,.4)"} onMouseLeave={e=>e.currentTarget.style.borderColor="rgba(1,53,90,.45)"}>
+                  <div key={ad.id} style={{...card,marginBottom:0,cursor:"pointer",transition:"border-color .15s",display:"flex",flexDirection:"column"}} onMouseEnter={e=>e.currentTarget.style.borderColor="rgba(23,163,164,.4)"} onMouseLeave={e=>e.currentTarget.style.borderColor="rgba(1,53,90,.45)"}>
                     <div style={{height:4,background:`linear-gradient(90deg,${cCol},${fCol})`}}/>
-                    <div style={{padding:"10px 12px"}}>
+                    <div style={{padding:"10px 12px",display:"flex",flexDirection:"column",flex:1}}>
                       <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:8,direction:"rtl"}}><Tag ch={ad.id} style={{fontSize:9,fontWeight:700,color:"#f5a623"}}/><Tag ch={ad.category} style={{fontSize:9,color:cCol}}/><Tag ch={ad.funnel} style={{fontSize:9,color:fCol}}/><Tag ch={ad.format} style={{fontSize:9}}/></div>
                       <p style={{fontSize:13,fontWeight:700,direction:"rtl",textAlign:"right",lineHeight:1.5,marginBottom:6}}>{ad.headline}</p>
                       {ad.sub_top&&<p style={{fontSize:10.5,color:"#5dc87a",direction:"rtl",textAlign:"right",marginBottom:2}}>✓ {ad.sub_top}</p>}
@@ -1500,7 +1500,7 @@ export default function CreativeOS(){
                           setFunnel(ad.funnel);
                           setTab("content");
                         }}
-                        style={{width:"100%",padding:"7px 4px",borderRadius:6,border:"1px solid rgba(23,163,164,.35)",background:"rgba(23,163,164,.08)",color:"#17a3a3",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit",marginTop:2}}
+                        style={{width:"100%",padding:"7px 4px",borderRadius:6,border:"1px solid rgba(23,163,164,.35)",background:"rgba(23,163,164,.08)",color:"#17a3a3",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit",marginTop:"auto",paddingTop:7}}
                       >
                         {T("استخدم كمرجع في المحتوى","Use as Content Reference")}
                       </button>
