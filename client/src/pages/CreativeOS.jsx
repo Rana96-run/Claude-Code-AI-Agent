@@ -1408,6 +1408,8 @@ export default function CreativeOS(){
                   <Btn ch="TikTok Ads" xs onClick={()=>loadLiveAds("tiktok_ads")} dis={liveAdsLd||!mComp}/>
                   <Btn ch="TikTok" xs onClick={()=>loadLiveAds("tiktok")} dis={liveAdsLd||!mComp}/>
                   <Btn ch="Snap" xs onClick={()=>loadLiveAds("snapchat")} dis={liveAdsLd||!mComp}/>
+                  <Btn ch="LinkedIn" xs onClick={()=>loadLiveAds("linkedin")} dis={liveAdsLd||!mComp}/>
+                  <Btn ch="LinkedIn Ads" xs onClick={()=>loadLiveAds("linkedin_ads")} dis={liveAdsLd||!mComp}/>
                   <Btn ch="YouTube" xs onClick={()=>loadLiveAds("youtube")} dis={liveAdsLd||!mComp}/>
                 </div>
               </div>
@@ -1417,7 +1419,7 @@ export default function CreativeOS(){
                 {!liveAdsLd&&liveAds.length===0&&!liveAdsErr&&<p style={{fontSize:10.5,color:"#6a96aa",direction:"rtl",textAlign:"right"}}>{T("اختر منافساً ثم اضغط أي قناة — Ads = مدفوع · Organic/IG/TikTok/Snap/YT = Organic","Pick a competitor then tap a channel — Ads = Paid · Organic/IG/TikTok/Snap/YT = Organic")}</p>}
                 {liveAds.length>0&&(
                   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:8}}>
-                    {[...liveAds].sort((a,b)=>{const ta=a.started?new Date(typeof a.started==="number"?a.started*1000:a.started).getTime():0;const tb=b.started?new Date(typeof b.started==="number"?b.started*1000:b.started).getTime():0;return tb-ta;}).map((ad,i)=>{const isPaid=["facebook","google","tiktok_ads"].includes(ad._source);return(
+                    {[...liveAds].sort((a,b)=>{const ta=a.started?new Date(typeof a.started==="number"?a.started*1000:a.started).getTime():0;const tb=b.started?new Date(typeof b.started==="number"?b.started*1000:b.started).getTime():0;return tb-ta;}).map((ad,i)=>{const isPaid=["facebook","google","tiktok_ads","linkedin_ads"].includes(ad._source);return(
                       <div key={(ad._source||"")+"|"+(ad.id||i)} style={{padding:"10px 12px",borderRadius:7,border:`1px solid ${isPaid?"rgba(245,166,35,.3)":"rgba(93,200,122,.25)"}`,background:"#0a1f3d"}}>
                         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
                           <div style={{display:"flex",alignItems:"center",gap:5}}>

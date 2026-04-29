@@ -26,15 +26,15 @@ const APIFY_TIMEOUT_MS = 90_000;
    IG handle). IG handles verified manually — null = no public IG. */
 const COMPETITORS: Record<
   string,
-  { domain: string; ig: string | null; fb_query: string; fb_page: string | null; tiktok: string | null; snapchat: string | null; aliases: string[] }
+  { domain: string; ig: string | null; fb_query: string; fb_page: string | null; tiktok: string | null; snapchat: string | null; linkedin: string | null; aliases: string[] }
 > = {
-  daftra:  { domain: "daftra.com",    ig: "daftraonline", fb_query: "daftra",     fb_page: "daftra",      tiktok: "daftra",      snapchat: "daftra",    aliases: ["دفترة", "daftra"] },
-  dafater: { domain: "dafater.com",   ig: null,           fb_query: "dafater",    fb_page: "dafater",     tiktok: null,          snapchat: null,        aliases: ["دفاتر", "dafater"] },
-  foodics: { domain: "foodics.com",   ig: "foodics",      fb_query: "foodics",    fb_page: "foodics",     tiktok: "foodics",     snapchat: "foodics",   aliases: ["فودكس", "foodics"] },
-  rewaa:   { domain: "rewaatech.com", ig: "rewaatech",    fb_query: "rewaa",      fb_page: "rewaatech",   tiktok: "rewaatech",   snapchat: "rewaatech", aliases: ["رواء", "rewaa"] },
-  wafeq:   { domain: "wafeq.com",     ig: "wafeq.app",    fb_query: "wafeq",      fb_page: "wafeq",       tiktok: "wafeqapp",    snapchat: null,        aliases: ["وافق", "wafeq"] },
-  smacc:   { domain: "smacc.com",     ig: null,           fb_query: "smacc",      fb_page: "smacc.erp",   tiktok: null,          snapchat: null,        aliases: ["smacc"] },
-  zoho:    { domain: "zoho.com",      ig: "zoho",         fb_query: "zoho books", fb_page: "zoho",        tiktok: "zoho",        snapchat: "zoho",      aliases: ["zoho", "zoho books"] },
+  daftra:  { domain: "daftra.com",    ig: "daftraonline", fb_query: "daftra",     fb_page: "daftra",      tiktok: "daftra",      snapchat: "daftra",    linkedin: "daftra",     aliases: ["دفترة", "daftra"] },
+  dafater: { domain: "dafater.com",   ig: null,           fb_query: "dafater",    fb_page: "dafater",     tiktok: null,          snapchat: null,        linkedin: null,         aliases: ["دفاتر", "dafater"] },
+  foodics: { domain: "foodics.com",   ig: "foodics",      fb_query: "foodics",    fb_page: "foodics",     tiktok: "foodics",     snapchat: "foodics",   linkedin: "foodics",    aliases: ["فودكس", "foodics"] },
+  rewaa:   { domain: "rewaatech.com", ig: "rewaatech",    fb_query: "rewaa",      fb_page: "rewaatech",   tiktok: "rewaatech",   snapchat: "rewaatech", linkedin: "rewaatech",  aliases: ["رواء", "rewaa"] },
+  wafeq:   { domain: "wafeq.com",     ig: "wafeq.app",    fb_query: "wafeq",      fb_page: "wafeq",       tiktok: "wafeqapp",    snapchat: null,        linkedin: "wafeq",      aliases: ["وافق", "wafeq"] },
+  smacc:   { domain: "smacc.com",     ig: null,           fb_query: "smacc",      fb_page: "smacc.erp",   tiktok: null,          snapchat: null,        linkedin: "smacc",      aliases: ["smacc"] },
+  zoho:    { domain: "zoho.com",      ig: "zoho",         fb_query: "zoho books", fb_page: "zoho",        tiktok: "zoho",        snapchat: "zoho",      linkedin: "zoho",       aliases: ["zoho", "zoho books"] },
 };
 
 function resolve(input: string) {
@@ -88,6 +88,55 @@ async function scrapeGoogleAdsViaJina(domain: string, country: string): Promise<
       });
     }
     return ads.slice(0, 10);
+  } catch {
+    clearTimeout(timeoutId);
+    return [];
+  }
+}
+
+/* ─── LinkedIn Ad Library scraper via r.jina.ai ──────────────────────────
+   LinkedIn's ad library is publicly accessible at:
+   https://www.linkedin.com/ad-library/search?q=KEYWORD
+   We scrape it the same way we do Google Ads — free via jina reader. */
+async function scrapeLinkedInAdsViaJina(query: string): Promise<Array<{ page_name: string; hook: string; body: string; caption: string; image_url: string | null; detail_url: string | null; platforms: string[]; started: string }>> {
+  const target = `https://www.linkedin.com/ad-library/search?q=${encodeURIComponent(query)}`;
+  const url = `https://r.jina.ai/${target}`;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 20_000);
+  try {
+    const r = await fetch(url, { headers: { Accept: "text/plain" }, signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (!r.ok) return [];
+    const text = await r.text();
+    // Extract ad cards — LinkedIn ad library shows company name + ad text + CTA
+    const ads: any[] = [];
+    // Pattern: lines with advertiser name followed by ad body text
+    const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+    let current: any = null;
+    for (const line of lines) {
+      if (line.match(/^\[.*\]\(https:\/\/www\.linkedin\.com\/company\//)) {
+        if (current) ads.push(current);
+        const nameMatch = /^\[([^\]]+)\]/.exec(line);
+        const urlMatch = /\((https:\/\/www\.linkedin\.com\/company\/[^)]+)\)/.exec(line);
+        current = { page_name: nameMatch?.[1] || query, hook: "", body: "", detail_url: urlMatch?.[1] || null };
+      } else if (current && !current.hook && line.length > 10 && !line.startsWith("!") && !line.startsWith("#")) {
+        current.hook = line.slice(0, 100);
+      } else if (current && current.hook && !current.body && line.length > 10 && !line.startsWith("!")) {
+        current.body = line.slice(0, 300);
+      }
+    }
+    if (current) ads.push(current);
+    return ads.slice(0, 10).map(a => ({
+      page_name: a.page_name,
+      hook: a.hook || `LinkedIn ad — ${query}`,
+      body: a.body || "",
+      caption: "LinkedIn Sponsored",
+      image_url: null,
+      detail_url: a.detail_url || `https://www.linkedin.com/ad-library/search?q=${encodeURIComponent(query)}`,
+      platforms: ["LinkedIn Ads"],
+      started: "",
+      _source: "linkedin_ads",
+    }));
   } catch {
     clearTimeout(timeoutId);
     return [];
@@ -163,8 +212,8 @@ router.post("/competitor-ads", async (req, res) => {
     res.status(400).json({ error: "Missing competitor" });
     return;
   }
-  if (!source || !["facebook", "facebook_organic", "google", "instagram", "youtube", "tiktok", "tiktok_ads", "snapchat"].includes(source)) {
-    res.status(400).json({ error: 'source must be one of: facebook, facebook_organic, google, instagram, youtube, tiktok, tiktok_ads, snapchat' });
+  if (!source || !["facebook", "facebook_organic", "google", "instagram", "youtube", "tiktok", "tiktok_ads", "snapchat", "linkedin", "linkedin_ads"].includes(source)) {
+    res.status(400).json({ error: 'source must be one of: facebook, facebook_organic, google, instagram, youtube, tiktok, tiktok_ads, snapchat, linkedin, linkedin_ads' });
     return;
   }
 
@@ -277,6 +326,30 @@ router.post("/competitor-ads", async (req, res) => {
       usernames: [c.snapchat],
       resultsLimit: apifyMinCount,
     };
+  } else if (source === "linkedin") {
+    if (!c.linkedin) {
+      res.status(400).json({ error: `No LinkedIn company slug known for ${competitor}` });
+      return;
+    }
+    // apify/linkedin-company-posts-scraper: scrapes posts from a LinkedIn company page
+    actor = "apify~linkedin-company-posts-scraper";
+    input = {
+      startUrls: [{ url: `https://www.linkedin.com/company/${c.linkedin}/posts/` }],
+      count: apifyMinCount,
+    };
+  } else if (source === "linkedin_ads") {
+    // LinkedIn Ad Library — free via r.jina.ai (no Apify actor needed)
+    const ads = await scrapeLinkedInAdsViaJina(c.linkedin || c.fb_query);
+    res.status(200).json({
+      ok: true,
+      source: "linkedin_ads",
+      competitor: c.domain,
+      country,
+      actor: "r.jina.ai (free)",
+      count: ads.length,
+      ads: ads.map(a => ({ ...a, _source: "linkedin_ads" })),
+    });
+    return;
   }
 
   const result = await runActor(actor, input, token);
@@ -532,6 +605,27 @@ function normalize(item: any, source: string) {
       platforms:  ["TikTok"],
       // createTimeISO is the direct ISO string — prefer it over multiplying createTime
       started:    item.createTimeISO || (item.createTime ? new Date(item.createTime * 1000).toISOString() : ""),
+    };
+  }
+  if (source === "linkedin") {
+    // apify/linkedin-company-posts-scraper post shape
+    const text    = item.text || item.commentary || item.description || "";
+    const likes   = item.numLikes   || item.likeCount   || item.reactions?.numLikes   || 0;
+    const comments= item.numComments|| item.commentCount|| 0;
+    const reposts = item.numShares  || item.repostCount || 0;
+    const parts: string[] = [];
+    if (likes)    parts.push(`${Number(likes).toLocaleString()} likes`);
+    if (comments) parts.push(`${Number(comments).toLocaleString()} comments`);
+    if (reposts)  parts.push(`${Number(reposts).toLocaleString()} reposts`);
+    return {
+      page_name:  item.authorName  || item.companyName || item.author?.name || "",
+      hook:       text.split("\n")[0]?.slice(0, 80) || "",
+      body:       text,
+      caption:    parts.length ? parts.join(" · ") : "LinkedIn post",
+      image_url:  item.image || item.imgUrl || item.images?.[0] || null,
+      detail_url: item.url  || item.postUrl || null,
+      platforms:  ["LinkedIn"],
+      started:    item.postedAt || item.createdAt || item.date || "",
     };
   }
   // instagram

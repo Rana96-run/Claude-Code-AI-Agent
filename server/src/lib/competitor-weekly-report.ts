@@ -34,6 +34,7 @@ export interface CompetitorSnapshot {
   youtube?: AdSnapshot[];
   tiktok?: AdSnapshot[];
   snapchat?: AdSnapshot[];
+  linkedin?: AdSnapshot[];
 }
 
 export interface WeekDiff {
@@ -47,13 +48,14 @@ export interface WeekDiff {
   youtube_new_videos: number;
   tiktok_new_videos: number;
   snapchat_new_posts: number;
+  linkedin_new_posts: number;
   notable_angles: string[];
   /* Master prompt §8.4: ads running >30 days = likely profitable.
      We surface these separately so the AI weights them higher when shaping
      counter-creatives. Format: "[source] hook (Nd live)" */
   proven_winners: string[];
   /* Top 3 items (mix of FB + Google + IG + YT + TT) with images, for Slack samples */
-  top_samples: Array<AdSnapshot & { source: "facebook" | "google" | "instagram" | "youtube" | "tiktok" | "snapchat" }>;
+  top_samples: Array<AdSnapshot & { source: "facebook" | "google" | "instagram" | "youtube" | "tiktok" | "snapchat" | "linkedin" }>;
 }
 
 /* ─── Diff: this week vs last week ─────────────────────────────────────── */
@@ -69,6 +71,7 @@ export function diffSnapshots(
   const lastYt = idsThis(lastWeek?.youtube);
   const lastTt = idsThis(lastWeek?.tiktok);
   const lastSc = idsThis(lastWeek?.snapchat);
+  const lastLi = idsThis(lastWeek?.linkedin);
 
   const fbNew = (thisWeek.facebook || []).filter(
     (a) => !lastFb.has(a.detail_url || `${a.page_name}|${a.hook}`),
@@ -94,9 +97,12 @@ export function diffSnapshots(
   const scNew = (thisWeek.snapchat || []).filter(
     (a) => !lastSc.has(a.detail_url || `${a.page_name}|${a.hook}`),
   );
+  const liNew = (thisWeek.linkedin || []).filter(
+    (a) => !lastLi.has(a.detail_url || `${a.page_name}|${a.hook}`),
+  );
 
   // Notable angles — distinct hooks across all new content
-  const angles = [...fbNew, ...gNew, ...igNew, ...ytNew, ...ttNew, ...scNew]
+  const angles = [...fbNew, ...gNew, ...igNew, ...ytNew, ...ttNew, ...scNew, ...liNew]
     .map((a) => a.hook?.slice(0, 60))
     .filter((h): h is string => !!h)
     .slice(0, 5);
@@ -113,6 +119,7 @@ export function diffSnapshots(
     ...(thisWeek.youtube || []).map((a) => ({ ...a, src: "youtube" as const })),
     ...(thisWeek.tiktok || []).map((a) => ({ ...a, src: "tiktok" as const })),
     ...(thisWeek.snapchat || []).map((a) => ({ ...a, src: "snapchat" as const })),
+    ...(thisWeek.linkedin || []).map((a) => ({ ...a, src: "linkedin" as const })),
   ];
   const provenWinners = allCurrent
     .filter((a) => {
@@ -129,7 +136,7 @@ export function diffSnapshots(
 
   // Top 3 visual samples: prefer ones WITH images, mix sources
   const samples: WeekDiff["top_samples"] = [];
-  const tag = (arr: AdSnapshot[], src: "facebook" | "google" | "instagram" | "youtube" | "tiktok" | "snapchat"): WeekDiff["top_samples"] =>
+  const tag = (arr: AdSnapshot[], src: "facebook" | "google" | "instagram" | "youtube" | "tiktok" | "snapchat" | "linkedin"): WeekDiff["top_samples"] =>
     arr.map((a) => ({ ...a, source: src }));
   const candidates = [
     ...tag(fbNew, "facebook"),
@@ -138,6 +145,7 @@ export function diffSnapshots(
     ...tag(ytNew, "youtube"),
     ...tag(ttNew, "tiktok"),
     ...tag(scNew, "snapchat"),
+    ...tag(liNew, "linkedin"),
   ];
   for (const c of candidates) {
     if (c.image_url && samples.length < 3) samples.push(c);
@@ -159,6 +167,7 @@ export function diffSnapshots(
     youtube_new_videos: ytNew.length,
     tiktok_new_videos: ttNew.length,
     snapchat_new_posts: scNew.length,
+    linkedin_new_posts: liNew.length,
     notable_angles: angles,
     proven_winners: provenWinners,
     top_samples: samples,
