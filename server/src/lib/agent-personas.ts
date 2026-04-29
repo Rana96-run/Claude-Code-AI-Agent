@@ -37,7 +37,7 @@ export const PERSONAS: Record<PersonaId, PersonaDef> = {
     id: "social_media",
     label: "متخصص السوشيال",
     label_en: "Social Media Specialist",
-    tagline: "محتوى + تحليل منافسين + أداء عضوي",
+    tagline: "محتوى + تحليل منافسين + أداء اورجانيك",
     tools: [
       "analyze_competitor_content",
       "build_content_calendar",
@@ -72,7 +72,7 @@ export const PERSONAS: Record<PersonaId, PersonaDef> = {
       "منافس",
       "competitor",
       "organic",
-      "عضوي",
+      "اورجانيك",
       "engagement",
       "تفاعل",
       "reach",
