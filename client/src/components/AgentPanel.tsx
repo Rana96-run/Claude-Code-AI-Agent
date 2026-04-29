@@ -299,9 +299,9 @@ export default function AgentPanel() {
           fontFamily: "inherit",
           boxShadow: "0 4px 14px rgba(2,21,68,0.4)",
         }}
-        title="سُمعه - معاك لمساعدتك"
+        title="Soma'a Agent — Your Content Maestro"
       >
-        {open ? "× إغلاق" : "🤖 سُمعه - معاك لمساعدتك"}
+        {open ? "× Close" : "✦ Soma'a Agent · Your Content Maestro"}
       </button>
 
       {open && (
