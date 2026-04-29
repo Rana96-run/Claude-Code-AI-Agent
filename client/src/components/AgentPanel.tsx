@@ -656,17 +656,17 @@ export default function AgentPanel() {
               <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
                 <span
                   style={{
-                    fontSize: 10, padding: "2px 8px", borderRadius: 4,
+                    fontSize: 11, padding: "2px 8px", borderRadius: 4,
                     background: `${statusColor[task.status]}22`, color: statusColor[task.status],
                     border: `1px solid ${statusColor[task.status]}66`, fontWeight: 700,
                   }}
                 >
                   {task.status}
                 </span>
-                <span style={{ fontSize: 10, color: "#6a96aa" }}>
+                <span style={{ fontSize: 11, color: "#6a96aa" }}>
                   {task.trigger.source}{task.trigger.actor ? ` · ${task.trigger.actor}` : ""}
                 </span>
-                <span style={{ fontSize: 10, color: "#2e5468", marginRight: "auto" }}>#{task.id}</span>
+                <span style={{ fontSize: 11, color: "#2e5468", marginRight: "auto" }}>#{task.id}</span>
               </div>
               {task.trigger.title && (
                 <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>{task.trigger.title}</div>
@@ -680,11 +680,11 @@ export default function AgentPanel() {
                 </div>
               )}
 
-              <div style={{ fontSize: 10, color: "#2e5468", marginBottom: 6, fontWeight: 700 }}>خطوات التنفيذ</div>
+              <div style={{ fontSize: 11, color: "#2e5468", marginBottom: 6, fontWeight: 700 }}>خطوات التنفيذ</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
-                {task.steps.map((s, i) => <StepRow key={i} step={s} />)}
+                {task.steps.filter(s => s.kind !== "think").map((s, i) => <StepRow key={i} step={s} />)}
                 {task.status !== "done" && task.status !== "error" && (
-                  <div style={{ fontSize: 10, color: "#f5a623", padding: "4px 0" }}>
+                  <div style={{ fontSize: 12, color: "#f5a623", padding: "4px 0" }}>
                     <Spinner /> سمعه تعمل على المهمة...
                   </div>
                 )}
@@ -692,7 +692,7 @@ export default function AgentPanel() {
 
               {Object.keys(task.outputs).length > 0 && (
                 <div style={{ marginTop: 10 }}>
-                  <div style={{ fontSize: 10, color: "#2e5468", marginBottom: 6, fontWeight: 700 }}>المخرجات</div>
+                  <div style={{ fontSize: 11, color: "#2e5468", marginBottom: 6, fontWeight: 700 }}>المخرجات</div>
                   <OutputsBlock outputs={task.outputs} />
                 </div>
               )}
@@ -762,16 +762,16 @@ export default function AgentPanel() {
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
                     <span style={{
-                      fontSize: 9, padding: "1px 6px", borderRadius: 3,
+                      fontSize: 10, padding: "1px 6px", borderRadius: 3,
                       background: `${statusColor[t.status]}22`, color: statusColor[t.status],
                       border: `1px solid ${statusColor[t.status]}55`, fontWeight: 700,
                     }}>{t.status}</span>
-                    <span style={{ fontSize: 9, color: "#2e5468" }}>{t.source}</span>
-                    <span style={{ fontSize: 9, color: "#2e5468", marginRight: "auto" }}>
+                    <span style={{ fontSize: 10, color: "#2e5468" }}>{t.source}</span>
+                    <span style={{ fontSize: 10, color: "#2e5468", marginRight: "auto" }}>
                       {new Date(t.created_at).toLocaleTimeString("ar", { hour12: false })}
                     </span>
                   </div>
-                  <div style={{ fontSize: 11, color: "#ddeef4", lineHeight: 1.5 }}>
+                  <div style={{ fontSize: 12, color: "#ddeef4", lineHeight: 1.5 }}>
                     {t.title || t.summary?.slice(0, 80) || "—"}
                   </div>
                 </div>
@@ -805,8 +805,8 @@ function StepRow({ step }: { step: TaskStep }) {
     : msgText;
 
   return (
-    <div style={{ padding: "6px 8px", background: bg, borderRadius: 5, borderRight: `2px solid ${color}`, fontSize: 10.5, lineHeight: 1.6 }}>
-      <div style={{ fontSize: 9, color, fontWeight: 700, marginBottom: 2 }}>
+    <div style={{ padding: "7px 10px", background: bg, borderRadius: 5, borderRight: `2px solid ${color}`, fontSize: 12, lineHeight: 1.65 }}>
+      <div style={{ fontSize: 10, color, fontWeight: 700, marginBottom: 3 }}>
         {step.kind}{step.tool ? ` · ${step.tool}` : ""}
       </div>
       {step.message && (
@@ -816,7 +816,7 @@ function StepRow({ step }: { step: TaskStep }) {
             {isLong && (
               <button
                 onClick={() => setExpanded(e => !e)}
-                style={{ fontSize: 9.5, color: "#17a3a3", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", padding: "2px 0", marginTop: 2 }}
+                style={{ fontSize: 11, color: "#17a3a3", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", padding: "2px 0", marginTop: 2 }}
               >
                 {expanded ? "▲ طيّ" : "▼ عرض المزيد"}
               </button>
@@ -829,12 +829,12 @@ function StepRow({ step }: { step: TaskStep }) {
         )
       )}
       {step.input !== undefined && (
-        <div style={{ color: "#6a96aa", fontSize: 9.5, marginTop: 2 }}>
+        <div style={{ color: "#6a96aa", fontSize: 11, marginTop: 2 }}>
           {truncate(JSON.stringify(step.input), 220)}
         </div>
       )}
       {step.output !== undefined && (
-        <div style={{ color: "#6a96aa", fontSize: 9.5, marginTop: 2 }}>
+        <div style={{ color: "#6a96aa", fontSize: 11, marginTop: 2 }}>
           {truncate(JSON.stringify(step.output), 220)}
         </div>
       )}
