@@ -94,6 +94,59 @@ async function scrapeGoogleAdsViaJina(domain: string, country: string): Promise<
   }
 }
 
+/* ─── LinkedIn API scraper ────────────────────────────────────────────────
+   Uses LINKEDIN_TOKEN (OAuth2 access token) to call the LinkedIn REST API.
+   Flow:
+     1. Resolve vanity name → company URN  (organizations endpoint)
+     2. Fetch recent posts                 (ugcPosts endpoint)
+   Requires token scope: r_organization_social (or broader marketing scope).
+   Returns normalized ad shape identical to other sources. */
+async function scrapeLinkedInViaAPI(slug: string, count: number): Promise<{
+  ok: boolean;
+  posts: any[];
+  error?: string;
+}> {
+  const token = process.env.LINKEDIN_TOKEN;
+  if (!token) return { ok: false, posts: [], error: "LINKEDIN_TOKEN not set in Railway environment" };
+
+  const headers = {
+    "Authorization": `Bearer ${token}`,
+    "X-Restli-Protocol-Version": "2.0.0",
+    "LinkedIn-Version": "202401",
+  };
+
+  try {
+    // Step 1: get company URN from vanity name
+    const orgUrl = `https://api.linkedin.com/v2/organizations?q=vanityName&vanityName=${encodeURIComponent(slug)}`;
+    const orgResp = await fetch(orgUrl, { headers, signal: AbortSignal.timeout(15_000) });
+    const orgData = (await orgResp.json().catch(() => ({}))) as any;
+
+    if (!orgResp.ok || !orgData?.elements?.[0]?.id) {
+      // Fallback: try /v2/organizationAcls for the URN
+      const errMsg = orgData?.message || orgData?.code || `HTTP ${orgResp.status}`;
+      return { ok: false, posts: [], error: `Could not resolve LinkedIn company '${slug}': ${errMsg}` };
+    }
+
+    const orgId = orgData.elements[0].id;
+    const urn = `urn:li:organization:${orgId}`;
+
+    // Step 2: fetch recent UGC posts by this org
+    const postsUrl = `https://api.linkedin.com/v2/ugcPosts?q=authors&authors=List(${encodeURIComponent(urn)})&count=${count}&sortBy=LAST_MODIFIED`;
+    const postsResp = await fetch(postsUrl, { headers, signal: AbortSignal.timeout(20_000) });
+    const postsData = (await postsResp.json().catch(() => ({}))) as any;
+
+    if (!postsResp.ok) {
+      const errMsg = postsData?.message || postsData?.code || `HTTP ${postsResp.status}`;
+      return { ok: false, posts: [], error: `LinkedIn posts API error: ${errMsg}` };
+    }
+
+    const elements: any[] = postsData?.elements || [];
+    return { ok: true, posts: elements };
+  } catch (err) {
+    return { ok: false, posts: [], error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 /* ─── LinkedIn Ad Library scraper via r.jina.ai ──────────────────────────
    LinkedIn's ad library is publicly accessible at:
    https://www.linkedin.com/ad-library/search?q=KEYWORD
@@ -331,12 +384,15 @@ router.post("/competitor-ads", async (req, res) => {
       res.status(400).json({ error: `No LinkedIn company slug known for ${competitor}` });
       return;
     }
-    // harvestapi/linkedin-company-posts: 880k+ runs, no cookies needed
-    actor = "harvestapi~linkedin-company-posts";
-    input = {
-      url: `https://www.linkedin.com/company/${c.linkedin}/`,
-      count: apifyMinCount,
-    };
+    // LinkedIn REST API — uses LINKEDIN_TOKEN env var (OAuth2 bearer token)
+    const li = await scrapeLinkedInViaAPI(c.linkedin, cap);
+    if (!li.ok) {
+      res.status(502).json({ error: li.error, source: "linkedin", competitor: c.domain });
+      return;
+    }
+    const ads = li.posts.map((p: any) => normalizeLinkedIn(p));
+    res.status(200).json({ ok: true, source: "linkedin", competitor: c.domain, country, actor: "linkedin-api-v2", count: ads.length, ads });
+    return;
   } else if (source === "linkedin_ads") {
     // LinkedIn Ad Library — free via r.jina.ai (no Apify actor needed)
     const ads = await scrapeLinkedInAdsViaJina(c.linkedin || c.fb_query);
@@ -514,6 +570,40 @@ router.get("/competitor-ads/discover-actor", async (req, res) => {
   }
 });
 
+/* ─── LinkedIn API post normalizer ───────────────────────────────────────
+   Maps LinkedIn UGC Posts API shape to the common ad shape. */
+function normalizeLinkedIn(p: any) {
+  // Text lives in specificContent.com.linkedin.ugc.ShareContent.shareCommentary.text
+  const text = p?.specificContent?.["com.linkedin.ugc.ShareContent"]?.shareCommentary?.text
+    || p?.commentary || p?.text || "";
+  // Media: image or video thumbnail
+  const media = p?.specificContent?.["com.linkedin.ugc.ShareContent"]?.media?.[0];
+  const imageUrl = media?.thumbnails?.[0]?.url || media?.originalUrl || null;
+  const detailUrl = media?.landingPage?.landingPageUrl || null;
+  // Engagement stats (v2 API sometimes includes socialDetail)
+  const stats = p?.socialDetail;
+  const likes    = stats?.totalSocialActivityCounts?.numLikes    || 0;
+  const comments = stats?.totalSocialActivityCounts?.numComments || 0;
+  const reposts  = stats?.totalSocialActivityCounts?.numShares   || 0;
+  const parts: string[] = [];
+  if (likes)    parts.push(`${Number(likes).toLocaleString()} likes`);
+  if (comments) parts.push(`${Number(comments).toLocaleString()} comments`);
+  if (reposts)  parts.push(`${Number(reposts).toLocaleString()} reposts`);
+  // Date: created.time is epoch ms
+  const created = p?.created?.time ? new Date(p.created.time).toISOString() : "";
+  return {
+    page_name:  p?.author || "",
+    hook:       text.split("\n")[0]?.slice(0, 80) || "",
+    body:       text,
+    caption:    parts.length ? parts.join(" · ") : "LinkedIn post",
+    image_url:  imageUrl,
+    detail_url: detailUrl || `https://www.linkedin.com/feed/update/${p?.id || ""}`,
+    platforms:  ["LinkedIn"],
+    started:    created,
+    _source:    "linkedin",
+  };
+}
+
 /* ─── Normalize each source's response into a common ad shape ────────── */
 function normalize(item: any, source: string) {
   if (source === "facebook") {
@@ -607,8 +697,11 @@ function normalize(item: any, source: string) {
       started:    item.createTimeISO || (item.createTime ? new Date(item.createTime * 1000).toISOString() : ""),
     };
   }
+  if (source === "linkedin_api") {
+    // handled by normalizeLinkedIn — this branch shouldn't be hit but kept as guard
+  }
   if (source === "linkedin") {
-    // apify/linkedin-company-posts-scraper post shape
+    // legacy Apify shape (kept as fallback)
     const text    = item.text || item.commentary || item.description || "";
     const likes   = item.numLikes   || item.likeCount   || item.reactions?.numLikes   || 0;
     const comments= item.numComments|| item.commentCount|| 0;
