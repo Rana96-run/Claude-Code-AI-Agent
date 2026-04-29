@@ -646,21 +646,6 @@ export default function AgentPanel() {
           {/* ── Task detail view ── */}
           {activeId && task && (
             <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: 14 }}>
-              <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
-                <span
-                  style={{
-                    fontSize: 11, padding: "2px 8px", borderRadius: 4,
-                    background: `${statusColor[task.status]}22`, color: statusColor[task.status],
-                    border: `1px solid ${statusColor[task.status]}66`, fontWeight: 700,
-                  }}
-                >
-                  {task.status}
-                </span>
-                <span style={{ fontSize: 11, color: "#6a96aa" }}>
-                  {task.trigger.source}{task.trigger.actor ? ` · ${task.trigger.actor}` : ""}
-                </span>
-                <span style={{ fontSize: 11, color: "#2e5468", marginRight: "auto" }}>#{task.id}</span>
-              </div>
               {task.trigger.title && (
                 <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>{task.trigger.title}</div>
               )}
