@@ -1408,8 +1408,7 @@ export default function CreativeOS(){
                   <Btn ch="TikTok Ads" xs onClick={()=>loadLiveAds("tiktok_ads")} dis={liveAdsLd||!mComp}/>
                   <Btn ch="TikTok" xs onClick={()=>loadLiveAds("tiktok")} dis={liveAdsLd||!mComp}/>
                   <Btn ch="Snap" xs onClick={()=>loadLiveAds("snapchat")} dis={liveAdsLd||!mComp}/>
-                  <Btn ch="LinkedIn" xs onClick={()=>loadLiveAds("linkedin")} dis={liveAdsLd||!mComp}/>
-                  <Btn ch="LinkedIn Ads" xs onClick={()=>loadLiveAds("linkedin_ads")} dis={liveAdsLd||!mComp}/>
+                  {(()=>{const lc=COMPS.find(c=>c.en===mComp||c.n===mComp);return(<><button onClick={()=>lc&&window.open(`https://www.linkedin.com/company/${lc.id}/posts/`,"_blank")} disabled={!mComp} style={{padding:"3px 8px",borderRadius:4,border:"1px solid rgba(10,102,194,.35)",background:"rgba(10,102,194,.08)",color:mComp?"#4a9fd4":"#2e5468",fontSize:9.5,cursor:mComp?"pointer":"default",fontFamily:"inherit",fontWeight:600,opacity:mComp?1:.4}} title="Opens LinkedIn in browser">🔗 LinkedIn</button><button onClick={()=>lc&&window.open(`https://www.linkedin.com/ad-library/search?q=${encodeURIComponent(lc.en)}`,"_blank")} disabled={!mComp} style={{padding:"3px 8px",borderRadius:4,border:"1px solid rgba(10,102,194,.35)",background:"rgba(10,102,194,.08)",color:mComp?"#4a9fd4":"#2e5468",fontSize:9.5,cursor:mComp?"pointer":"default",fontFamily:"inherit",fontWeight:600,opacity:mComp?1:.4}} title="Opens LinkedIn Ad Library in browser">🔗 LI Ads</button></>);})()}
                   <Btn ch="YouTube" xs onClick={()=>loadLiveAds("youtube")} dis={liveAdsLd||!mComp}/>
                 </div>
               </div>
