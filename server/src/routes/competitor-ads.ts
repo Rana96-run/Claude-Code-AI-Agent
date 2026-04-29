@@ -29,7 +29,7 @@ const COMPETITORS: Record<
   { domain: string; ig: string | null; fb_query: string; fb_page: string | null; tiktok: string | null; snapchat: string | null; linkedin: string | null; aliases: string[] }
 > = {
   daftra:  { domain: "daftra.com",    ig: "daftraonline", fb_query: "daftra",     fb_page: "daftra",      tiktok: "daftra",      snapchat: "daftra",    linkedin: "daftra",     aliases: ["دفترة", "daftra"] },
-  dafater: { domain: "dafater.com",   ig: null,           fb_query: "dafater",    fb_page: "dafater",     tiktok: null,          snapchat: null,        linkedin: null,         aliases: ["دفاتر", "dafater"] },
+  dafater: { domain: "dafater.com",   ig: null,           fb_query: "dafater",    fb_page: "dafater",     tiktok: null,          snapchat: null,        linkedin: "dafater",    aliases: ["دفاتر", "dafater"] },
   foodics: { domain: "foodics.com",   ig: "foodics",      fb_query: "foodics",    fb_page: "foodics",     tiktok: "foodics",     snapchat: "foodics",   linkedin: "foodics",    aliases: ["فودكس", "foodics"] },
   rewaa:   { domain: "rewaatech.com", ig: "rewaatech",    fb_query: "rewaa",      fb_page: "rewaatech",   tiktok: "rewaatech",   snapchat: "rewaatech", linkedin: "rewaatech",  aliases: ["رواء", "rewaa"] },
   wafeq:   { domain: "wafeq.com",     ig: "wafeq.app",    fb_query: "wafeq",      fb_page: "wafeq",       tiktok: "wafeqapp",    snapchat: null,        linkedin: "wafeq",      aliases: ["وافق", "wafeq"] },
