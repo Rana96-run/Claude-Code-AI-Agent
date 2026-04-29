@@ -52,14 +52,14 @@ const SECTORS = [
 
 /* ─── COMPETITORS ─── */
 const COMPS = [
-  {id:"daftra",n:"دفترة",en:"Daftra",lb:"#0047FF",lt:"D",c:"#6699ff",chs:["IG","FB","LI","X","TK"],thr:"high",war:"تعدد رسائل، لهجة مصرية",wae:"Multi-message, Egyptian dialect"},
-  {id:"dafater",n:"دفاتر",en:"Dafater",lb:"#e11d48",lt:"D",c:"#f43f5e",chs:["FB","LI","IG"],thr:"mid",war:"ERP فقط، قوة للمخازن",wae:"ERP-focused, inventory-heavy"},
-  {id:"foodics",n:"فودكس",en:"Foodics",lb:"#7c3aed",lt:"F",c:"#c084fc",chs:["IG","TK","X","LI"],thr:"high",war:"F&B أساساً — مو شامل",wae:"Primarily F&B only"},
-  {id:"rewaa",n:"رواء",en:"Rewaa",lb:"#0f766e",lt:"R",c:"#4dd9b0",chs:["IG","X","TK"],thr:"high",war:"ZATCA+مخزون — ليس محاسبة كاملة",wae:"Strong ZATCA+inventory — not full accounting"},
-  {id:"wafeq",n:"وافق",en:"Wafeq",lb:"#0369a1",lt:"W",c:"#67d4ee",chs:["IG","X","LI"],thr:"mid",war:"باقات معقدة، لا POS",wae:"Complex tiers, no POS"},
-  {id:"smacc",n:"SMACC",en:"SMACC",lb:"#1e40af",lt:"S",c:"#93c5fd",chs:["IG","FB","LI"],thr:"mid",war:"لا ZATCA أصلي، واجهة قديمة",wae:"No native ZATCA, dated UI"},
-  {id:"alostaz",n:"الأستاذ",en:"Al-Ostaz",lb:"#374151",lt:"A",c:"#9ca3af",chs:["FB"],thr:"low",war:"ليس سحابي",wae:"Not cloud-native"},
-  {id:"zoho",n:"Zoho/QB",en:"Zoho/QB",lb:"#d97706",lt:"Z",c:"#fbbf24",chs:["LI","FB"],thr:"mid",war:"أجنبي، لا ZATCA أصلي",wae:"Foreign, no native ZATCA"},
+  {id:"daftra", n:"دفترة",   en:"Daftra",    lb:"#0047FF",lt:"D",c:"#6699ff",chs:["IG","FB","LI","X","TK"],thr:"high",war:"تعدد رسائل، لهجة مصرية",          wae:"Multi-message, Egyptian dialect",       domain:"daftra.com",    pricing:"https://www.daftra.com/ar/pricing"},
+  {id:"dafater",n:"دفاتر",   en:"Dafater",   lb:"#e11d48",lt:"D",c:"#f43f5e",chs:["FB","LI","IG"],        thr:"mid", war:"ERP فقط، قوة للمخازن",             wae:"ERP-focused, inventory-heavy",          domain:"dafater.com",   pricing:"https://www.dafater.com/pricing"},
+  {id:"foodics",n:"فودكس",   en:"Foodics",   lb:"#7c3aed",lt:"F",c:"#c084fc",chs:["IG","TK","X","LI"],    thr:"high",war:"F&B أساساً — مو شامل",            wae:"Primarily F&B only",                    domain:"foodics.com",   pricing:"https://www.foodics.com/ar/pricing"},
+  {id:"rewaa",  n:"رواء",    en:"Rewaa",     lb:"#0f766e",lt:"R",c:"#4dd9b0",chs:["IG","X","TK"],         thr:"high",war:"ZATCA+مخزون — ليس محاسبة كاملة", wae:"Strong ZATCA+inventory — not full accounting", domain:"rewaatech.com", pricing:"https://www.rewaatech.com/pricing"},
+  {id:"wafeq",  n:"وافق",    en:"Wafeq",     lb:"#0369a1",lt:"W",c:"#67d4ee",chs:["IG","X","LI"],         thr:"mid", war:"باقات معقدة، لا POS",              wae:"Complex tiers, no POS",                 domain:"wafeq.com",     pricing:"https://wafeq.com/ar/pricing"},
+  {id:"smacc",  n:"SMACC",   en:"SMACC",     lb:"#1e40af",lt:"S",c:"#93c5fd",chs:["IG","FB","LI"],        thr:"mid", war:"لا ZATCA أصلي، واجهة قديمة",      wae:"No native ZATCA, dated UI",             domain:"smacc.com",     pricing:"https://www.smacc.com/pricing"},
+  {id:"alostaz",n:"الأستاذ", en:"Al-Ostaz",  lb:"#374151",lt:"A",c:"#9ca3af",chs:["FB"],                  thr:"low", war:"ليس سحابي",                       wae:"Not cloud-native",                      domain:"alostaz.com",   pricing:null},
+  {id:"zoho",   n:"Zoho/QB", en:"Zoho/QB",   lb:"#d97706",lt:"Z",c:"#fbbf24",chs:["LI","FB"],             thr:"mid", war:"أجنبي، لا ZATCA أصلي",             wae:"Foreign, no native ZATCA",              domain:"zoho.com",      pricing:"https://www.zoho.com/sa/books/pricing/"},
 ];
 
 /* ─── CAMPAIGN REFERENCES ─── */
@@ -1424,15 +1424,17 @@ export default function CreativeOS(){
                   <Fld label={T("المنافس","Competitor")}><select value={mComp} onChange={e=>setMComp(e.target.value)}><option value="">{T("— اختر —","— Select —")}</option>{COMPS.map(c=><option key={c.id} value={lang==="en"?c.en:c.n}>{lang==="en"?c.en:c.n}</option>)}</select></Fld>
                   <Fld label={T("القناة","Channel")}><select value={mChan} onChange={e=>setMChan(e.target.value)}>{["Instagram","Facebook","TikTok","Snapchat","LinkedIn","Twitter/X"].map(v=><option key={v}>{v}</option>)}</select></Fld>
                 </div>
+                {/* Quick-fill links for selected competitor */}
+                {(()=>{const comp=COMPS.find(c=>(lang==="en"?c.en:c.n)===mComp||c.en===mComp||c.n===mComp);if(!comp)return null;const chip=(label,url,icon)=>(<button key={label} onClick={()=>setMDesc(url)} style={{padding:"3px 9px",borderRadius:4,fontSize:9.5,fontWeight:600,background:"rgba(1,53,90,.5)",border:"1px solid rgba(106,150,170,.25)",color:"#8aafc4",cursor:"pointer",fontFamily:"inherit"}}>{icon} {label}</button>);return(<div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:10}}>{chip(`${comp.domain}`,`https://www.${comp.domain}`,"🌐")}{comp.pricing&&chip("Pricing",comp.pricing,"💰")}{chip("Google Search",`https://www.google.com/search?q=${encodeURIComponent((lang==="en"?comp.en:comp.n)+" "+comp.domain)}`,"🔍")}{chip("Google Ads",`https://adstransparency.google.com/?region=SA&domain=${comp.domain}`,"📢")}</div>);})()}
                 <Fld label={T("رابط البوست / الإعلان أو وصفه","Post / Ad URL or Description")}>
                   <textarea value={mDesc} onChange={e=>setMDesc(e.target.value)} rows={3}
                     placeholder={T(
-                      "الصق رابط مباشر لأي بوست أو إعلان (IG · FB · LinkedIn · Twitter · أي موقع) — أو اكتب وصفاً يدوياً للإعلان",
-                      "Paste any post or ad URL (IG · FB · LinkedIn · Twitter · any page) — or describe the ad manually"
+                      "الصق أي رابط — موقع المنافس · صفحة الأسعار · بوست IG/FB · إعلان · نتائج Google — أو اكتب وصفاً يدوياً",
+                      "Paste any URL — competitor website · pricing page · IG/FB post · ad · Google search results — or describe manually"
                     )}
                     dir="rtl" style={{textAlign:"right"}}
                   />
-                  <p style={{fontSize:9.5,color:"#6a96aa",marginTop:4,direction:"rtl"}}>{T("يجلب المحتوى الحقيقي تلقائياً — يعمل مع المنشورات العضوية والإعلانات المدفوعة","Auto-fetches real content — works with organic posts and paid ads")}</p>
+                  <p style={{fontSize:9.5,color:"#6a96aa",marginTop:4,direction:"rtl"}}>{T("يجلب المحتوى الحقيقي من الرابط تلقائياً — يعمل مع المواقع والبوستات والإعلانات","Auto-fetches real content from any URL — websites, posts, ads, pricing pages")}</p>
                 </Fld>
                 <Btn ch={T("أنشئ النسخة المضادة","Create Counter-Creative")} onClick={genCounter} dis={mLd} full/>
               </div>
