@@ -95,21 +95,23 @@ async function scrapeGoogleAdsViaJina(domain: string, country: string): Promise<
 }
 
 /* ─── LinkedIn API scraper ────────────────────────────────────────────────
-   Uses LINKEDIN_TOKEN (OAuth2 access token) to call the LinkedIn REST API.
-   Flow:
-     1. Resolve vanity name → company URN  (organizations endpoint)
-     2. Fetch recent posts                 (ugcPosts endpoint)
-   Requires token scope: r_organization_social (or broader marketing scope).
-   Returns normalized ad shape identical to other sources. */
+   Env vars (set in Railway):
+     LI_ACCESS_TOKEN      — OAuth2 bearer token
+     LI_ORGANIZATION_URN  — Qoyod's own URN (urn:li:organization:XXXXX)
+     LI_BUSINESS_MANAGER_ID — Qoyod's Business Manager ID (for ads)
+   Flow (organic posts):
+     1. Resolve competitor vanity name → organization URN
+     2. Fetch recent UGC posts for that URN
+   Requires token scope: r_organization_social */
 async function scrapeLinkedInViaAPI(slug: string, count: number): Promise<{
   ok: boolean;
   posts: any[];
   error?: string;
 }> {
-  const token = process.env.LINKEDIN_TOKEN;
-  if (!token) return { ok: false, posts: [], error: "LINKEDIN_TOKEN not set in Railway environment" };
+  const token = process.env.LI_ACCESS_TOKEN;
+  if (!token) return { ok: false, posts: [], error: "LI_ACCESS_TOKEN not set in Railway environment" };
 
-  const headers = {
+  const headers: Record<string, string> = {
     "Authorization": `Bearer ${token}`,
     "X-Restli-Protocol-Version": "2.0.0",
     "LinkedIn-Version": "202401",
@@ -122,15 +124,16 @@ async function scrapeLinkedInViaAPI(slug: string, count: number): Promise<{
     const orgData = (await orgResp.json().catch(() => ({}))) as any;
 
     if (!orgResp.ok || !orgData?.elements?.[0]?.id) {
-      // Fallback: try /v2/organizationAcls for the URN
-      const errMsg = orgData?.message || orgData?.code || `HTTP ${orgResp.status}`;
+      const errMsg = orgData?.message || orgData?.serviceErrorCode
+        ? `${orgData.message || ""} (code ${orgData.serviceErrorCode || orgData.code || orgResp.status})`
+        : `HTTP ${orgResp.status}`;
       return { ok: false, posts: [], error: `Could not resolve LinkedIn company '${slug}': ${errMsg}` };
     }
 
     const orgId = orgData.elements[0].id;
     const urn = `urn:li:organization:${orgId}`;
 
-    // Step 2: fetch recent UGC posts by this org
+    // Step 2: fetch recent UGC posts for this org
     const postsUrl = `https://api.linkedin.com/v2/ugcPosts?q=authors&authors=List(${encodeURIComponent(urn)})&count=${count}&sortBy=LAST_MODIFIED`;
     const postsResp = await fetch(postsUrl, { headers, signal: AbortSignal.timeout(20_000) });
     const postsData = (await postsResp.json().catch(() => ({}))) as any;
@@ -140,10 +143,52 @@ async function scrapeLinkedInViaAPI(slug: string, count: number): Promise<{
       return { ok: false, posts: [], error: `LinkedIn posts API error: ${errMsg}` };
     }
 
-    const elements: any[] = postsData?.elements || [];
-    return { ok: true, posts: elements };
+    return { ok: true, posts: postsData?.elements || [] };
   } catch (err) {
     return { ok: false, posts: [], error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/* ─── LinkedIn Ads via Marketing API ─────────────────────────────────────
+   Uses LI_ACCESS_TOKEN + LI_BUSINESS_MANAGER_ID to search the
+   LinkedIn Ad Library for competitor sponsored content. */
+async function scrapeLinkedInAdsViaAPI(query: string): Promise<{
+  ok: boolean;
+  ads: any[];
+  error?: string;
+}> {
+  const token = process.env.LI_ACCESS_TOKEN;
+  const bmId = process.env.LI_BUSINESS_MANAGER_ID;
+  if (!token) return { ok: false, ads: [], error: "LI_ACCESS_TOKEN not set in Railway environment" };
+
+  const headers: Record<string, string> = {
+    "Authorization": `Bearer ${token}`,
+    "X-Restli-Protocol-Version": "2.0.0",
+    "LinkedIn-Version": "202401",
+  };
+
+  try {
+    // LinkedIn Ad Library search endpoint — searches public sponsored content
+    // by advertiser name keyword. Requires r_ads scope or Marketing API access.
+    const params = new URLSearchParams({
+      q: "search",
+      "search.advertiserNames[0]": query,
+      count: "10",
+      ...(bmId ? { "search.sponsorAccountId": bmId } : {}),
+    });
+    const url = `https://api.linkedin.com/v2/adLibraryByShare?${params}`;
+    const resp = await fetch(url, { headers, signal: AbortSignal.timeout(15_000) });
+    const data = (await resp.json().catch(() => ({}))) as any;
+
+    if (!resp.ok) {
+      // Fallback: try the adCreativesV2 search
+      const errMsg = data?.message || data?.code || `HTTP ${resp.status}`;
+      return { ok: false, ads: [], error: `LinkedIn Ads API: ${errMsg}` };
+    }
+
+    return { ok: true, ads: data?.elements || [] };
+  } catch (err) {
+    return { ok: false, ads: [], error: err instanceof Error ? err.message : String(err) };
   }
 }
 
@@ -394,17 +439,14 @@ router.post("/competitor-ads", async (req, res) => {
     res.status(200).json({ ok: true, source: "linkedin", competitor: c.domain, country, actor: "linkedin-api-v2", count: ads.length, ads });
     return;
   } else if (source === "linkedin_ads") {
-    // LinkedIn Ad Library — free via r.jina.ai (no Apify actor needed)
-    const ads = await scrapeLinkedInAdsViaJina(c.linkedin || c.fb_query);
-    res.status(200).json({
-      ok: true,
-      source: "linkedin_ads",
-      competitor: c.domain,
-      country,
-      actor: "r.jina.ai (free)",
-      count: ads.length,
-      ads: ads.map(a => ({ ...a, _source: "linkedin_ads" })),
-    });
+    // LinkedIn Marketing API ad library search
+    const liAds = await scrapeLinkedInAdsViaAPI(c.linkedin || c.fb_query);
+    if (!liAds.ok) {
+      res.status(502).json({ error: liAds.error, source: "linkedin_ads", competitor: c.domain });
+      return;
+    }
+    const ads = liAds.ads.map((a: any) => normalizeLinkedInAd(a));
+    res.status(200).json({ ok: true, source: "linkedin_ads", competitor: c.domain, country, actor: "linkedin-marketing-api", count: ads.length, ads });
     return;
   }
 
@@ -601,6 +643,25 @@ function normalizeLinkedIn(p: any) {
     platforms:  ["LinkedIn"],
     started:    created,
     _source:    "linkedin",
+  };
+}
+
+/* ─── LinkedIn Ad normalizer (Marketing API adLibraryByShare shape) ─────── */
+function normalizeLinkedInAd(a: any) {
+  const creative = a?.creative || a;
+  const text = creative?.variables?.data?.["com.linkedin.ads.SponsoredUpdateCreativeVariables"]
+    ?.activity?.["com.linkedin.ugc.Share"]?.commentary
+    || a?.shareText || a?.text || "";
+  return {
+    page_name:  a?.advertiserName || a?.sponsorName || "",
+    hook:       text.split("\n")[0]?.slice(0, 80) || `LinkedIn Sponsored — ${a?.advertiserName || ""}`,
+    body:       text,
+    caption:    a?.callToAction || a?.ctaLabel || "LinkedIn Sponsored",
+    image_url:  a?.imageUrl || null,
+    detail_url: a?.destinationUrl || null,
+    platforms:  ["LinkedIn Ads"],
+    started:    a?.startDate || a?.createdAt || "",
+    _source:    "linkedin_ads",
   };
 }
 
