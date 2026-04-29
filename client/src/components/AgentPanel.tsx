@@ -504,7 +504,7 @@ export default function AgentPanel() {
                 }}>AI</span>
               </div>
               <div style={{ fontSize: 10, color: "#6a96aa", marginTop: 2 }}>
-                تشتغل بنفسها أو بأمر منك — تسويق ذكي 24/7
+                يشتغل بنفسه أو بأمر منك — تسويق ذكي 24/7
               </div>
             </div>
             <button
@@ -711,7 +711,7 @@ export default function AgentPanel() {
 
               {task.status !== "done" && task.status !== "error" && (
                 <div style={{ fontSize: 13, color: "#f5a623", padding: "6px 0 10px" }}>
-                  <Spinner /> سمعه تعمل على المهمة...
+                  <Spinner /> سمعه يعمل على المهمة...
                 </div>
               )}
 
