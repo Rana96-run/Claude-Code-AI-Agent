@@ -719,6 +719,36 @@ export default function AgentPanel() {
                 );
               })()}
 
+              {/* ── Quick follow-up actions ── */}
+              {task.status === "done" && task.summary && (() => {
+                const actions: { label: string; body: string }[] = [];
+                const s = task.summary;
+                // Size variants
+                if (/4:5|9:16|16:9|1:1/.test(s)) {
+                  const sizes = ["1:1","4:5","9:16","16:9"].filter(sz => !new RegExp(`\\b${sz.replace(":",":")}\\b`).test(task.trigger.body ?? ""));
+                  sizes.slice(0, 3).forEach(sz => actions.push({ label: `حجم ${sz}`, body: `نفس المحتوى بحجم ${sz}` }));
+                }
+                // Drive save
+                actions.push({ label: "احفظ في Drive", body: "احفظ هذا المحتوى في Google Drive كـ Doc" });
+                if (actions.length === 0) return null;
+                return (
+                  <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 5 }}>
+                    {actions.map((a) => (
+                      <button key={a.label} onClick={() => {
+                        setPrompt(a.body);
+                        setComposerTab("free");
+                        setActiveId(null);
+                        setTask(null);
+                      }} style={{
+                        padding: "4px 10px", fontSize: 11, borderRadius: 10, cursor: "pointer",
+                        fontFamily: "inherit", background: "rgba(23,163,163,0.08)",
+                        border: "1px solid rgba(23,163,163,0.3)", color: "#17a3a3",
+                      }}>{a.label}</button>
+                    ))}
+                  </div>
+                );
+              })()}
+
               {task.error && (
                 <div style={{
                   marginTop: 10, padding: 8, background: "rgba(240,112,112,0.08)",

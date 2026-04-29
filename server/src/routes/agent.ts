@@ -1,7 +1,7 @@
 import { Router } from "express";
 import crypto from "crypto";
 import { canvaUploadSvgAndCreateDesign } from "./canva.js";
-import { driveUploadText } from "./drive.js";
+import { driveUploadText, driveUploadAsGoogleDoc } from "./drive.js";
 import { sheetsAppendBrief } from "../lib/sheets-client.js";
 import { logger, taskLogger } from "../lib/logger.js";
 import { loadTasks, saveTasks, type PersistedTask } from "../lib/agent-store.js";
@@ -225,6 +225,7 @@ OPERATING RULES:
 4. After all tool calls, write your final summary in ENGLISH following the structure above. Include public URLs as plain text (no markdown link syntax).
 5. Never invent ZATCA claims that are not true. Qoyod is ZATCA Phase-2 compliant.
 6. Never publish to WordPress/HubSpot without an explicit instruction. If the trigger mentions "publish" / "نشر" / "draft live", proceed.
+7. NEVER call save_to_drive automatically. Only call it when the user explicitly says "save to Drive", "احفظه في Drive", "ارفعه", "share as doc", or similar. Delivering content in the summary is always sufficient unless told otherwise.
 
 STRICT SINGLE-CHANNEL RULE:
 - If the user specifies one channel (e.g. Instagram, LinkedIn, TikTok), call generate_content ONCE for that channel only. Do NOT generate copies for other channels unless the user explicitly says "all channels" / "كل القنوات" / "لكل القنوات".
@@ -504,7 +505,7 @@ const TOOLS = [
   {
     name: "save_to_drive",
     description:
-      "Save a text-ish artifact (HTML / markdown / SVG / CSV) to the Qoyod team Drive folder. Returns a public view link.",
+      "Save a content artifact to the Qoyod team Drive folder as a native Google Doc (for text/markdown/HTML) or raw file (for CSV/SVG). Returns an edit link. ONLY call this when the user explicitly requests saving to Drive.",
     input_schema: {
       type: "object",
       properties: {
@@ -1035,6 +1036,17 @@ JSON: {"sequence":[{"idx":1,"subject":"...","preview":"...","body_html":"<p>…<
     }
     case "save_to_drive": {
       const { filename, content, mimeType = "text/plain" } = input;
+      // Text / markdown / HTML content → convert to native Google Doc (readable)
+      // Binary or CSV → keep as raw file
+      const isDocContent = ["text/plain", "text/markdown", "text/html", "application/json"].includes(mimeType)
+        || mimeType.startsWith("text/");
+      if (isDocContent) {
+        // Wrap plain text / markdown in minimal HTML so Drive renders it properly
+        const htmlBody = mimeType === "text/html"
+          ? content
+          : `<html><body style="font-family:Arial,sans-serif;font-size:14px;line-height:1.7;max-width:800px;margin:40px auto;direction:rtl;text-align:right"><pre style="white-space:pre-wrap;font-family:inherit">${content.replace(/</g, "&lt;")}</pre></body></html>`;
+        return driveUploadAsGoogleDoc(filename, htmlBody);
+      }
       return driveUploadText(filename, content, mimeType);
     }
     case "analyze_landing_page": {
