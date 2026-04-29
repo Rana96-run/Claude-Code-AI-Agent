@@ -331,10 +331,10 @@ router.post("/competitor-ads", async (req, res) => {
       res.status(400).json({ error: `No LinkedIn company slug known for ${competitor}` });
       return;
     }
-    // apify/linkedin-company-posts-scraper: scrapes posts from a LinkedIn company page
-    actor = "apify~linkedin-company-posts-scraper";
+    // harvestapi/linkedin-company-posts: 880k+ runs, no cookies needed
+    actor = "harvestapi~linkedin-company-posts";
     input = {
-      startUrls: [{ url: `https://www.linkedin.com/company/${c.linkedin}/posts/` }],
+      url: `https://www.linkedin.com/company/${c.linkedin}/`,
       count: apifyMinCount,
     };
   } else if (source === "linkedin_ads") {
