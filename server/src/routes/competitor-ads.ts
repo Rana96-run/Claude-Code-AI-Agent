@@ -459,7 +459,30 @@ router.post("/competitor-ads", async (req, res) => {
   }
 
   // Normalize across sources
-  const ads = result.items.slice(0, cap).map((it) => normalize(it, source));
+  const rawAds = result.items.slice(0, cap).map((it) => normalize(it, source));
+
+  // ─── Cleanup pass ──────────────────────────────────────────────
+  // 1. Drop Meta Dynamic Product Ads (DPA): ads whose copy is just
+  //    template placeholders like {{product.name}} — Meta substitutes
+  //    real catalog values at delivery time, so the scraped copy has
+  //    no analyzable signal for us.
+  // 2. Content-hash dedup: same competitor often re-runs the same
+  //    creative across audiences/placements; each instance has a
+  //    different Apify id but identical copy. Collapse to one entry.
+  const TEMPLATE_RE = /\{\{[^}]+\}\}/;
+  const seen = new Set<string>();
+  const ads = rawAds.filter((a) => {
+    const text = `${a.hook ?? ""} ${a.body ?? ""} ${a.caption ?? ""}`.trim();
+    // Skip DPA templates (no real copy to learn from)
+    if (TEMPLATE_RE.test(text)) return false;
+    // Skip empty ads (nothing to display or analyze)
+    if (!text) return false;
+    // Dedup by page_name + first 100 chars of meaningful copy
+    const key = `${(a.page_name || "").toLowerCase().trim()}|${text.slice(0, 100).toLowerCase().replace(/\s+/g, " ")}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 
   // Debug mode: include first raw item so we can see actual field names
   const debug = req.body?._debug;
@@ -470,6 +493,8 @@ router.post("/competitor-ads", async (req, res) => {
     country,
     actor,
     count: ads.length,
+    raw_count: rawAds.length,
+    filtered_out: rawAds.length - ads.length,
     ads,
     ...(debug && result.items[0] ? { _raw_keys: Object.keys(result.items[0]).slice(0, 30), _raw_sample: result.items[0] } : {}),
   });
