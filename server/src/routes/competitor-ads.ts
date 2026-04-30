@@ -472,13 +472,16 @@ router.post("/competitor-ads", async (req, res) => {
   const TEMPLATE_RE = /\{\{[^}]+\}\}/;
   const seen = new Set<string>();
   const ads = rawAds.filter((a) => {
-    const text = `${a.hook ?? ""} ${a.body ?? ""} ${a.caption ?? ""}`.trim();
-    // Skip DPA templates (no real copy to learn from)
-    if (TEMPLATE_RE.test(text)) return false;
-    // Skip empty ads (nothing to display or analyze)
-    if (!text) return false;
+    // Only hook + body are reliably real copy. Caption is overloaded
+    // (engagement metrics for organic FB/Snap/TikTok, format for Google).
+    // A post that has only a caption like "0 likes, 0 shares" has nothing
+    // analyzable — drop it.
+    const realText = `${a.hook ?? ""} ${a.body ?? ""}`.trim();
+    if (!realText) return false;
+    // Skip DPA templates (Meta dynamic catalog ads — visible copy is just placeholders)
+    if (TEMPLATE_RE.test(realText)) return false;
     // Dedup by page_name + first 100 chars of meaningful copy
-    const key = `${(a.page_name || "").toLowerCase().trim()}|${text.slice(0, 100).toLowerCase().replace(/\s+/g, " ")}`;
+    const key = `${(a.page_name || "").toLowerCase().trim()}|${realText.slice(0, 100).toLowerCase().replace(/\s+/g, " ")}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;

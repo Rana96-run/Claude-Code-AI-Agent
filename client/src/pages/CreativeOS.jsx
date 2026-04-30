@@ -887,9 +887,13 @@ export default function CreativeOS(){
   },[mComp,lang]);
 
   const useLiveAdAsInput=useCallback((ad)=>{
-    // Fill the form with the real ad's content so genCounter has accurate input
-    const text=[ad.hook,ad.body,ad.caption].filter(Boolean).join("\n");
-    setMDesc(text);
+    // Fill the form with the real ad's content. Only use hook + body —
+    // 'caption' is overloaded across sources (engagement metrics for FB
+    // organic / Snap / TikTok organic, format string for Google, real
+    // CTA for paid sources). Hook + body are always real copy.
+    const text=[ad.hook,ad.body].filter(Boolean).join("\n").trim();
+    if(!text){setMDesc(ad.detail_url||"");setMErr&&setMErr(T("هذا البوست بدون نص — استخدم الرابط للتحليل","No post text — using URL for analysis"));}
+    else setMDesc(text);
     // Switch the channel select based on detected platform
     const plats=(ad.platforms||[]).join(" ").toLowerCase();
     if(ad._source==="instagram"||plats.includes("instagram"))setMChan("Instagram");
