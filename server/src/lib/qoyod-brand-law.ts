@@ -38,6 +38,8 @@ FUNNEL STAGES:
 OUT OF SCOPE: graphic design execution (fonts/colors/logo placement/layout) and landing-page production. Brief copy + visual *concept* only.
 
 NEVER name competitors in paid copy — use "بعض الأنظمة..." or "برامج أخرى...".
+
+NEVER use emojis in any generated marketing content (captions, ads, articles, emails, calendars). Plain text only — no decorative symbols, no flags, no smileys. This applies to ALL output regardless of channel or format. (Reading competitor content with emojis for analysis is fine — producing them is forbidden.)
 `.trim();
 
 /* ─── HARD STOPS (refuses to produce) ─────────────────────────────────── */
@@ -50,6 +52,7 @@ HARD STOPS — refuse to produce:
   - Stock-photo concepts without Saudi context
   - Exaggerated smiles or unrealistic poses
   - Any creative without a hypothesis + kill criterion
+  - Emojis in any output (captions, ads, articles, emails, headlines, CTAs, calendars)
 `.trim();
 
 /* ─── SECTOR LANGUAGE (use the sector's own pain words) ──────────────── */

@@ -470,16 +470,29 @@ router.post("/competitor-ads", async (req, res) => {
   //    creative across audiences/placements; each instance has a
   //    different Apify id but identical copy. Collapse to one entry.
   const TEMPLATE_RE = /\{\{[^}]+\}\}/;
+  const HASHTAG_RE = /#[\p{L}\p{N}_]+/gu;        // unicode-aware (Arabic + English)
+  const URL_RE = /https?:\/\/\S+/g;
+  const MIN_REAL_WORDS = 3;                       // post must have ≥ 3 non-hashtag, non-URL words
+
   const seen = new Set<string>();
   const ads = rawAds.filter((a) => {
     // Only hook + body are reliably real copy. Caption is overloaded
     // (engagement metrics for organic FB/Snap/TikTok, format for Google).
-    // A post that has only a caption like "0 likes, 0 shares" has nothing
-    // analyzable — drop it.
     const realText = `${a.hook ?? ""} ${a.body ?? ""}`.trim();
     if (!realText) return false;
+
     // Skip DPA templates (Meta dynamic catalog ads — visible copy is just placeholders)
     if (TEMPLATE_RE.test(realText)) return false;
+
+    // Skip hashtag-dumps: posts whose only "content" is #tags (and maybe a URL).
+    // Strip hashtags + URLs, then count remaining words. If < 3 real words, drop.
+    const stripped = realText
+      .replace(HASHTAG_RE, " ")
+      .replace(URL_RE, " ")
+      .trim();
+    const realWordCount = stripped.split(/\s+/).filter(w => w.length > 1).length;
+    if (realWordCount < MIN_REAL_WORDS) return false;
+
     // Dedup by page_name + first 100 chars of meaningful copy
     const key = `${(a.page_name || "").toLowerCase().trim()}|${realText.slice(0, 100).toLowerCase().replace(/\s+/g, " ")}`;
     if (seen.has(key)) return false;
