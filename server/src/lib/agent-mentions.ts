@@ -35,12 +35,12 @@ const HANDLE_MAP: Record<string, PersonaId> = {
   lifecycle: "email_lifecycle",
   "بريد": "email_lifecycle",
   "ايميل": "email_lifecycle",
-  // pr
-  pr: "pr_comms",
-  press: "pr_comms",
-  comms: "pr_comms",
-  "إعلام": "pr_comms",
-  "بيان": "pr_comms",
+  // pr — handled by content_creator (no dedicated pr_comms persona currently)
+  pr: "content_creator",
+  press: "content_creator",
+  comms: "content_creator",
+  "إعلام": "content_creator",
+  "بيان": "content_creator",
   // editor
   editor: "editor_qa",
   qa: "editor_qa",

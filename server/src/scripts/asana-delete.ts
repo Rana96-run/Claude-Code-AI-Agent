@@ -1,6 +1,7 @@
 #!/usr/bin/env tsx
 /* Delete an Asana webhook by GID.
    Usage:  npm run asana:delete -- <webhook_gid>           */
+export {};   // make this file a module so top-level await + isolated scope work
 
 const PAT = process.env.ASANA_ACCESS_TOKEN;
 const gid = process.argv[2];

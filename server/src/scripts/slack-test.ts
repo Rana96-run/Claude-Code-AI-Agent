@@ -1,6 +1,7 @@
 #!/usr/bin/env tsx
 /* Test the Slack bot token — posts a single message to SLACK_DEFAULT_CHANNEL.
    Usage:  npm run slack:test                                                  */
+export {};   // make this file a module so top-level await + isolated scope work
 
 const TOKEN = process.env.SLACK_BOT_TOKEN;
 const CHANNEL = process.env.SLACK_DEFAULT_CHANNEL;

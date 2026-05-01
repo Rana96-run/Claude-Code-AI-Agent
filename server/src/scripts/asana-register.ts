@@ -16,6 +16,7 @@
      - Server must be running:     npm run dev   (in another terminal)
      - PUBLIC_HOST must be set:    e.g. https://xxxx.ngrok.app
    ══════════════════════════════════════════════════════════════════ */
+export {};   // make this file a module so top-level await + isolated scope work
 
 const PAT = process.env.ASANA_ACCESS_TOKEN;
 const PROJECT_GID = process.env.ASANA_PROJECT_GID;
@@ -111,16 +112,16 @@ async function run() {
   console.log(`\n  SAVE THIS GID in case you need to delete it later:`);
   console.log(`  npm run asana:delete -- ${hook.gid}\n`);
 
-  /* Verify the server is already receiving events by checking its health */
+  /* Verify the server is already receiving events by checking its health.
+     PUBLIC_HOST is guaranteed defined here — fail() exited above if missing. */
+  const host = PUBLIC_HOST!;
   try {
-    const health = await fetch(
-      `${PUBLIC_HOST.replace(/\/$/, "")}/api/agent/tasks?limit=1`,
-    );
+    const health = await fetch(`${host.replace(/\/$/, "")}/api/agent/tasks?limit=1`);
     if (health.ok) {
-      console.log(`  ✓  Server reachable at ${PUBLIC_HOST} — all good.\n`);
+      console.log(`  ✓  Server reachable at ${host} — all good.\n`);
     }
   } catch {
-    console.warn(`  ⚠  Could not reach ${PUBLIC_HOST} — check the server is running.\n`);
+    console.warn(`  ⚠  Could not reach ${host} — check the server is running.\n`);
   }
 }
 

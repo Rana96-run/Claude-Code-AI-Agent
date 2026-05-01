@@ -56,11 +56,12 @@ function buildStats(): DigestStats {
     if (e.topic) byTopic[e.topic] = (byTopic[e.topic] ?? 0) + 1;
   }
   const compRecent = listCompetitorPosts(undefined, 200).filter(
-    (p) => Date.parse(p.scraped_at) > since,
+    (p) => Date.parse(p.fetched_at) > since,
   );
+  // CompetitorPost has no `topic` field — derive a coarse "channel" signal instead.
   const compTopics: Record<string, number> = {};
   for (const p of compRecent) {
-    if (p.topic) compTopics[p.topic] = (compTopics[p.topic] ?? 0) + 1;
+    if (p.channel) compTopics[p.channel] = (compTopics[p.channel] ?? 0) + 1;
   }
   const topCompTopic = Object.entries(compTopics).sort((a, b) => b[1] - a[1])[0]?.[0];
 

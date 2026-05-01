@@ -1031,8 +1031,10 @@ JSON: {"sequence":[{"idx":1,"subject":"...","preview":"...","body_html":"<p>…<
       return r.json();
     }
     case "upload_canva": {
-      const { svg, name, design_type = "SocialMedia" } = input;
-      return canvaUploadSvgAndCreateDesign(svg, name, design_type);
+      const { svg, name } = input;
+      // Canva integration is a stub (no active OAuth) — design_type is accepted
+      // for forward-compat but currently ignored by the underlying helper.
+      return canvaUploadSvgAndCreateDesign(svg, name);
     }
     case "save_to_drive": {
       const { filename, content, mimeType = "text/plain" } = input;
@@ -1041,10 +1043,16 @@ JSON: {"sequence":[{"idx":1,"subject":"...","preview":"...","body_html":"<p>…<
       const isDocContent = ["text/plain", "text/markdown", "text/html", "application/json"].includes(mimeType)
         || mimeType.startsWith("text/");
       if (isDocContent) {
-        // Wrap plain text / markdown in minimal HTML so Drive renders it properly
+        // Wrap plain text / markdown in minimal HTML so Drive renders it properly.
+        // Escape order matters: & MUST be replaced first, otherwise we'd
+        // double-escape the &lt; / &gt; we're about to insert.
+        const escaped = content
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
         const htmlBody = mimeType === "text/html"
           ? content
-          : `<html><body style="font-family:Arial,sans-serif;font-size:14px;line-height:1.7;max-width:800px;margin:40px auto;direction:rtl;text-align:right"><pre style="white-space:pre-wrap;font-family:inherit">${content.replace(/</g, "&lt;")}</pre></body></html>`;
+          : `<html><body style="font-family:Arial,sans-serif;font-size:14px;line-height:1.7;max-width:800px;margin:40px auto;direction:rtl;text-align:right"><pre style="white-space:pre-wrap;font-family:inherit">${escaped}</pre></body></html>`;
         return driveUploadAsGoogleDoc(filename, htmlBody);
       }
       return driveUploadText(filename, content, mimeType);
@@ -1623,7 +1631,8 @@ function mergeOutputs(task: Task, tool: string, output: unknown) {
   if ((tool === "generate_nb_image" || tool === "generate_openai_image") && o.drive_link)
     task.outputs.nb_image_drive_link = o.drive_link;
   if (tool === "generate_miro_board") {
-    const url = (o.viewLink as string) || (o.url as string) || (o.board?.viewLink as string);
+    const board = o.board as { viewLink?: string } | undefined;
+    const url = (o.viewLink as string) || (o.url as string) || board?.viewLink;
     if (url) task.outputs.miro_board_url = url;
   }
   if (tool === "analyze_landing_page") {
