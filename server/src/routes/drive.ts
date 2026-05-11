@@ -137,7 +137,8 @@ router.get("/status", (_req, res) => {
   res.json({
     configured:
       !!FOLDER_ID &&
-      (!!process.env.GOOGLE_SERVICE_ACCOUNT_JSON ||
+      (!!process.env.GOOGLE_SERVICE_ACCOUNT_B64 ||
+        !!process.env.GOOGLE_SERVICE_ACCOUNT_JSON ||
         !!process.env.GOOGLE_APPLICATION_CREDENTIALS),
     folder_id: FOLDER_ID || null,
     folder_link: FOLDER_ID ? `https://drive.google.com/drive/folders/${FOLDER_ID}` : null,
